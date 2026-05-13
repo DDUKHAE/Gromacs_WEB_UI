@@ -97,9 +97,24 @@ conda run -n GROMACS python3 run_autonomy.py '{
 - 바이너리 일관성을 위해 런타임에서 `gmx_bin`을 전달합니다.
 - 대용량 `.xvg`는 직접 판독 대신 downsampling 분석 경로를 사용합니다.
 - 실제 물리적 타당성은 입력 시스템/force field/파라미터 품질에 의존합니다.
+- 실행은 기본적으로 run 격리 디렉터리(`runs/<target>_<timestamp>`)에서 수행되어 런 간 파일 오염을 줄입니다.
+- 다중 PDB 회귀 실행 후 요약 아티팩트는 `/tmp/harness_regression_summary.json`에 생성됩니다.
 
 ## Documentation
 
 - 실행 정책/역할: `AGENTS.md`
 - 아키텍처 개요: `ARCHITECTURE.md`
 - 상태/단계 계약: `docs/pipeline_contract.md`
+
+## License Guidance
+
+이 저장소는 GROMACS 자체 코드를 포함하지 않고, GROMACS를 호출하는 하네스/오케스트레이션 레이어입니다.
+
+- 일반적으로는 하네스 코드에 대해 `MIT` 또는 `Apache-2.0`을 선택해도 무방합니다.
+- GROMACS와 라이선스 정합성을 우선한다면 `LGPL-2.1-or-later`도 선택 가능합니다.
+
+권장:
+- 외부 기여/재사용을 넓게 받으려면 `MIT`
+- GROMACS 생태계와 톤을 맞추려면 `LGPL-2.1-or-later`
+
+최종 선택 후 루트에 `LICENSE` 파일을 추가하세요.

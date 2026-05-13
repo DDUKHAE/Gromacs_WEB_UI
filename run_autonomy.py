@@ -4,6 +4,7 @@ import sys
 import importlib.util
 import shutil
 import subprocess
+from datetime import datetime
 
 
 def _load_func(module_path, func_name):
@@ -50,6 +51,36 @@ def _resolve_gmx_bin(preferred):
         if path:
             return path
     return preferred or "gmx"
+
+
+def _resolve_supported_forcefield(requested, gmx_bin, cwd):
+    requested = (requested or "").strip()
+    installed = set()
+    gmxlib = os.environ.get("GMXLIB")
+    probe_dirs = []
+    if gmxlib:
+        probe_dirs.append(gmxlib)
+    conda_prefix = os.environ.get("CONDA_PREFIX")
+    if conda_prefix:
+        probe_dirs.append(os.path.join(conda_prefix, "share", "gromacs", "top"))
+
+    for d in probe_dirs:
+        if not d or not os.path.isdir(d):
+            continue
+        for name in os.listdir(d):
+            if name.endswith(".ff"):
+                installed.add(name[:-3].lower())
+
+    candidates = [requested.lower()] if requested else []
+    fallback_order = ["amber99sb-ildn", "amber14sb", "charmm27", "oplsaa"]
+    for item in fallback_order:
+        if item.lower() not in candidates:
+            candidates.append(item.lower())
+
+    for ff in candidates:
+        if ff and (not installed or ff in installed):
+            return ff
+    return (requested.lower() if requested else "") or "amber99sb-ildn"
 
 
 def _parse_topol_molecules(cwd):
@@ -115,7 +146,7 @@ def _write_analysis_report(cwd, routed, phase_results, analysis):
     return report_path
 
 
-def _append_retry_history(cwd, step, phase, command, attempts, status, summary):
+def _append_retry_history(cwd, step, phase, command, attempts, status, summary, gate_diagnostics=None):
     current = run_state_manager({"action": "read", "cwd": cwd})
     if current.get("status") != "success":
         return
@@ -128,6 +159,8 @@ def _append_retry_history(cwd, step, phase, command, attempts, status, summary):
         "status": status,
         "summary": summary,
     }
+    if gate_diagnostics is not None:
+        history[key]["gate_diagnostics"] = gate_diagnostics
     run_state_manager({"action": "update", "cwd": cwd, "data": {"retry_history": history}})
 
 
@@ -141,6 +174,8 @@ def _retry_history_from_execution_log(execution_log):
             "status": item.get("status"),
             "summary": item.get("summary"),
         }
+        if item.get("gate_diagnostics") is not None:
+            history[key]["gate_diagnostics"] = item.get("gate_diagnostics")
     return history
 
 
@@ -150,6 +185,12 @@ def _mdp_overrides_from_compiled_args(args):
         overrides["tau_t"] = args["__override_tau_t"]
     if "__override_tau_p" in args:
         overrides["tau_p"] = args["__override_tau_p"]
+    if "__override_dt" in args:
+        overrides["dt"] = args["__override_dt"]
+    if "__override_nsteps" in args:
+        overrides["nsteps"] = args["__override_nsteps"]
+    if "__override_tc_grps" in args:
+        overrides["tc-grps"] = args["__override_tc_grps"]
     return overrides
 
 
@@ -183,22 +224,136 @@ def _mutate_args_for_retry(cmd_name, args, attempt):
         else:
             mutated.pop("-ignh", None)
     elif cmd_name == "genion":
-        if "-neutral" in mutated:
+        # Ensure executable args differ for every retry attempt.
+        if "-neutral" in mutated and attempt % 2 == 1:
             mutated.pop("-neutral", None)
             mutated["-conc"] = "0.15"
-        else:
-            mutated["-neutral"] = ""
+        elif "-conc" in mutated and attempt % 2 == 0:
             mutated.pop("-conc", None)
+            mutated["-neutral"] = ""
+        mutated["-seed"] = str(1000 + attempt)
+    elif cmd_name == "grompp":
+        if "__override_tau_t" in mutated and attempt >= 1:
+            mutated["__override_tau_t"] = "0.08 0.08" if attempt == 1 else "0.05 0.05"
+        if "__override_tau_p" in mutated and attempt >= 1:
+            mutated["__override_tau_p"] = "2.5" if attempt == 1 else "3.0"
+        if attempt >= 1 and mutated.get("-f") == "nvt.mdp":
+            mutated["__override_dt"] = "0.0005" if attempt == 1 else "0.0002"
+            mutated["__override_nsteps"] = "250000"
+        mutated["-maxwarn"] = str(attempt)
+    elif cmd_name == "mdrun":
+        if attempt >= 1:
+            mutated["-ntomp"] = str(max(1, 8 - attempt))
+            mutated["-pin"] = "off"
+            if attempt >= 2:
+                mutated["-nb"] = "cpu"
+        # Add deterministic per-attempt output override to guarantee unique runtime args.
+        mutated["-cpo"] = f"state_retry_{attempt}.cpt"
     return mutated
 
 
+def _is_nvt_instability(result):
+    if not isinstance(result, dict):
+        return False
+    blob = "\n".join(
+        [
+            str(result.get("fatal_error", "")),
+            str(result.get("summary", "")),
+            str(result.get("stdout_tail", "")),
+        ]
+    ).lower()
+    keys = [
+        "lincs warning",
+        "can not be settled",
+        "cannot be settled",
+        "potential energy is nan",
+        "not finite",
+    ]
+    return any(k in blob for k in keys)
+
+
+def _refresh_args_from_state(cmd_name, args, state):
+    updated = dict(args)
+    latest_gro = state.get("latest_gro")
+    top_file = state.get("top_file")
+    if cmd_name == "editconf" and latest_gro and "-f" in updated:
+        updated["-f"] = latest_gro
+    if cmd_name == "solvate" and latest_gro and "-cp" in updated:
+        updated["-cp"] = latest_gro
+    if cmd_name == "grompp" and latest_gro and "-c" in updated:
+        updated["-c"] = latest_gro
+    if top_file and "-p" in updated:
+        updated["-p"] = top_file
+    return updated
+
+
+def _parse_gro_atom_count(path):
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            _ = f.readline()
+            line = f.readline().strip()
+        return int(line)
+    except Exception:
+        return None
+
+
+def _topol_expected_atoms(cwd):
+    top = os.path.join(cwd, "topol.top")
+    if not os.path.exists(top):
+        return None
+    solvent = _parse_topol_molecules(cwd).get("SOL", 0)
+    with open(top, "r", encoding="utf-8") as f:
+        text = f.read()
+    if "Protein_chain_A" not in text:
+        return None
+    return solvent * 3
+
+
+def _build_topology_gro_gate_diagnostics(cwd, gro_path):
+    atom_count = _parse_gro_atom_count(gro_path)
+    expected_min = _topol_expected_atoms(cwd)
+    molecules = _parse_topol_molecules(cwd)
+    diag = {
+        "gate": "topology_gro_consistency",
+        "gro_path": gro_path,
+        "gro_atoms": atom_count,
+        "expected_min_atoms": expected_min,
+        "solvent_molecules": molecules.get("SOL"),
+        "status": "pass",
+        "reason": "",
+    }
+    if atom_count is None or expected_min is None or atom_count < expected_min:
+        diag["status"] = "fail"
+        diag["reason"] = "gro_atoms_missing_or_below_expected_min"
+    return diag
+
+
+def _prepare_run_dir(base_cwd, target_name):
+    runs_dir = os.path.join(base_cwd, "runs")
+    os.makedirs(runs_dir, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_dir = os.path.join(runs_dir, f"{target_name}_{stamp}")
+    os.makedirs(run_dir, exist_ok=True)
+    return run_dir
+
+
 def run(payload):
-    cwd = payload.get("cwd", os.getcwd())
+    base_cwd = payload.get("cwd", os.getcwd())
+    target_name = payload.get("target_name", "protein")
+    cwd = payload.get("run_dir") or _prepare_run_dir(base_cwd, target_name)
     prompt = payload.get("prompt", "")
     pdb_path = payload.get("pdb_path")
     retry_count = int(payload.get("retry_count", 0))
-    target_name = payload.get("target_name", "protein")
+    if pdb_path and os.path.exists(pdb_path):
+        abs_pdb = os.path.abspath(pdb_path)
+        dst = os.path.join(cwd, os.path.basename(abs_pdb))
+        if not os.path.exists(dst):
+            shutil.copy2(abs_pdb, dst)
+        pdb_path = os.path.abspath(dst)
     gmx_bin = _resolve_gmx_bin(payload.get("gmx_bin"))
+    selected_ff = _resolve_supported_forcefield(payload.get("forcefield", "charmm36"), gmx_bin, cwd)
     validate_phase, analyze_trajectory = _safe_load_optional()
 
     manifests = [
@@ -219,7 +374,7 @@ def run(payload):
                 "retry_history": {},
                 "top_file": "topol.top",
                 "gro_file": f"{target_name}_processed.gro",
-                "forcefield": payload.get("forcefield", "charmm36"),
+                "forcefield": selected_ff,
                 "water_model": payload.get("water_model", "tip3p"),
                 "latest_gro": None,
                 "hardware_specs": {},
@@ -254,9 +409,13 @@ def run(payload):
                 "top_file": "topol.top",
                 "gro_file": f"{target_name}_processed.gro",
                 "target_name": target_name,
+                "pdb_file": pdb_path,
+                "forcefield": selected_ff,
+                "water_model": payload.get("water_model", "tip3p"),
             },
             "cwd": cwd,
             "retry_count": retry_count,
+            "pdb_path": pdb_path,
         }
     )
     if compiled.get("status") != "success":
@@ -277,9 +436,16 @@ def run(payload):
     )
 
     execute = bool(payload.get("execute", False))
+    capabilities = {
+        "validator_loaded": validate_phase is not None,
+        "analyzer_loaded": analyze_trajectory is not None,
+        "gmx_bin": gmx_bin,
+    }
     if not execute:
         return {
             "status": "success",
+            "run_dir": cwd,
+            "capabilities": capabilities,
             "routing": routed,
             "planning": planned,
             "compiled_command_count": len(compiled.get("commands", [])),
@@ -294,13 +460,15 @@ def run(payload):
 
     phase_results = {}
     analysis_result = None
+    gate_remediation_used = False
     for cmd_item in compiled.get("commands", []):
         refreshed = run_state_manager({"action": "read", "cwd": cwd})
         if refreshed.get("status") != "success":
             return {"status": "error", "message": "state_read_failed", "detail": refreshed}
 
         cmd_name = cmd_item["command"]
-        args = dict(cmd_item.get("args", {}))
+        state = refreshed.get("state", {})
+        args = _refresh_args_from_state(cmd_name, dict(cmd_item.get("args", {})), state)
         step = cmd_item.get("step")
         phase = cmd_item.get("phase")
 
@@ -329,6 +497,11 @@ def run(payload):
 
         if cmd_name == "grompp":
             phase_name = phase if phase else ("ions" if args.get("-f") == "ions.mdp" else None)
+            if phase_name == "nvt" and step == 6 and retry_count >= 1:
+                args["__override_dt"] = "0.0005" if retry_count == 1 else "0.0002"
+                args["__override_tau_t"] = "0.05"
+                args["__override_nsteps"] = "250000"
+                args["__override_tc_grps"] = "System"
             if phase_name:
                 mdp_result = compose_mdp(
                     {
@@ -339,24 +512,40 @@ def run(payload):
                 )
                 if mdp_result.get("status") != "success":
                     return {"status": "error", "message": "mdp_compose_failed", "detail": mdp_result}
-            args.pop("__override_tau_t", None)
-            args.pop("__override_tau_p", None)
 
         attempt = 0
         result = None
         while attempt < max_retries:
             current_args = _mutate_args_for_retry(cmd_name, args, attempt)
+            exec_args = dict(current_args)
+            exec_args.pop("__override_tau_t", None)
+            exec_args.pop("__override_tau_p", None)
             if cmd_item.get("requires_backup") and topology_backup is None:
                 topology_backup = _backup_topol(cwd)
+
+            interactive_responses = []
+            if cmd_name == "genion":
+                group_res = run_gmx(
+                    {
+                        "command": cmd_name,
+                        "args": current_args,
+                        "cwd": cwd,
+                        "resolve_group_index": True,
+                        "group_name": "SOL",
+                        "gmx_bin": gmx_bin,
+                    }
+                )
+                if group_res.get("status") == "success" and group_res.get("group_index") is not None:
+                    interactive_responses = [str(group_res.get("group_index"))]
 
             result = run_gmx(
                 {
                     "command": cmd_name,
-                    "args": current_args,
+                    "args": exec_args,
                     "cwd": cwd,
                     "retry_count": attempt,
                     "previous_attempt_fingerprints": previous_fingerprints,
-                    "interactive_responses": ["SOL"] if cmd_name == "genion" else [],
+                    "interactive_responses": interactive_responses,
                     "backup_topology": bool(cmd_item.get("requires_backup")),
                     "gmx_bin": gmx_bin,
                 }
@@ -375,6 +564,57 @@ def run(payload):
                 _restore_topol(cwd, topology_backup)
 
         attempts_used = attempt + 1 if result and result.get("status") == "success" else attempt
+        gate_diag = None
+        if result and result.get("status") == "success" and cmd_name in ["solvate", "genion"]:
+            gro_out = args.get("-o")
+            if gro_out:
+                gro_path = os.path.join(cwd, gro_out)
+                gate_diag = _build_topology_gro_gate_diagnostics(cwd, gro_path)
+                if gate_diag.get("status") == "fail":
+                    restored = _restore_topol(cwd, topology_backup) if topology_backup else False
+                    remediation_attempted = False
+                    if not gate_remediation_used:
+                        remediation_attempted = True
+                        gate_remediation_used = True
+                        rem_args = _mutate_args_for_retry(cmd_name, args, max_retries)
+                        rem_exec_args = dict(rem_args)
+                        rem_exec_args.pop("__override_tau_t", None)
+                        rem_exec_args.pop("__override_tau_p", None)
+                        rem_result = run_gmx(
+                            {
+                                "command": cmd_name,
+                                "args": rem_exec_args,
+                                "cwd": cwd,
+                                "retry_count": max_retries,
+                                "previous_attempt_fingerprints": previous_fingerprints,
+                                "backup_topology": bool(cmd_item.get("requires_backup")),
+                                "gmx_bin": gmx_bin,
+                            }
+                        )
+                        rem_fp = rem_result.get("command_fingerprint")
+                        if rem_fp:
+                            previous_fingerprints.append(rem_fp)
+                        if rem_result.get("status") == "success":
+                            rem_diag = _build_topology_gro_gate_diagnostics(cwd, gro_path)
+                            if rem_diag.get("status") == "pass":
+                                result = rem_result
+                                attempts_used += 1
+                                gate_diag = rem_diag
+                            else:
+                                gate_diag = rem_diag
+                    if gate_diag.get("status") == "fail":
+                        gate_diag["rollback_performed"] = bool(restored)
+                        gate_diag["remediation_attempted"] = remediation_attempted
+                        result = {
+                            "status": "error",
+                            "summary": "Topology/GRO consistency gate failed.",
+                            "fatal_error": (
+                                f"gro_atoms={gate_diag.get('gro_atoms')}, "
+                                f"expected_min={gate_diag.get('expected_min_atoms')}, "
+                                f"reason={gate_diag.get('reason')}"
+                            ),
+                            "gate_diagnostics": gate_diag,
+                        }
         execution_log.append(
             {
                 "step": step,
@@ -383,6 +623,7 @@ def run(payload):
                 "status": result.get("status") if result else "error",
                 "attempts": attempts_used,
                 "summary": result.get("summary") if result else "no_result",
+                "gate_diagnostics": gate_diag,
             }
         )
         _append_retry_history(
@@ -393,9 +634,18 @@ def run(payload):
             attempts=attempts_used,
             status=result.get("status") if result else "error",
             summary=result.get("summary") if result else "no_result",
+            gate_diagnostics=gate_diag,
         )
 
         if not result or result.get("status") != "success":
+            if cmd_name == "mdrun" and phase == "nvt" and _is_nvt_instability(result):
+                return run(
+                    {
+                        **payload,
+                        "retry_count": retry_count + 1,
+                        "execute": True,
+                    }
+                )
             run_state_manager(
                 {
                     "action": "update",
@@ -474,6 +724,8 @@ def run(payload):
 
     return {
         "status": "success",
+        "run_dir": cwd,
+        "capabilities": capabilities,
         "routing": routed,
         "planning": planned,
         "compiled_command_count": len(compiled.get("commands", [])),

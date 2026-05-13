@@ -83,10 +83,21 @@ def command_fingerprint(cmd, cwd, interactive_responses):
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def validate_input_files(args, cwd):
+def validate_input_files(command, args, cwd):
+    output_flags_by_command = {
+        "pdb2gmx": {"-p", "-o", "-i", "-n"},
+        "editconf": {"-o"},
+        "solvate": {"-o"},
+        "genion": {"-o"},
+        "grompp": {"-o"},
+        "mdrun": {"-deffnm", "-g", "-o", "-e", "-c", "-x", "-cpo"},
+    }
+    output_flags = output_flags_by_command.get(command, set())
     missing = []
     for flag, value in args.items():
         if flag not in INPUT_FILE_FLAGS:
+            continue
+        if flag in output_flags:
             continue
         value_str = str(value).strip()
         if not value_str:
@@ -139,6 +150,17 @@ def get_available_groups(command, args, cwd, gmx_bin="gmx"):
     except Exception:
         return []
 
+def find_group_index(command, args, group_name, cwd, gmx_bin="gmx"):
+    groups = get_available_groups(command, args, cwd, gmx_bin)
+    if not groups:
+        return None
+    for line in groups:
+        if group_name.lower() in line.lower():
+            head = line.split(":", 1)[0].strip()
+            if head.isdigit():
+                return head
+    return None
+
 
 def run_gmx(input_data):
     command = input_data.get("command")
@@ -159,6 +181,12 @@ def run_gmx(input_data):
     if input_data.get("list_groups_only", False):
         groups = get_available_groups(command, args, cwd, gmx_bin)
         return {"status": "success", "available_groups": groups}
+    if input_data.get("resolve_group_index"):
+        group_name = input_data.get("group_name", "SOL")
+        index = find_group_index(command, args, group_name, cwd, gmx_bin)
+        if index is None:
+            return {"status": "error", "summary": f"Group '{group_name}' not found."}
+        return {"status": "success", "group_name": group_name, "group_index": index}
 
     previous_attempt_fingerprints = input_data.get("previous_attempt_fingerprints", [])
 
@@ -172,8 +200,17 @@ def run_gmx(input_data):
     if not os.path.exists(cwd):
         os.makedirs(cwd, exist_ok=True)
 
+    out_flag = args.get("-o")
+    if out_flag:
+        out_path = out_flag if os.path.isabs(str(out_flag)) else os.path.join(cwd, str(out_flag))
+        if os.path.exists(out_path):
+            try:
+                os.remove(out_path)
+            except Exception:
+                pass
+
     args, tuning_meta = tune_mdrun_args(command, args)
-    missing_inputs = validate_input_files(args, cwd)
+    missing_inputs = validate_input_files(command, args, cwd)
     if missing_inputs:
         return {
             "status": "error",
@@ -222,16 +259,20 @@ def run_gmx(input_data):
                 fatal_idx = i
                 break
                 
+        nonempty_lines = [line for line in lines if line.strip()]
         if proc.returncode != 0 or fatal_idx != -1:
             fatal_error = "Unknown error"
             if fatal_idx != -1:
                 fatal_error = "\n".join(lines[fatal_idx:fatal_idx+5])
             
-            summary_lines = [line for line in lines if line.strip()][-5:]
+            summary_lines = nonempty_lines[-5:]
+            stdout_tail = "\n".join(nonempty_lines[-80:])
             return {
                 "status": "error",
                 "fatal_error": fatal_error.strip(),
                 "summary": "\n".join(summary_lines).strip(),
+                "stdout_tail": stdout_tail,
+                "return_code": proc.returncode,
                 "elapsed_seconds": round(elapsed, 2),
                 "command_fingerprint": fingerprint,
                 "topology_rolled_back": rollback_topology(bak_path, cwd) if backup_topology else False,
@@ -245,7 +286,7 @@ def run_gmx(input_data):
             if os.path.isfile(fpath) and os.path.getmtime(fpath) >= start_time:
                 output_files.append(f)
                 
-        summary_lines = [line for line in lines if line.strip()][-5:]
+        summary_lines = nonempty_lines[-5:]
         return {
             "status": "success",
             "output_files": output_files,

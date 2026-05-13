@@ -20,6 +20,9 @@ def compile_protocol(input_data):
     top_file = state.get("top_file", "topol.top")
     gro_file = state.get("gro_file", "protein_processed.gro")
     target = state.get("target_name", "protein")
+    pdb_file = state.get("pdb_file") or input_data.get("pdb_path") or f"{target}.pdb"
+    forcefield = state.get("forcefield", "charmm36")
+    water_model = state.get("water_model", "tip3p")
     phases = input_data.get("phases", ["minim", "nvt", "npt", "md"])
     box_distance = 1.0 + (0.1 * retry_count)
     tau_t = "0.1 0.1" if retry_count == 0 else "0.08 0.08"
@@ -35,6 +38,14 @@ def compile_protocol(input_data):
 
         if step == 1:
             cmd = "pdb2gmx"
+            args = {
+                "-f": pdb_file,
+                "-o": f"{target}_processed.gro",
+                "-p": top_file,
+                "-ff": forcefield,
+                "-water": water_model,
+            }
+            gro_file = f"{target}_processed.gro"
         elif step == 2:
             cmd = "editconf"
             args = {"-f": gro_file, "-o": f"{target}_box.gro", "-c": "", "-d": f"{box_distance:.2f}", "-bt": "cubic"}
@@ -57,9 +68,12 @@ def compile_protocol(input_data):
         elif step == 6:
             for phase in phases:
                 args = {"-f": f"{phase}.mdp", "-c": gro_file, "-p": top_file, "-o": f"{phase}.tpr"}
-                if phase != "minim":
-                    prev = "minim" if phase == "nvt" else ("nvt" if phase == "npt" else "npt")
+                if phase in ["npt", "md"]:
+                    prev = "nvt" if phase == "npt" else "npt"
                     args["-t"] = f"{prev}.cpt"
+                if phase in ["nvt", "npt", "md"]:
+                    prev_gro = "minim" if phase == "nvt" else ("nvt" if phase == "npt" else "npt")
+                    args["-r"] = f"{prev_gro}.gro"
                 if phase in ["nvt", "npt", "md"]:
                     args["__override_tau_t"] = tau_t
                 if phase in ["npt", "md"]:
@@ -78,27 +92,24 @@ def compile_protocol(input_data):
                         "cwd": _join(cwd, "."),
                     }
                 )
-            continue
-        elif step == 7:
-            for phase in phases:
-                args = {"-deffnm": phase}
-                if phase != "minim":
-                    args["-cpi"] = f"{phase}.cpt"
-                fingerprint = f"mdrun|{json.dumps(args, sort_keys=True)}|retry={retry_count}"
+                mdrun_args = {"-deffnm": phase}
+                mdrun_fingerprint = f"mdrun|{json.dumps(mdrun_args, sort_keys=True)}|retry={retry_count}"
                 compiled.append(
                     {
-                        "step": step,
+                        "step": 7,
                         "phase": phase,
                         "command": "mdrun",
-                        "args": args,
+                        "args": mdrun_args,
                         "requires_backup": False,
                         "topology_mutates": False,
                         "retry_count": retry_count,
-                        "fingerprint": fingerprint,
+                        "fingerprint": mdrun_fingerprint,
                         "cwd": _join(cwd, "."),
                     }
                 )
                 gro_file = f"{phase}.gro"
+            continue
+        elif step == 7:
             continue
         elif step == 8:
             cmd = "analysis_bundle"

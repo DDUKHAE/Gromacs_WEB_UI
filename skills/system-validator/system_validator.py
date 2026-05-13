@@ -3,8 +3,7 @@ import os
 import re
 import subprocess
 import sys
-
-import numpy as np
+import statistics
 
 
 def parse_xvg(filepath):
@@ -28,7 +27,22 @@ def xvg_stats(filepath, col_idx):
     vals = [row[col_idx] for row in data if len(row) > col_idx]
     if not vals:
         return None, None, data
-    return float(np.mean(vals)), float(np.std(vals)), data
+    if len(vals) == 1:
+        return float(vals[0]), 0.0, data
+    return float(statistics.fmean(vals)), float(statistics.pstdev(vals)), data
+
+
+def linear_slope(x, y):
+    n = len(x)
+    if n < 2:
+        return 0.0
+    mx = statistics.fmean(x)
+    my = statistics.fmean(y)
+    num = sum((xi - mx) * (yi - my) for xi, yi in zip(x, y))
+    den = sum((xi - mx) ** 2 for xi in x)
+    if den == 0:
+        return 0.0
+    return num / den
 
 
 def list_energy_terms(edr_path, cwd, gmx_bin="gmx"):
@@ -203,8 +217,7 @@ def validate(input_data):
             else:
                 t = [row[0] for row in data]
                 e_tot = [row[2] for row in data]
-                z = np.polyfit(t, e_tot, 1)
-                slope = float(z[0])
+                slope = float(linear_slope(t, e_tot))
                 metrics["total_energy_drift_slope"] = slope
 
                 if abs(slope) < 1.0:

@@ -3,8 +3,7 @@ import os
 import re
 import subprocess
 import sys
-
-import numpy as np
+import statistics
 
 
 def run_cmd(cmd, cwd, stdin_str=""):
@@ -37,8 +36,23 @@ def parse_xvg(filepath):
 def downsample(data, max_points=100):
     if not data or len(data) <= max_points:
         return data
-    indices = np.linspace(0, len(data) - 1, max_points, dtype=int)
+    if max_points <= 1:
+        return [data[0]]
+    indices = [int(i * (len(data) - 1) / (max_points - 1)) for i in range(max_points)]
     return [data[i] for i in indices]
+
+
+def linear_slope(x, y):
+    n = len(x)
+    if n < 2:
+        return 0.0
+    mx = statistics.fmean(x)
+    my = statistics.fmean(y)
+    num = sum((xi - mx) * (yi - my) for xi, yi in zip(x, y))
+    den = sum((xi - mx) ** 2 for xi in x)
+    if den == 0:
+        return 0.0
+    return num / den
 
 
 def parse_xvg_with_legend(filepath):
@@ -130,8 +144,8 @@ def analyze(input_data):
                 half = len(data) // 2
                 if half > 0:
                     second_half = [row[1] for row in data[half:]]
-                    rmsd_final_avg = np.mean(second_half) * 10
-                    rmsd_std = np.std(second_half) * 10
+                    rmsd_final_avg = statistics.fmean(second_half) * 10
+                    rmsd_std = statistics.pstdev(second_half) * 10 if len(second_half) > 1 else 0.0
                     reports["rmsd_final_avg_angstrom"] = round(float(rmsd_final_avg), 3)
                     reports["rmsd_std_angstrom"] = round(float(rmsd_std), 3)
                     reports["rmsd_plateau_reached"] = bool(rmsd_std < 0.5)
@@ -145,8 +159,8 @@ def analyze(input_data):
             if data:
                 generated_files.append(out_xvg)
                 vals = [row[1] for row in data]
-                reports["rmsf_core_max_nm"] = round(float(np.max(vals)), 3)
-                reports["rmsf_avg_nm"] = round(float(np.mean(vals)), 3)
+                reports["rmsf_core_max_nm"] = round(float(max(vals)), 3)
+                reports["rmsf_avg_nm"] = round(float(statistics.fmean(vals)), 3)
                 ds = downsample(data, 100)
                 downsampled_data["rmsf"] = [{"res": int(row[0]), "val": row[1]} for row in ds]
 
@@ -157,7 +171,7 @@ def analyze(input_data):
             if data:
                 generated_files.append(out_xvg)
                 vals = [row[1] for row in data]
-                reports["gyration_avg_nm"] = round(float(np.mean(vals)), 3)
+                reports["gyration_avg_nm"] = round(float(statistics.fmean(vals)), 3)
                 ds = downsample(data, 100)
                 downsampled_data["gyrate"] = [{"t": row[0], "val": row[1]} for row in ds]
 
@@ -179,9 +193,9 @@ def analyze(input_data):
                     t = [row[0] for row in data]
                     e_tot = [row[tot_col] for row in data]
                     if len(t) > 1:
-                        z = np.polyfit(t, e_tot, 1)
-                        reports["energy_drift_slope"] = round(float(z[0]), 4)
-                        reports["energy_drift_detected"] = bool(abs(z[0]) > 1.0)
+                        slope = linear_slope(t, e_tot)
+                        reports["energy_drift_slope"] = round(float(slope), 4)
+                        reports["energy_drift_detected"] = bool(abs(slope) > 1.0)
 
                 ds = downsample(data, 100)
                 energy_rows = []
