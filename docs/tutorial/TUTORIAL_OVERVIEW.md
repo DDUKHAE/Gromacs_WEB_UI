@@ -1,41 +1,64 @@
 # GROMACS Tutorial Overview
 
-이 문서는 GROMACS 하네스(Agent) 환경에서 참고하고 활용할 수 있도록 정리된 튜토리얼 문서들의 전체 개요를 설명합니다. 각 튜토리얼 폴더는 특정한 분자 동역학(Molecular Dynamics, MD) 시뮬레이션 목적과 방법론을 다루며, 모든 문서는 시스템 자동화와 에이전트 파싱을 고려하여 논리적인 단계별 마크다운(Markdown) 형태로 통일되어 있습니다.
+이 문서는 GROMACS 하네스(Agent) 환경에서 참고하고 활용할 수 있도록 정리된 튜토리얼 문서들의 전체 개요를 설명합니다.
+
+## Runtime-First Reading Order
+
+LLM 런타임에서는 아래 문서를 먼저 읽고 튜토리얼 part 본문으로 진입합니다.
+
+1. `docs/tutorial/TUTORIAL_OVERVIEW.md`
+2. `docs/tutorial/tutorial_index.json`
+3. 선택 튜토리얼 `tutorial.manifest.json` (있는 경우)
+4. `docs/tutorial/LLM_TUTORIAL_GUIDE.md`
+5. `docs/tutorial/LLM_ESSENTIALS_BY_STEP.md`
+6. 필요한 tutorial part 문서
+
+관련 운영 문서:
+
+- 가이드: `docs/tutorial/LLM_TUTORIAL_GUIDE.md`
+- Step 필수요약: `docs/tutorial/LLM_ESSENTIALS_BY_STEP.md`
+- 토큰 정책: `docs/tutorial/TUTORIAL_TOKENIZATION_POLICY.md`
+- 런타임 계약: `docs/tutorial/README_LLM_RUNTIME.md`
+- 검증 체크리스트: `docs/tutorial/LLM_DOC_VALIDATION_CHECKLIST.md`
 
 ## 튜토리얼 폴더 목록 및 설명
 
 ### 1. Lysozyme_in_water
-- **설명**: 수용액 상태의 단백질(Lysozyme)을 모의실험하는 가장 기초적이고 표준적인 튜토리얼입니다. 
-- **내용**: PDB 구조 변환, 상자(Box) 생성 및 용매화(Solvation), 이온 추가, 에너지 최소화(EM), 평형화(NVT, NPT), 최종 프로덕션 MD 및 기본 궤적 분석 방법 등을 다룹니다.
+
+- 설명: 수용액 상태의 단백질(Lysozyme) 표준 워크플로우.
+- 내용: topology, box/solvation, ions, EM/NVT/NPT/production, 분석.
 
 ### 2. KALP15_in_DPPC (Membrane Protein)
-- **설명**: 지질 이중층(DPPC)에 삽입된 막 단백질(KALP15 펩타이드) 시스템을 구성하고 시뮬레이션하는 튜토리얼입니다.
-- **내용**: 소수성 지질 막 내부에 단백질을 배치하는 방법(`InflateGRO` 등)과 특수 막 평형화 과정을 다룹니다.
+
+- 설명: 지질 이중층 막 단백질 시스템.
+- 내용: 막 환경 특화 준비/평형화.
 
 ### 3. Protein_Ligand_Complex
-- **설명**: 단백질과 리간드 복합체의 토폴로지를 생성하고 모의실험을 진행하는 튜토리얼입니다.
-- **내용**: CGenFF 등을 활용하여 GROMACS에서 기본적으로 지원하지 않는 소분자 리간드의 파라미터를 생성하는 방법, 단백질과 리간드 간 상호작용 에너지 및 수소 결합 분석 등을 다룹니다.
+
+- 설명: 단백질-리간드 복합체 워크플로우.
+- 내용: ligand parameterization, 복합체 시뮬레이션, 상호작용 분석.
 
 ### 4. Umbrella_Sampling
-- **설명**: 우산 표집(Umbrella Sampling) 기법을 이용해 Potential of Mean Force (PMF) 프로파일을 도출하는 튜토리얼입니다.
-- **내용**: 펩타이드를 단백질에서 떼어내는 당기기 시뮬레이션(Steered MD), 위치 제어, 반응 좌표(Reaction Coordinate) 설정, WHAM을 이용한 자유 에너지 계산을 다룹니다.
+
+- 설명: PMF 계산용 umbrella sampling.
+- 내용: pulling, window setup, WHAM 분석.
 
 ### 5. Building_Biphasic_Systems
-- **설명**: 물과 소수성 용매(Cyclohexane)로 이루어진 다상(Biphasic) 시스템을 구축하는 튜토리얼입니다.
-- **내용**: 두 개의 서로 다른 층이 만나는 경계면 시뮬레이션을 위해 개별 상자를 만들고 결합하는 `insert-molecules`와 `genconf`, `editconf` 활용법을 다룹니다.
+
+- 설명: 물/소수성 용매 다상 시스템.
+- 내용: 상자 결합, 계면 구성.
 
 ### 6. Free_Energy_Calculations_Methane_in_Water
-- **설명**: 물 속 메탄(Methane) 분자의 반데르발스(van der Waals) 상호작용을 서서히 줄여가며(Decoupling) 자유 에너지를 계산하는 튜토리얼입니다.
-- **내용**: 자유 에너지 섭동의 기초 이론, 람다(λ) 파라미터 벡터를 이용한 시뮬레이션 설정, Bennett Acceptance Ratio (BAR) 방법(`gmx bar`)을 활용한 자유 에너지 차이(ΔG) 도출을 다룹니다.
+
+- 설명: 메탄 수화 자유에너지(주로 vdW decoupling) 계산.
+- 내용: lambda schedule, BAR 분석.
 
 ### 7. Free_Energy_calculations_Hydration_Free_Energy_of_Ethanol
-- **설명**: 메탄 튜토리얼에서 한 단계 나아가, 쿨롱 상호작용(Coulombic)과 반데르발스 상호작용을 모두 변환하여 에탄올의 수화 자유 에너지(Hydration Free Energy)를 도출하는 심화 튜토리얼입니다.
-- **내용**: 다중 람다(λ) 상태를 순차적으로 끄고 켜는(Decoupling) 워크플로우 설정법을 중점적으로 다룹니다.
+
+- 설명: 에탄올 수화 자유에너지(쿨롱+vdW staged decoupling).
+- 내용: 다중 람다 상태 실행/요약.
 
 ### 8. Virtual_Sites
-- **설명**: 선형 분자(Linear molecule, 예: CO2) 모델링 시 발생하는 구조적 불안정성을 해결하기 위해 가상 사이트(Virtual Sites)를 구축하는 튜토리얼입니다.
-- **내용**: 관성 모멘트를 보존하기 위한 수학적 계산과, `[ virtual_sites2 ]` 지시어를 활용한 토폴로지 수동 구성 방법을 다룹니다.
 
----
-
-이 문서들을 기반으로 에이전트 환경의 `GmxExecutor` 및 `SystemValidator`는 다양한 GROMACS 워크플로우를 자율적이고 일관되게 수행 및 모니터링할 수 있습니다. 각 하위 폴더에는 세부 단계별로 분리된 마크다운 문서가 준비되어 있습니다.
+- 설명: 선형 분자 virtual sites topology 모델링.
+- 내용: 수동 topology 구성과 안정화.
