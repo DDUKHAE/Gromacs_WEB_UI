@@ -65,3 +65,16 @@ def run(args: Sequence[str], cwd: Path,
         stderr=completed.stderr,
         classification=_classify(completed.returncode, completed.stderr or ""),
     )
+
+
+def backup_topology(top: Path) -> Path:
+    bak = top.with_suffix(top.suffix + ".bak")
+    shutil.copy2(top, bak)
+    return bak
+
+
+def restore_topology(top: Path) -> None:
+    bak = top.with_suffix(top.suffix + ".bak")
+    if not bak.exists():
+        raise FileNotFoundError(f"no backup found: {bak}")
+    shutil.copy2(bak, top)

@@ -45,3 +45,28 @@ def test_run_passes_gmx_bin_env_override(monkeypatch):
         GW.run(["hardware"], cwd=Path("."))
         args, _ = mock_run.call_args
     assert args[0][0] == "/tmp/fake-gmx"
+
+
+def test_backup_topology_creates_bak(tmp_path: Path):
+    top = tmp_path / "topol.top"
+    top.write_text("[ molecules ]\nProtein 1\n")
+    bak = GW.backup_topology(top)
+    assert bak.exists()
+    assert bak.suffix == ".bak"
+    assert bak.read_text() == top.read_text()
+
+
+def test_restore_topology(tmp_path: Path):
+    top = tmp_path / "topol.top"
+    top.write_text("original")
+    bak = GW.backup_topology(top)
+    top.write_text("mutated")
+    GW.restore_topology(top)
+    assert top.read_text() == "original"
+
+
+def test_restore_without_backup_raises(tmp_path: Path):
+    top = tmp_path / "topol.top"
+    top.write_text("x")
+    with pytest.raises(FileNotFoundError):
+        GW.restore_topology(top)
