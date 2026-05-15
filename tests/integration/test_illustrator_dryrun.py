@@ -56,3 +56,26 @@ def test_advanced_analyses_run(tmp_workspace: Path, ubq_pdb_path: Path):
     assert "hbond" in out
     assert "dssp" in out
     assert "pca" in out
+
+
+def test_illustrate_end_to_end(tmp_workspace: Path, ubq_pdb_path: Path):
+    from skills.env_builder import build_environment
+    from skills.md_runner import run_simulation
+    from skills.illustrator import illustrate
+    shutil.copy(ubq_pdb_path, tmp_workspace / "inputs" / "input.pdb")
+    build_environment(
+        pdb_path=tmp_workspace / "inputs" / "input.pdb",
+        prompt="protein in water",
+        workspace_dir=tmp_workspace,
+        prerequisites={},
+        interactive=False,
+    )
+    run_simulation(workspace_dir=tmp_workspace,
+                   phase_overrides={p: {"nsteps": 100, "dt": 0.001}
+                                     for p in ("em","nvt","npt","production")},
+                   interactive=False)
+    result = illustrate(workspace_dir=tmp_workspace, animation={"enabled": False})
+    assert result["report_path"]
+    from lib import state as _s
+    s = _s.read(tmp_workspace)
+    assert s["last_completed_stage"] == "viz"

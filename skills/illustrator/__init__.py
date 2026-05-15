@@ -9,3 +9,4 @@ from .illustrator import render_frame  # noqa: F401
 from .illustrator import animate_trajectory  # noqa: F401
 from .illustrator import compose_report  # noqa: F401
 from .illustrator import compose_html_report  # noqa: F401
+from .illustrator import illustrate  # noqa: F401

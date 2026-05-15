@@ -410,6 +410,45 @@ def plot_all(workspace_dir: Path) -> list[Path]:
             continue
     return pngs
 
+def illustrate(workspace_dir: Path,
+               analyses: list[str] | None = None,
+               render_frames: list = None,
+               animation: dict | None = None,
+               report_html: bool = True,
+               interactive: bool = True) -> dict[str, Any]:
+    assert_ready(workspace_dir)
+    run_core_analyses(workspace_dir)
+    run_advanced_analyses(workspace_dir)
+    run_variant_analyses(workspace_dir)
+    plot_all(workspace_dir)
+    viz = _viz_dir(workspace_dir)
+    rendered: list[str] = []
+    for f in (render_frames or [0, "middle", "last"]):
+        out = viz / f"frame_{f}.png"
+        r = render_frame(workspace_dir, f, out)
+        if r:
+            rendered.append(str(r))
+    anim_cfg = animation or {"enabled": True, "fps": 30, "stride": 10}
+    anim_path = None
+    if anim_cfg.get("enabled", True):
+        anim_path = animate_trajectory(
+            workspace_dir, viz / "trajectory.mp4",
+            fps=anim_cfg.get("fps", 30),
+            stride=anim_cfg.get("stride", 10),
+        )
+    report = compose_report(workspace_dir)
+    html = compose_html_report(workspace_dir) if report_html else None
+    s = state.read(workspace_dir)
+    s["last_completed_stage"] = "viz"
+    state.write(workspace_dir, s)
+    return {
+        "report_path": str(report),
+        "report_html_path": str(html) if html else None,
+        "rendered_frames": rendered,
+        "animation_path": str(anim_path) if anim_path else None,
+    }
+
+
 VARIANT_DISPATCH = {
     "umbrella_sampling": "_run_wham",
     "free_energy_alchemical": "_run_bar",
