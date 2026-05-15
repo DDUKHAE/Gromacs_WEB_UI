@@ -6,3 +6,4 @@ from .illustrator import plot_xvg  # noqa: F401
 from .illustrator import plot_all  # noqa: F401
 from .illustrator import select_renderer  # noqa: F401
 from .illustrator import render_frame  # noqa: F401
+from .illustrator import animate_trajectory  # noqa: F401

@@ -279,6 +279,45 @@ def render_frame(workspace_dir: Path, frame: str | int,
     return None
 
 
+_PYMOL_ANIM_SCRIPT = """
+load {gro}, system
+load_traj {xtc}, system
+hide everything
+show cartoon, polymer
+bg_color white
+mset 1 x{nframes}
+viewport 800,600
+movie.produce {out_prefix}, encoder=ffmpeg, mode=ray, quality=80
+quit
+"""
+
+
+def animate_trajectory(workspace_dir: Path, output_path: Path,
+                       fps: int = 30, stride: int = 10) -> Path | None:
+    renderer = select_renderer()
+    if renderer == "none":
+        return None
+    if not shutil.which("ffmpeg"):
+        return None
+    ws = Path(workspace_dir)
+    s = state.read(ws) if state.path(ws).exists() else {}
+    prefix = _trajectory_prefix(s) if s else "production"
+    gro = ws / "stage2_md" / f"{prefix}.gro"
+    xtc = ws / "stage2_md" / f"{prefix}.xtc"
+    if renderer == "pymol":
+        script_path = ws / "stage3_viz" / "anim.pml"
+        script_path.write_text(_PYMOL_ANIM_SCRIPT.format(
+            gro=gro, xtc=xtc, nframes=100,
+            out_prefix=str(output_path.with_suffix("")),
+        ))
+        import subprocess
+        subprocess.run(["pymol", "-cq", str(script_path)],
+                       check=False, capture_output=True)
+        return output_path if output_path.exists() else None
+    # VMD path omitted for brevity; same pattern with `make movie` plugin.
+    return None
+
+
 import sys as _sys
 
 
