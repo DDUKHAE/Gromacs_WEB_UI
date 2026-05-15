@@ -192,3 +192,27 @@ def run_step5_genion(workspace_dir: Path, concentration: float = 0.15) -> None:
     s["current_step"] = 5
     s["last_completed_stage"] = "env"
     state.write(ws, s)
+
+
+def build_environment(pdb_path: Path, prompt: str, workspace_dir: Path,
+                      prerequisites: dict[str, Any] | None = None,
+                      interactive: bool = True) -> dict[str, Any]:
+    init_workspace(workspace_dir)
+    collect_hardware(workspace_dir)
+    inputs_pdb = Path(workspace_dir) / "inputs" / "input.pdb"
+    if Path(pdb_path).resolve() != inputs_pdb.resolve():
+        shutil.copy(pdb_path, inputs_pdb)
+    decision = select_tutorial(workspace_dir, inputs_pdb, prompt,
+                               prerequisites or {})
+    manifest = TR.load_manifest(decision.tutorial_id) or {}
+    defaults = manifest.get("defaults", {})
+    ff = defaults.get("forcefield", "charmm36")
+    water = defaults.get("water_model", "tip3p")
+    box_type = defaults.get("box_type", "cubic")
+    box_d = defaults.get("box_distance_nm", 1.0)
+    run_step1_topology(workspace_dir, ff, water)
+    run_step2_box(workspace_dir, box_type, box_d)
+    run_step3_solvate(workspace_dir)
+    run_step4_ions_prep(workspace_dir)
+    run_step5_genion(workspace_dir, concentration=0.15)
+    return state.read(workspace_dir)

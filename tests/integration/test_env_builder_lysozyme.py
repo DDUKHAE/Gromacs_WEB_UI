@@ -64,3 +64,20 @@ def test_step4_and_step5(tmp_workspace: Path, ubq_pdb_path: Path):
     assert "step_5" in s["step_outputs"]
     assert s["step_outputs"]["step_5"]["net_charge"] == 0.0
     assert s["last_completed_stage"] == "env"
+
+
+def test_build_environment_end_to_end(tmp_workspace: Path, ubq_pdb_path: Path):
+    from skills.env_builder import build_environment
+    from lib import state
+    shutil.copy(ubq_pdb_path, tmp_workspace / "inputs" / "input.pdb")
+    build_environment(
+        pdb_path=tmp_workspace / "inputs" / "input.pdb",
+        prompt="protein in water",
+        workspace_dir=tmp_workspace,
+        prerequisites={},
+        interactive=False,
+    )
+    s = state.read(tmp_workspace)
+    assert s["last_completed_stage"] == "env"
+    for k in ("step_1", "step_2", "step_3", "step_5"):
+        assert k in s["step_outputs"]
