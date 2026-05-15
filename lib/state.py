@@ -42,3 +42,21 @@ def write(workspace_dir: Path, data: dict[str, Any]) -> None:
     finally:
         if os.path.exists(tmp):
             os.unlink(tmp)
+
+
+class StateContractError(Exception):
+    """Raised when state.json violates a skill's entry contract."""
+
+
+def require_step_keys(state_data: dict[str, Any], keys: list[str]) -> None:
+    missing = [k for k in keys if k not in state_data.get("step_outputs", {})]
+    if missing:
+        raise StateContractError(f"missing required step keys: {missing}")
+
+
+def require_last_stage(state_data: dict[str, Any], expected: str) -> None:
+    actual = state_data.get("last_completed_stage")
+    if actual != expected:
+        raise StateContractError(
+            f"last_completed_stage must be {expected!r}, got {actual!r}"
+        )
