@@ -7,6 +7,7 @@ from typing import Any
 
 from lib import state
 from lib import tutorial_registry as TR
+from lib import gmx_wrapper as GW
 
 
 class UnsupportedTutorialError(Exception):
@@ -70,3 +71,25 @@ def select_tutorial(workspace_dir: Path, pdb_path: Path,
     }
     state.write(workspace_dir, s)
     return decision
+
+
+def run_step1_topology(workspace_dir: Path, forcefield: str, water: str) -> None:
+    ws = Path(workspace_dir)
+    pdb = ws / "inputs" / "input.pdb"
+    out_dir = ws / "stage1_env"
+    result = GW.run(
+        ["pdb2gmx", "-f", str(pdb),
+         "-o", "processed.gro", "-p", "topol.top",
+         "-water", water, "-ff", forcefield, "-ignh"],
+        cwd=out_dir,
+    )
+    if not result.ok:
+        raise RuntimeError(f"pdb2gmx failed: {result.stderr[-500:]}")
+    s = state.read(ws)
+    s["step_outputs"]["step_1"] = {
+        "forcefield": forcefield, "water_model": water,
+        "top_file": "stage1_env/topol.top",
+        "gro_file": "stage1_env/processed.gro",
+    }
+    s["current_step"] = 1
+    state.write(ws, s)
