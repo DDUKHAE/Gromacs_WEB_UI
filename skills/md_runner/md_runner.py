@@ -160,3 +160,107 @@ def _default_phase_runner(workspace_dir: Path, phase: str,
     run_phase(workspace_dir, phase, overrides)
     # Default judgment: PASS. Real validators are wired in Task H6.
     return V.Judgment(tier="pass", metric=phase)
+
+
+_NUM_RE = re.compile(r"(-?\d+(?:\.\d+)?)")
+
+
+def _parse_change_value(target: str, change_str: str) -> Any:
+    # "2.0 → 5.0" -> 5.0
+    m = _NUM_RE.findall(change_str)
+    if not m:
+        return change_str
+    val = m[-1]
+    try:
+        return float(val) if "." in val else int(val)
+    except ValueError:
+        return val
+
+
+def _record_warning(workspace_dir: Path, phase: str,
+                    judgment: V.Judgment) -> dict[str, Any]:
+    payload = {
+        "warning_id": judgment.warning_id,
+        "step": 7, "phase": phase,
+        "metric": judgment.metric, "observed": judgment.observed,
+        "expected_range": judgment.expected_range,
+        "suggested_mutation": judgment.suggested_mutation,
+        "cause": judgment.cause,
+    }
+    s = state.read(workspace_dir)
+    s["pending_warnings"].append(payload)
+    state.write(workspace_dir, s)
+    return payload
+
+
+def handle_phase_result(workspace_dir: Path, phase: str,
+                        judgment: V.Judgment, interactive: bool) -> dict[str, Any]:
+    if judgment.tier != "warning":
+        return {"status": judgment.tier}
+    payload = _record_warning(workspace_dir, phase, judgment)
+    if interactive:
+        return {"status": "warning_pending_decision",
+                "warning_id": payload["warning_id"],
+                "payload": payload}
+    # auto-decline path
+    s = state.read(workspace_dir)
+    s["retry_history"].append({
+        "step": 7, "phase": phase, "tier": "warning",
+        "cause": "auto_decline_noninteractive",
+        "warning_id": payload["warning_id"],
+        "remediation": "noninteractive=False; no mutation applied",
+    })
+    s["pending_warnings"] = [p for p in s["pending_warnings"]
+                              if p["warning_id"] != payload["warning_id"]]
+    state.write(workspace_dir, s)
+    return {"status": "warning_declined",
+            "warning_id": payload["warning_id"]}
+
+
+def _pop_warning(workspace_dir: Path, warning_id: str) -> dict[str, Any] | None:
+    s = state.read(workspace_dir)
+    remaining = []
+    found = None
+    for p in s["pending_warnings"]:
+        if p["warning_id"] == warning_id and found is None:
+            found = p
+        else:
+            remaining.append(p)
+    if found is None:
+        return None
+    s["pending_warnings"] = remaining
+    state.write(workspace_dir, s)
+    return found
+
+
+def accept_warning(workspace_dir: Path, warning_id: str) -> dict[str, Any]:
+    payload = _pop_warning(workspace_dir, warning_id)
+    if not payload:
+        raise KeyError(f"warning_id not found: {warning_id}")
+    mutation = payload["suggested_mutation"] or {}
+    overrides: dict[str, Any] = {}
+    for k, v in (mutation.get("changes") or {}).items():
+        overrides[k] = _parse_change_value(mutation.get("target", ""), str(v))
+    s = state.read(workspace_dir)
+    s["retry_history"].append({
+        "step": payload["step"], "phase": payload["phase"],
+        "tier": "warning", "cause": payload["cause"],
+        "warning_id": warning_id,
+        "remediation": f"accepted: {overrides}",
+    })
+    state.write(workspace_dir, s)
+    return overrides
+
+
+def decline_warning(workspace_dir: Path, warning_id: str) -> None:
+    payload = _pop_warning(workspace_dir, warning_id)
+    if not payload:
+        raise KeyError(f"warning_id not found: {warning_id}")
+    s = state.read(workspace_dir)
+    s["retry_history"].append({
+        "step": payload["step"], "phase": payload["phase"],
+        "tier": "warning", "cause": "user_decline",
+        "warning_id": warning_id,
+        "remediation": "user declined; proceeding to next step",
+    })
+    state.write(workspace_dir, s)
