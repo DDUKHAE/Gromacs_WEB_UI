@@ -3,6 +3,8 @@ from pathlib import Path
 from typing import Any
 from lib import state
 from lib.state import StateContractError
+from lib import gmx_wrapper as GW
+from lib.mdp_templates import base as MDP
 
 
 REQUIRED_KEYS = ["step_1", "step_2", "step_3", "step_5"]
@@ -35,3 +37,57 @@ PHASE_SEQUENCES = {
 
 def phase_sequence_for_variant(variant: str | None) -> list[str]:
     return PHASE_SEQUENCES.get(variant or "", ["em", "nvt", "npt", "production"])
+
+
+PHASE_INPUT_GRO = {
+    "em":         ("stage1_env", "ions.gro"),
+    "nvt":        ("stage2_md", "em.gro"),
+    "npt":        ("stage2_md", "nvt.gro"),
+    "production": ("stage2_md", "npt.gro"),
+    "umbrella":   ("stage2_md", "npt.gro"),
+    "free_energy":("stage2_md", "npt.gro"),
+}
+
+PHASE_TO_STATE_KEY = {
+    "em": "em_gro", "nvt": "nvt_gro", "npt": "npt_gro",
+    "production": "production_gro",
+    "umbrella": "production_gro", "free_energy": "production_gro",
+}
+
+
+def run_phase(workspace_dir: Path, phase: str,
+              overrides: dict[str, Any] | None = None) -> None:
+    ws = Path(workspace_dir)
+    out_dir = ws / "stage2_md"
+    mdp_path = MDP.render(phase, overrides or {}, output_dir=out_dir)
+    in_dir_rel, in_gro = PHASE_INPUT_GRO[phase]
+    in_gro_path = ws / in_dir_rel / in_gro
+    top_path = ws / "stage1_env" / "topol.top"
+    tpr_path = out_dir / f"{phase}.tpr"
+    grompp_result = GW.run(
+        ["grompp", "-f", mdp_path.name,
+         "-c", str(in_gro_path),
+         "-p", str(top_path),
+         "-o", tpr_path.name, "-maxwarn", "2"],
+        cwd=out_dir,
+    )
+    if not grompp_result.ok:
+        raise RuntimeError(
+            f"grompp ({phase}) failed [{grompp_result.classification}]: "
+            f"{grompp_result.stderr[-500:]}"
+        )
+    mdrun_result = GW.run(
+        ["mdrun", "-deffnm", phase, "-ntomp",
+         str(state.read(ws)["hardware"]["ntomp"])],
+        cwd=out_dir,
+    )
+    if not mdrun_result.ok:
+        raise RuntimeError(
+            f"mdrun ({phase}) failed [{mdrun_result.classification}]: "
+            f"{mdrun_result.stderr[-500:]}"
+        )
+    s = state.read(ws)
+    step7 = s["step_outputs"].setdefault("step_7", {})
+    step7[PHASE_TO_STATE_KEY[phase]] = f"stage2_md/{phase}.gro"
+    s["current_step"] = 7
+    state.write(ws, s)
