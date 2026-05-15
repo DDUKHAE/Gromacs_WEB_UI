@@ -19,6 +19,10 @@ class Judgment:
             self.warning_id = str(uuid.uuid4())
 
 
+
+class RetryContractError(Exception):
+    """Raised when an attempt would violate the no-identical-retry rule."""
+
 NEUTRALITY_WARNING_TOL = 0.1
 NEUTRALITY_FATAL_TOL = 0.5
 DENSITY_WARNING_FRAC = 0.02
@@ -28,6 +32,7 @@ TEMP_RETRYABLE_K = 10.0
 ENERGY_DRIFT_WARNING = 0.5   # kJ/mol per ns
 ENERGY_DRIFT_RETRY = 5.0
 RMSD_PLATEAU_MAX_RANGE = 0.05  # nm tail-half range threshold
+RETRYABLE_MAX = 3
 
 
 def judge_neutrality(net_charge: float) -> Judgment:
@@ -145,3 +150,24 @@ def judge_rmsd_plateau(rmsd_series: list[float]) -> Judgment:
             "rationale": "RMSD has not plateaued; extend sampling",
         },
     )
+
+
+def assert_unique_attempt(history: list[dict[str, Any]], command: str,
+                          parameters: dict[str, Any]) -> None:
+    for entry in history:
+        if entry.get("command") == command and entry.get("parameters") == parameters:
+            raise RetryContractError(
+                f"retry must mutate command/parameters; identical attempt found "
+                f"(cause={entry.get('cause')})"
+            )
+
+
+def retryable_budget_remaining(history: list[dict[str, Any]],
+                               step: int, phase: str) -> int:
+    used = sum(
+        1 for e in history
+        if e.get("step") == step
+        and e.get("phase") == phase
+        and e.get("tier") == "retryable"
+    )
+    return max(0, RETRYABLE_MAX - used)
