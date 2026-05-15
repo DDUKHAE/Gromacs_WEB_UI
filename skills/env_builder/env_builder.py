@@ -6,6 +6,11 @@ from pathlib import Path
 from typing import Any
 
 from lib import state
+from lib import tutorial_registry as TR
+
+
+class UnsupportedTutorialError(Exception):
+    pass
 
 
 def init_workspace(workspace_dir: Path) -> None:
@@ -36,3 +41,32 @@ def collect_hardware(workspace_dir: Path) -> None:
     s = state.read(workspace_dir)
     s["hardware"] = {"cpu_count": cpu, "gpu_ids": gpus, "ntomp": ntomp}
     state.write(workspace_dir, s)
+
+
+def _pdb_hints(pdb_path: Path) -> dict[str, bool]:
+    text = Path(pdb_path).read_text()
+    return {
+        "has_protein": "ATOM" in text and any(
+            res in text for res in ("ALA", "GLY", "LEU", "VAL", "ILE")),
+        "has_membrane": any(
+            lipid in text for lipid in ("DPPC", "POPC", "DMPC", "DOPC")),
+        "has_ligand": "HETATM" in text,
+    }
+
+
+def select_tutorial(workspace_dir: Path, pdb_path: Path,
+                    prompt: str, prerequisites: dict[str, Any]) -> TR.RoutingDecision:
+    hints = _pdb_hints(pdb_path)
+    decision = TR.route(prompt=prompt, pdb_hints=hints, prerequisites=prerequisites)
+    if decision.unsupported_reason:
+        raise UnsupportedTutorialError(decision.unsupported_reason)
+    s = state.read(workspace_dir)
+    s["tutorial"] = {
+        "id": decision.tutorial_id,
+        "variant": decision.pipeline_variant,
+        "manifest_path": (
+            f"docs/tutorial/{decision.tutorial_id}/tutorial.manifest.json"
+        ),
+    }
+    state.write(workspace_dir, s)
+    return decision
