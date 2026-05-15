@@ -171,3 +171,69 @@ def run_advanced_analyses(workspace_dir: Path) -> dict[str, Any]:
     s["step_outputs"].setdefault("step_8", {})["advanced_summaries"] = out
     state.write(workspace_dir, s)
     return out
+
+
+def _run_wham(workspace_dir: Path) -> dict[str, Any]:
+    # Caller must have produced tpr-files.dat and pullf-files.dat in stage2_md/.
+    out = _viz_dir(workspace_dir) / "pmf.xvg"
+    GW.run(
+        ["wham", "-it", "tpr-files.dat", "-if", "pullf-files.dat",
+         "-o", str(out), "-hist", str(_viz_dir(workspace_dir) / "hist.xvg")],
+        cwd=_md_dir(workspace_dir),
+    )
+    return {"pmf_xvg": str(out),
+            "summary": xvg_parser.summary(out)}
+
+
+def _run_bar(workspace_dir: Path) -> dict[str, Any]:
+    # Caller must have produced per-lambda md.edr files in stage2_md/.
+    out_log = _viz_dir(workspace_dir) / "bar.log"
+    md = _md_dir(workspace_dir)
+    edrs = sorted(str(p.name) for p in md.glob("md_l*.edr"))
+    if not edrs:
+        return {"status": "skipped", "reason": "no md_l*.edr files"}
+    result = GW.run(["bar", "-f", *edrs, "-o", str(out_log)], cwd=md)
+    dG = None
+    for line in (result.stdout + result.stderr).splitlines():
+        if line.strip().startswith("total"):
+            try:
+                dG = float(line.split()[1])
+            except (IndexError, ValueError):
+                pass
+    return {"dG_kJ_per_mol": dG, "log": str(out_log)}
+
+
+def _run_membrane_analysis(workspace_dir: Path) -> dict[str, Any]:
+    return {"status": "stub",
+            "note": "membrane thickness, area per lipid, order parameters"}
+
+
+def _run_protein_ligand_analysis(workspace_dir: Path) -> dict[str, Any]:
+    return {"status": "stub",
+            "note": "ligand RMSD, binding distance, interaction map"}
+
+
+import sys as _sys
+
+VARIANT_DISPATCH = {
+    "umbrella_sampling": "_run_wham",
+    "free_energy_alchemical": "_run_bar",
+    "membrane_md_standard": "_run_membrane_analysis",
+    "protein_ligand_complex": "_run_protein_ligand_analysis",
+}
+
+
+def run_variant_analyses(workspace_dir: Path) -> dict[str, Any]:
+    s = state.read(workspace_dir)
+    variant = (s.get("tutorial") or {}).get("variant", "")
+    fn_name = VARIANT_DISPATCH.get(variant)
+    if not fn_name:
+        return {}
+    # Look up via module so patches applied at module level take effect.
+    module = _sys.modules[__name__]
+    fn = getattr(module, fn_name)
+    result = fn(workspace_dir)
+    s = state.read(workspace_dir)
+    s["step_outputs"].setdefault("step_8", {})["variant_summary"] = result
+    state.write(workspace_dir, s)
+    return result
