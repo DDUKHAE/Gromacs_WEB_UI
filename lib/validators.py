@@ -1,3 +1,4 @@
+import statistics
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
@@ -22,6 +23,11 @@ NEUTRALITY_WARNING_TOL = 0.1
 NEUTRALITY_FATAL_TOL = 0.5
 DENSITY_WARNING_FRAC = 0.02
 DENSITY_RETRYABLE_FRAC = 0.10
+TEMP_WARNING_K = 3.0
+TEMP_RETRYABLE_K = 10.0
+ENERGY_DRIFT_WARNING = 0.5   # kJ/mol per ns
+ENERGY_DRIFT_RETRY = 5.0
+RMSD_PLATEAU_MAX_RANGE = 0.05  # nm tail-half range threshold
 
 
 def judge_neutrality(net_charge: float) -> Judgment:
@@ -83,3 +89,59 @@ def judge_density(observed: float, expected_range: tuple[float, float]) -> Judgm
         )
     return Judgment(tier="retryable", metric="density", observed=observed,
                     expected_range=expected_range, cause="pressure_coupling")
+
+
+def judge_temperature(observed: float, target: float) -> Judgment:
+    dev = abs(observed - target)
+    if dev <= TEMP_WARNING_K:
+        return Judgment(tier="pass", metric="temperature", observed=observed)
+    if dev <= TEMP_RETRYABLE_K:
+        return Judgment(
+            tier="warning", metric="temperature", observed=observed,
+            cause="temperature_coupling",
+            suggested_mutation={
+                "target": "nvt.mdp",
+                "changes": {"tau_t": "0.1 → 0.5"},
+                "rationale": "thermostat too tight; relax tau_t",
+            },
+        )
+    return Judgment(tier="retryable", metric="temperature", observed=observed,
+                    cause="temperature_coupling")
+
+
+def judge_energy_drift(slope_per_ns: float) -> Judgment:
+    s = abs(slope_per_ns)
+    if s <= ENERGY_DRIFT_WARNING:
+        return Judgment(tier="pass", metric="energy_drift", observed=slope_per_ns)
+    if s <= ENERGY_DRIFT_RETRY:
+        return Judgment(
+            tier="warning", metric="energy_drift", observed=slope_per_ns,
+            cause="unstable_energy",
+            suggested_mutation={
+                "target": "production.mdp",
+                "changes": {"dt": "0.002 → 0.001"},
+                "rationale": "energy drift positive; shorten timestep",
+            },
+        )
+    return Judgment(tier="retryable", metric="energy_drift", observed=slope_per_ns,
+                    cause="unstable_energy")
+
+
+def judge_rmsd_plateau(rmsd_series: list[float]) -> Judgment:
+    if len(rmsd_series) < 4:
+        return Judgment(tier="warning", metric="rmsd_plateau",
+                        observed=len(rmsd_series),
+                        cause="analysis_not_converged")
+    tail = rmsd_series[len(rmsd_series) // 2:]
+    spread = max(tail) - min(tail)
+    if spread <= RMSD_PLATEAU_MAX_RANGE:
+        return Judgment(tier="pass", metric="rmsd_plateau", observed=spread)
+    return Judgment(
+        tier="warning", metric="rmsd_plateau", observed=spread,
+        cause="analysis_not_converged",
+        suggested_mutation={
+            "target": "production.mdp",
+            "changes": {"nsteps": "extend by 50%"},
+            "rationale": "RMSD has not plateaued; extend sampling",
+        },
+    )
