@@ -1,3 +1,4 @@
+import shutil
 from pathlib import Path
 from typing import Any
 from lib import state
@@ -211,6 +212,71 @@ def _run_membrane_analysis(workspace_dir: Path) -> dict[str, Any]:
 def _run_protein_ligand_analysis(workspace_dir: Path) -> dict[str, Any]:
     return {"status": "stub",
             "note": "ligand RMSD, binding distance, interaction map"}
+
+
+def select_renderer() -> str:
+    if shutil.which("pymol"):
+        return "pymol"
+    if shutil.which("vmd"):
+        return "vmd"
+    return "none"
+
+
+_PYMOL_SCRIPT = """
+load {gro}, system
+load_traj {xtc}, system
+frame {frame_index}
+hide everything
+show cartoon, polymer
+show surface, polymer and resi {highlight_resi}
+bg_color white
+ray 1200, 800
+png {out_png}
+quit
+"""
+
+
+def render_frame(workspace_dir: Path, frame: str | int,
+                 output_path: Path,
+                 highlight_resi: str = "1-10") -> Path | None:
+    renderer = select_renderer()
+    if renderer == "none":
+        return None
+    ws = Path(workspace_dir)
+    s = state.read(ws) if state.path(ws).exists() else {}
+    prefix = _trajectory_prefix(s) if s else "production"
+    gro = ws / "stage2_md" / f"{prefix}.gro"
+    xtc = ws / "stage2_md" / f"{prefix}.xtc"
+    if frame == "last":
+        frame_idx = -1
+    elif frame == "middle":
+        frame_idx = 0  # PyMOL doesn't trivially expose count; use 0 as a stub.
+    else:
+        frame_idx = int(frame)
+    if renderer == "pymol":
+        script = _PYMOL_SCRIPT.format(
+            gro=str(gro), xtc=str(xtc),
+            frame_index=frame_idx, highlight_resi=highlight_resi,
+            out_png=str(output_path),
+        )
+        script_path = ws / "stage3_viz" / "render.pml"
+        script_path.write_text(script)
+        import subprocess
+        subprocess.run(["pymol", "-cq", str(script_path)],
+                       check=False, capture_output=True)
+        return output_path if output_path.exists() else None
+    if renderer == "vmd":
+        # VMD scripting fallback (minimal).
+        script = (f"mol new {gro}\nmol addfile {xtc} waitfor all\n"
+                  f"animate goto {frame_idx}\nrender TachyonInternal "
+                  f"{output_path}\nquit\n")
+        script_path = ws / "stage3_viz" / "render.vmd"
+        script_path.write_text(script)
+        import subprocess
+        subprocess.run(["vmd", "-dispdev", "text", "-e", str(script_path)],
+                       check=False, capture_output=True)
+        return output_path if output_path.exists() else None
+    return None
 
 
 import sys as _sys
