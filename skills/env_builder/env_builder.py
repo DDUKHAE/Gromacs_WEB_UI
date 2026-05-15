@@ -93,3 +93,51 @@ def run_step1_topology(workspace_dir: Path, forcefield: str, water: str) -> None
     }
     s["current_step"] = 1
     state.write(ws, s)
+
+
+def run_step2_box(workspace_dir: Path, box_type: str, distance_nm: float) -> None:
+    ws = Path(workspace_dir)
+    out_dir = ws / "stage1_env"
+    result = GW.run(
+        ["editconf", "-f", "processed.gro", "-o", "box.gro",
+         "-c", "-d", str(distance_nm), "-bt", box_type],
+        cwd=out_dir,
+    )
+    if not result.ok:
+        raise RuntimeError(f"editconf failed: {result.stderr[-500:]}")
+    s = state.read(ws)
+    s["step_outputs"]["step_2"] = {
+        "box_type": box_type, "box_distance": distance_nm,
+        "box_gro": "stage1_env/box.gro",
+    }
+    s["current_step"] = 2
+    state.write(ws, s)
+
+
+def run_step3_solvate(workspace_dir: Path) -> None:
+    ws = Path(workspace_dir)
+    out_dir = ws / "stage1_env"
+    top = out_dir / "topol.top"
+    GW.backup_topology(top)
+    s = state.read(ws)
+    s["topology_backups"].append("stage1_env/topol.top.bak")
+    state.write(ws, s)
+    result = GW.run(
+        ["solvate", "-cp", "box.gro", "-cs", "spc216.gro",
+         "-o", "solv.gro", "-p", "topol.top"],
+        cwd=out_dir,
+    )
+    if not result.ok:
+        GW.restore_topology(top)
+        raise RuntimeError(f"solvate failed: {result.stderr[-500:]}")
+    n_sol = 0
+    for line in result.stdout.splitlines():
+        if "Number of solvent molecules" in line:
+            n_sol = int(line.split()[-1])
+            break
+    s = state.read(ws)
+    s["step_outputs"]["step_3"] = {
+        "solv_gro": "stage1_env/solv.gro", "n_solvent_molecules": n_sol,
+    }
+    s["current_step"] = 3
+    state.write(ws, s)
