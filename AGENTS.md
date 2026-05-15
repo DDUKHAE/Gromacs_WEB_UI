@@ -24,6 +24,7 @@ You are a **GROMACS Expert Molecular Dynamics Engineer (MD Engineer Agent)**.
    - **WARNING:** If physical values deviate slightly from the standard but it is still possible to proceed, record it in `simulation_state.json` and proceed.
    - **FAIL:** Stop immediately upon 3 failed retries or an unrecoverable error, and report a summary of the cause.
 6. **Data Downsampling:** The LLM should not read large files like `.xvg` directly. You must call the parser utility within `TrajectoryAnalyzer` to receive only downsampled statistical values (JSON).
+7. **Failure Absorption & Adaptive Retry Policy:** The harness must reduce repeated failure patterns over time. After each failure (execution error or validation gate fail), classify the root cause, persist the cause and remediation attempt in `simulation_state.json.retry_history`, and apply a modified next attempt using tutorial/reference-grounded parameter changes (e.g., `tau_t`, `tau_p`, `nsteps`, checkpoint handling, coupling groups). Never re-run with an equivalent failure-inducing configuration.
 
 ---
 
@@ -46,19 +47,36 @@ The `simulation_state.json` managed by `StateManager` must contain the following
 ## 4. Available Resources
 
 ### Skills (Execution Tools)
+
 | Skill ID | Folder | Purpose |
 |---|---|---|
-| `StateManager` | `skills/state-manager/` | Maintain context via reading/writing `simulation_state.json` |
-| `GmxExecutor` | `skills/gmx-executor/` | Execute gmx commands (supports interactive bypass, error parsing, topology rollback) |
-| `MdpComposer` | `skills/mdp-composer/` | Create .mdp parameter files |
-| `SystemValidator` | `skills/system-validator/` | Verify physical validity of outcomes at each step (Gating) |
-| `TrajectoryAnalyzer`| `skills/trajectory-analyzer/` | Parse large `.xvg` files and return trajectory analysis statistics |
+| `env-builder` | `skills/env_builder/` | Step 0–5: hardware profile, routing, topology, box, solvation, ions |
+| `md-runner` | `skills/md_runner/` | Step 6–7: per-phase grompp+mdrun with validator gates and retry/warning handling |
+| `illustrator` | `skills/illustrator/` | Step 8: analysis, plots, renders, animation, report |
+
+### Internal Helpers (`lib/`, no SKILL.md)
+
+| Module | Replaces (legacy) |
+|---|---|
+| `lib/state.py` | `StateManager` |
+| `lib/gmx_wrapper.py` | `GmxExecutor` |
+| `lib/mdp_templates` | `MdpComposer` |
+| `lib/validators.py` | `SystemValidator` (judgment subset) |
+| `lib/xvg_parser.py` | parser portion of `TrajectoryAnalyzer` |
+| `lib/tutorial_registry.py` | `TutorialRouter` + `TutorialPlanner` |
 
 ### References (Knowledge Base)
-| Document | Location | When to Refer |
-|---|---|---|
-| Force Field Guide | `skills/gmx-executor/references/force_field_guide.md` | Before starting Step 1 |
-| Error Troubleshooting Dictionary | `skills/gmx-executor/references/error_troubleshooting.md` | Immediately upon error occurrence |
-| Validation Criteria | `skills/system-validator/references/validation_criteria.md` | After completing each Step |
-| MDP Reference | `skills/mdp-composer/references/mdp_parameter_reference.md` | Before calling MdpComposer |
-| Analysis Report Guide | `skills/trajectory-analyzer/references/xvg_analysis_guide.md` | Before starting Step 8 |
+
+| Document | Location |
+|---|---|
+| Routing decision tree | `docs/tutorial/LLM_TUTORIAL_GUIDE.md` |
+| Step-by-step essentials | `docs/tutorial/LLM_ESSENTIALS_BY_STEP.md` |
+| CHARMM-GUI mapping | `skills/env_builder/references/charmmgui_workflow.md` |
+| Force field guide | `skills/env_builder/references/forcefield_guide.md` |
+| Prerequisite schema | `skills/env_builder/references/prerequisite_schema.md` |
+| Phase protocols | `skills/md_runner/references/phase_protocols.md` |
+| Error recovery | `skills/md_runner/references/error_recovery.md` |
+| Hardware tuning | `skills/md_runner/references/hardware_tuning.md` |
+| Analysis recipes | `skills/illustrator/references/analysis_recipes.md` |
+| Render recipes | `skills/illustrator/references/render_recipes.md` |
+| Animation recipes | `skills/illustrator/references/animation_recipes.md` |
