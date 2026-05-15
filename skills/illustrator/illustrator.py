@@ -109,3 +109,65 @@ def run_core_analyses(workspace_dir: Path) -> dict[str, dict]:
     s["step_outputs"].setdefault("step_8", {})["analysis_summaries"] = out
     state.write(workspace_dir, s)
     return out
+
+
+def _hbond(ws: Path, prefix: str) -> Path:
+    out = _viz_dir(ws) / "hbond.xvg"
+    GW.run(
+        ["hbond", "-s", f"{prefix}.tpr", "-f", f"{prefix}.xtc",
+         "-num", str(out)],
+        cwd=_md_dir(ws), interactive_inputs=["Protein", "Protein"],
+    )
+    return out
+
+
+def _dssp(ws: Path, prefix: str) -> Path:
+    out_xpm = _viz_dir(ws) / "dssp.xpm"
+    GW.run(
+        ["do_dssp", "-s", f"{prefix}.tpr", "-f", f"{prefix}.xtc",
+         "-o", str(out_xpm)],
+        cwd=_md_dir(ws), interactive_inputs=["Protein"],
+    )
+    return out_xpm
+
+
+def _pca(ws: Path, prefix: str) -> tuple[Path, Path]:
+    md = _md_dir(ws); viz = _viz_dir(ws)
+    GW.run(
+        ["covar", "-s", f"{prefix}.tpr", "-f", f"{prefix}.xtc",
+         "-o", str(viz / "eigenval.xvg"), "-v", str(viz / "eigenvec.trr")],
+        cwd=md, interactive_inputs=["Backbone", "Backbone"],
+    )
+    GW.run(
+        ["anaeig", "-s", f"{prefix}.tpr", "-f", f"{prefix}.xtc",
+         "-v", str(viz / "eigenvec.trr"),
+         "-2d", str(viz / "pca_proj.xvg"),
+         "-first", "1", "-last", "2"],
+        cwd=md, interactive_inputs=["Backbone", "Backbone"],
+    )
+    return viz / "eigenval.xvg", viz / "pca_proj.xvg"
+
+
+def run_advanced_analyses(workspace_dir: Path) -> dict[str, Any]:
+    s = assert_ready(workspace_dir)
+    prefix = _trajectory_prefix(s)
+    out: dict[str, Any] = {}
+    try:
+        out["hbond"] = xvg_parser.summary(_hbond(workspace_dir, prefix))
+    except Exception as e:
+        out["hbond"] = {"status": "skipped", "reason": str(e)[:200]}
+    try:
+        dssp_xpm = _dssp(workspace_dir, prefix)
+        out["dssp"] = {"xpm_path": str(dssp_xpm)}
+    except Exception as e:
+        out["dssp"] = {"status": "skipped", "reason": str(e)[:200]}
+    try:
+        eigval, proj = _pca(workspace_dir, prefix)
+        out["pca"] = {"eigenval_summary": xvg_parser.summary(eigval),
+                      "proj_xvg": str(proj)}
+    except Exception as e:
+        out["pca"] = {"status": "skipped", "reason": str(e)[:200]}
+    s = state.read(workspace_dir)
+    s["step_outputs"].setdefault("step_8", {})["advanced_summaries"] = out
+    state.write(workspace_dir, s)
+    return out
