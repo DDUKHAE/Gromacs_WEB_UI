@@ -8,6 +8,7 @@ from typing import Any
 from lib import state
 from lib import tutorial_registry as TR
 from lib import gmx_wrapper as GW
+from lib.mdp_templates import base as MDP
 
 
 class UnsupportedTutorialError(Exception):
@@ -140,4 +141,54 @@ def run_step3_solvate(workspace_dir: Path) -> None:
         "solv_gro": "stage1_env/solv.gro", "n_solvent_molecules": n_sol,
     }
     s["current_step"] = 3
+    state.write(ws, s)
+
+
+def run_step4_ions_prep(workspace_dir: Path) -> None:
+    ws = Path(workspace_dir)
+    out_dir = ws / "stage1_env"
+    MDP.render("ions", overrides={}, output_dir=out_dir)
+    result = GW.run(
+        ["grompp", "-f", "ions.mdp", "-c", "solv.gro",
+         "-p", "topol.top", "-o", "ions.tpr", "-maxwarn", "1"],
+        cwd=out_dir,
+    )
+    if not result.ok:
+        raise RuntimeError(f"grompp (ions) failed: {result.stderr[-500:]}")
+    s = state.read(ws)
+    s["current_step"] = 4
+    state.write(ws, s)
+
+
+def run_step5_genion(workspace_dir: Path, concentration: float = 0.15) -> None:
+    ws = Path(workspace_dir)
+    out_dir = ws / "stage1_env"
+    top = out_dir / "topol.top"
+    GW.backup_topology(top)
+    s = state.read(ws)
+    if "stage1_env/topol.top.bak" not in s["topology_backups"]:
+        s["topology_backups"].append("stage1_env/topol.top.bak")
+    state.write(ws, s)
+    result = GW.run(
+        ["genion", "-s", "ions.tpr", "-o", "ions.gro",
+         "-p", "topol.top", "-pname", "NA", "-nname", "CL",
+         "-neutral", "-conc", str(concentration)],
+        cwd=out_dir, interactive_inputs=["SOL"],
+    )
+    if not result.ok:
+        GW.restore_topology(top)
+        raise RuntimeError(f"genion failed: {result.stderr[-500:]}")
+    n_na = n_cl = 0
+    for line in (result.stdout + result.stderr).splitlines():
+        if "Will try to add" in line and "NA" in line:
+            n_na = int(line.split()[3])
+        if "Will try to add" in line and "CL" in line:
+            n_cl = int(line.split()[3])
+    s = state.read(ws)
+    s["step_outputs"]["step_5"] = {
+        "ion_gro": "stage1_env/ions.gro",
+        "n_na": n_na, "n_cl": n_cl, "net_charge": 0.0,
+    }
+    s["current_step"] = 5
+    s["last_completed_stage"] = "env"
     state.write(ws, s)
