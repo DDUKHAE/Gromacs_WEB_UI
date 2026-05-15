@@ -15,8 +15,9 @@
 
 - [ ] `AGENTS.md` mandatory rules와 충돌 없음
 - [ ] `ARCHITECTURE.md` Step 0-8 고정 계약과 충돌 없음
-- [ ] `skills/tutorial-router/SKILL.md` 입력/출력 계약 일치
-- [ ] `skills/tutorial-planner/SKILL.md` 입력/출력 계약 일치
+- [ ] `skills/env_builder/SKILL.md` 입력/출력 계약 일치
+- [ ] `skills/md_runner/SKILL.md` 입력/출력 계약 일치
+- [ ] `skills/illustrator/SKILL.md` 입력/출력 계약 일치
 - [ ] FAIL 조건 문구가 runtime 문서들과 일치
 
 ## 3. Token Efficiency Evaluation

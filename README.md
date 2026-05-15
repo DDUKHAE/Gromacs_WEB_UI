@@ -1,21 +1,18 @@
 # GROMACS Harness
 
-Prompt + PDB input 기반으로 GROMACS 분자동역학 파이프라인(Step 0-8)을 자율 실행하기 위한 LLM 오케스트레이션 하네스입니다.
+Prompt + PDB input 기반으로 GROMACS 분자동역학 파이프라인을 3가지 핵심 스킬(env_builder, md_runner, illustrator)로 자율 실행하기 위한 LLM 오케스트레이션 하네스입니다.
 
 ## What This Repository Provides
 
-- `run_autonomy.py` 중심의 실행 오케스트레이터
-- 단계별 스킬 모듈:
-  - `skills/state-manager`
-  - `skills/gmx-executor`
-  - `skills/mdp-composer`
-  - `skills/system-validator`
-  - `skills/trajectory-analyzer`
-- 상태 파일 기반 컨텍스트 유지: `simulation_state.json`
-- 문서 기반 계약/아키텍처:
+- 3-skill 기반 실행 모델:
+  - `skills/env_builder`: 시스템 설정 및 환경 구축
+  - `skills/md_runner`: 분자동역학 시뮬레이션 실행
+  - `skills/illustrator`: 결과 시각화 및 보고
+- 상태 기반 계약/아키텍처:
   - `AGENTS.md`
   - `ARCHITECTURE.md`
   - `docs/pipeline_contract.md`
+- 회귀 테스트 스크립트: `scripts/regression/`
 
 ## Directory Layout
 
@@ -23,19 +20,23 @@ Prompt + PDB input 기반으로 GROMACS 분자동역학 파이프라인(Step 0-8
 .
 ├── AGENTS.md
 ├── ARCHITECTURE.md
-├── run_autonomy.py
-├── simulation_state.json
 ├── scripts/
-│   └── check_gromacs_env.py
+│   ├── check_gromacs_env.py
+│   └── regression/
+│       ├── run_tutorial.sh
+│       ├── lysozyme.sh
+│       ├── kalp15.sh
+│       ├── protein_ligand.sh
+│       ├── umbrella.sh
+│       ├── biphasic.sh
+│       ├── fe_methane.sh
+│       ├── fe_ethanol.sh
+│       └── virtual_sites.sh
 ├── skills/
-│   ├── gmx-executor/
-│   ├── mdp-composer/
-│   ├── state-manager/
-│   ├── system-validator/
-│   ├── trajectory-analyzer/
-│   ├── protocol-compiler/
-│   ├── tutorial-planner/
-│   └── tutorial-router/
+│   ├── env_builder/
+│   ├── md_runner/
+│   └── illustrator/
+├── lib/
 └── docs/
 ```
 
@@ -60,45 +61,37 @@ conda run -n GROMACS gmx --version
 conda run -n GROMACS python3 scripts/check_gromacs_env.py
 ```
 
-3. Dry run (`execute=false`)
+3. 회귀 테스트 실행
 
 ```bash
-conda run -n GROMACS python3 run_autonomy.py '{
-  "cwd": "/absolute/path/to/GROMACS_Harness",
-  "prompt": "lysozyme in water",
-  "pdb_path": "/absolute/path/to/input.pdb",
-  "execute": false
-}'
+# Lysozyme 기본 회귀 테스트
+./scripts/regression/lysozyme.sh
+
+# 모든 회귀 스크립트 실행 가능
+./scripts/regression/kalp15.sh
+./scripts/regression/protein_ligand.sh
+./scripts/regression/umbrella.sh
+./scripts/regression/biphasic.sh
+./scripts/regression/fe_methane.sh
+./scripts/regression/fe_ethanol.sh
+./scripts/regression/virtual_sites.sh
 ```
 
-4. Full pipeline run (`execute=true`)
+## 3-Skill Execution Model
 
-```bash
-conda run -n GROMACS python3 run_autonomy.py '{
-  "cwd": "/absolute/path/to/GROMACS_Harness",
-  "prompt": "lysozyme in water",
-  "pdb_path": "/absolute/path/to/input.pdb",
-  "execute": true
-}'
-```
+사용자는 3개 핵심 스킬을 직렬로 호출:
 
-## Autonomy Model
+1. **env_builder**: PDB + 프롬프트 → 시스템 구축 (Stage 0-1)
+2. **md_runner**: 환경 → 시뮬레이션 실행 (Stage 2)
+3. **illustrator**: 결과 → 시각화 보고서 (Stage 3)
 
-- 사용자 입력 최소 단위: `prompt`, `pdb_path`
-- 나머지 Step 0-8은 오케스트레이터/스킬이 처리
-- 상태 추적: `simulation_state.json`
-- 실패 처리:
-  - 최대 3회 재시도
-  - 동일 지문 재시도 방지
-  - topology 변경 단계 백업/복구
+각 스킬의 입출력 계약은 `skills/<name>/SKILL.md`에 명시됩니다.
 
 ## Current Notes
 
-- 바이너리 일관성을 위해 런타임에서 `gmx_bin`을 전달합니다.
-- 대용량 `.xvg`는 직접 판독 대신 downsampling 분석 경로를 사용합니다.
+- 실행은 기본적으로 run 격리 디렉터리(`runs/<tutorial_id>_<timestamp>`)에서 수행되어 런 간 파일 오염을 줄입니다.
+- 각 회귀 스크립트는 `scripts/regression/run_tutorial.sh`를 호출하여 3개 스킬 체인을 실행합니다.
 - 실제 물리적 타당성은 입력 시스템/force field/파라미터 품질에 의존합니다.
-- 실행은 기본적으로 run 격리 디렉터리(`runs/<target>_<timestamp>`)에서 수행되어 런 간 파일 오염을 줄입니다.
-- 다중 PDB 회귀 실행 후 요약 아티팩트는 `/tmp/harness_regression_summary.json`에 생성됩니다.
 
 ## Documentation
 
