@@ -1,0 +1,13 @@
+[project]
+name = "gromacs-harness"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+markers = [
+    "integration: requires gmx on PATH",
+    "renderer: requires PyMOL or VMD",
+    "animation: requires ffmpeg",
+]
