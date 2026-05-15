@@ -214,6 +214,65 @@ def _run_protein_ligand_analysis(workspace_dir: Path) -> dict[str, Any]:
             "note": "ligand RMSD, binding distance, interaction map"}
 
 
+def compose_report(workspace_dir: Path) -> Path:
+    ws = Path(workspace_dir)
+    viz = _viz_dir(ws)
+    s = state.read(ws)
+    step8 = s["step_outputs"].get("step_8", {})
+    analyses = step8.get("analysis_summaries", {})
+    advanced = step8.get("advanced_summaries", {})
+    variant = step8.get("variant_summary", {})
+    lines = []
+    lines.append(f"# Simulation Report")
+    lines.append("")
+    lines.append(f"- Tutorial: `{(s.get('tutorial') or {}).get('id')}`")
+    lines.append(f"- Variant: `{(s.get('tutorial') or {}).get('variant')}`")
+    lines.append("")
+    lines.append("## Core Analysis Summary")
+    lines.append("")
+    lines.append("| Metric | Mean | Std | Count |")
+    lines.append("|---|---|---|---|")
+    for name, st in sorted(analyses.items()):
+        if st.get("count", 0) == 0:
+            continue
+        lines.append(f"| {name.upper()} | {st.get('mean','-'):.4g} "
+                     f"| {st.get('std','-'):.4g} | {st.get('count')} |")
+    lines.append("")
+    lines.append("## Plots")
+    for png in sorted(viz.glob("*.png")):
+        lines.append(f"![{png.stem}]({png.name})")
+        lines.append("")
+    if advanced:
+        lines.append("## Advanced Analyses")
+        for k, v in advanced.items():
+            lines.append(f"- **{k}**: `{v}`")
+        lines.append("")
+    if variant:
+        lines.append("## Tutorial-specific")
+        for k, v in variant.items():
+            lines.append(f"- **{k}**: `{v}`")
+        lines.append("")
+    report = viz / "report.md"
+    report.write_text("\n".join(lines))
+    s = state.read(ws)
+    s["step_outputs"].setdefault("step_8", {})["final_report_path"] = \
+        str(report)
+    state.write(ws, s)
+    return report
+
+
+def compose_html_report(workspace_dir: Path) -> Path | None:
+    try:
+        import plotly  # noqa: F401
+    except ImportError:
+        return None
+    # Plotly HTML rendering left as future extension; emit a placeholder.
+    viz = _viz_dir(workspace_dir)
+    html = viz / "report.html"
+    html.write_text("<html><body>See report.md (plotly HTML stub)</body></html>")
+    return html
+
+
 def select_renderer() -> str:
     if shutil.which("pymol"):
         return "pymol"
