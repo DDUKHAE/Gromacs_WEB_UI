@@ -264,3 +264,94 @@ def decline_warning(workspace_dir: Path, warning_id: str) -> None:
         "remediation": "user declined; proceeding to next step",
     })
     state.write(workspace_dir, s)
+
+
+def _validate_phase(workspace_dir: Path, phase: str) -> V.Judgment:
+    """Run gmx energy on the .edr and judge the most relevant metric."""
+    ws = Path(workspace_dir)
+    edr = ws / "stage2_md" / f"{phase}.edr"
+    if not edr.exists():
+        return V.Judgment(tier="pass", metric=phase)  # nothing to inspect
+    # request density for npt, temperature for nvt, potential for em/production
+    if phase == "nvt":
+        return _judge_temperature(workspace_dir, phase)
+    if phase == "npt":
+        return _judge_density(workspace_dir, phase)
+    if phase in ("production", "umbrella", "free_energy"):
+        return _judge_energy_drift(workspace_dir, phase)
+    return V.Judgment(tier="pass", metric=phase)
+
+
+def _gmx_energy(workspace_dir: Path, phase: str, term: str,
+                out_xvg: str) -> Path:
+    out_dir = Path(workspace_dir) / "stage2_md"
+    GW.run(["energy", "-f", f"{phase}.edr", "-o", out_xvg],
+           cwd=out_dir, interactive_inputs=[term, ""])
+    return out_dir / out_xvg
+
+
+def _judge_temperature(ws: Path, phase: str) -> V.Judgment:
+    xvg = _gmx_energy(ws, phase, "Temperature", f"{phase}_temp.xvg")
+    summary = xvg_parser.summary(xvg)
+    if summary["count"] == 0:
+        return V.Judgment(tier="pass", metric="temperature")
+    return V.judge_temperature(observed=summary["mean"], target=300.0)
+
+
+def _judge_density(ws: Path, phase: str) -> V.Judgment:
+    xvg = _gmx_energy(ws, phase, "Density", f"{phase}_dens.xvg")
+    summary = xvg_parser.summary(xvg)
+    if summary["count"] == 0:
+        return V.Judgment(tier="pass", metric="density")
+    return V.judge_density(observed=summary["mean"],
+                           expected_range=(995.0, 1005.0))
+
+
+def _judge_energy_drift(ws: Path, phase: str) -> V.Judgment:
+    xvg = _gmx_energy(ws, phase, "Potential", f"{phase}_pot.xvg")
+    summary = xvg_parser.summary(xvg)
+    if summary["count"] < 2:
+        return V.Judgment(tier="pass", metric="energy_drift")
+    slope = (summary["last"] - summary["first"]) / max(1, summary["count"])
+    return V.judge_energy_drift(slope_per_ns=slope)
+
+
+def _validating_phase_runner(workspace_dir: Path, phase: str,
+                              overrides: dict[str, Any]) -> V.Judgment:
+    run_phase(workspace_dir, phase, overrides)
+    return _validate_phase(workspace_dir, phase)
+
+
+def run_simulation(workspace_dir: Path,
+                   phase_overrides: dict[str, dict[str, Any]] | None = None,
+                   interactive: bool = True,
+                   accept_warning_id: str | None = None,
+                   decline_warning_id: str | None = None) -> dict[str, Any]:
+    if accept_warning_id:
+        ov = accept_warning(workspace_dir, accept_warning_id)
+        # caller is expected to also supply the phase via phase_overrides
+        return {"status": "warning_accepted", "applied_overrides": ov}
+    if decline_warning_id:
+        decline_warning(workspace_dir, decline_warning_id)
+        return {"status": "warning_declined"}
+
+    s = assert_ready(workspace_dir)
+    variant = (s.get("tutorial") or {}).get("variant")
+    seq = phase_sequence_for_variant(variant)
+    phase_overrides = phase_overrides or {}
+    for phase in seq:
+        judgment = run_phase_with_recovery(
+            workspace_dir, phase=phase,
+            phase_runner=_validating_phase_runner,
+            overrides=phase_overrides.get(phase, {}),
+        )
+        if judgment.tier == "warning":
+            outcome = handle_phase_result(workspace_dir, phase, judgment,
+                                          interactive=interactive)
+            if outcome["status"] == "warning_pending_decision":
+                return outcome
+            # else: declined -> proceed
+    s = state.read(workspace_dir)
+    s["last_completed_stage"] = "md"
+    state.write(workspace_dir, s)
+    return {"status": "complete"}
