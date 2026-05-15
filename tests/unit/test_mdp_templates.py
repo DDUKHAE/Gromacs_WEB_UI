@@ -27,3 +27,20 @@ def test_unknown_template_raises(tmp_path: Path):
     import pytest
     with pytest.raises(KeyError):
         M.render("nonexistent", overrides={}, output_dir=tmp_path)
+
+
+def test_render_umbrella(tmp_path: Path):
+    out = M.render("umbrella", overrides={"pull_coord_init": 0.5}, output_dir=tmp_path)
+    text = out.read_text()
+    assert "pull" in text
+    assert "pull_coord1_init         = 0.5" in text
+
+
+def test_render_free_energy(tmp_path: Path):
+    out = M.render("free_energy",
+                   overrides={"init_lambda_state": 3,
+                              "vdw_lambdas": "0.0 0.25 0.5 0.75 1.0"},
+                   output_dir=tmp_path)
+    text = out.read_text()
+    assert "free_energy" in text
+    assert "init_lambda_state        = 3" in text
