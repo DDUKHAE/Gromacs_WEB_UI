@@ -49,3 +49,28 @@ def test_illustrator_accepts_externally_prepared_md(tmp_workspace: Path):
         (tmp_workspace / "stage2_md" / f).write_text("placeholder")
     from skills.illustrator.illustrator import assert_ready
     assert_ready(tmp_workspace)
+
+
+@pytest.mark.skipif(GMX is None, reason="gmx not on PATH")
+def test_full_pipeline_progresses_last_completed_stage(tmp_workspace: Path,
+                                                       ubq_pdb_path: Path):
+    from skills.env_builder import build_environment
+    from skills.md_runner import run_simulation
+    from skills.illustrator import illustrate
+    from lib import state
+    shutil.copy(ubq_pdb_path, tmp_workspace / "inputs" / "input.pdb")
+    build_environment(
+        pdb_path=tmp_workspace / "inputs" / "input.pdb",
+        prompt="protein in water",
+        workspace_dir=tmp_workspace,
+        prerequisites={},
+        interactive=False,
+    )
+    assert state.read(tmp_workspace)["last_completed_stage"] == "env"
+    run_simulation(workspace_dir=tmp_workspace,
+                   phase_overrides={p: {"nsteps": 100, "dt": 0.001}
+                                     for p in ("em","nvt","npt","production")},
+                   interactive=False)
+    assert state.read(tmp_workspace)["last_completed_stage"] == "md"
+    illustrate(workspace_dir=tmp_workspace, animation={"enabled": False})
+    assert state.read(tmp_workspace)["last_completed_stage"] == "viz"
