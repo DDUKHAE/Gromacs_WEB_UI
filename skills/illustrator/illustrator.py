@@ -215,6 +215,37 @@ def _run_protein_ligand_analysis(workspace_dir: Path) -> dict[str, Any]:
 
 import sys as _sys
 
+
+def plot_xvg(xvg_path: Path, output_path: Path, title: str = "") -> Path:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    data = xvg_parser.parse(xvg_path, max_points=2000)
+    fig, ax = plt.subplots(figsize=(8, 5))
+    cols = data["columns"]
+    if len(cols) >= 2:
+        ax.plot(cols[0], cols[1])
+    ax.set_xlabel(data["xaxis_label"])
+    ax.set_ylabel(data["yaxis_label"])
+    ax.set_title(title or data["title"] or xvg_path.stem)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=120)
+    plt.close(fig)
+    return output_path
+
+
+def plot_all(workspace_dir: Path) -> list[Path]:
+    viz = _viz_dir(workspace_dir)
+    pngs = []
+    for xvg in sorted(viz.glob("*.xvg")):
+        png = viz / (xvg.stem + ".png")
+        try:
+            plot_xvg(xvg, png, title=xvg.stem)
+            pngs.append(png)
+        except Exception:
+            continue
+    return pngs
+
 VARIANT_DISPATCH = {
     "umbrella_sampling": "_run_wham",
     "free_energy_alchemical": "_run_bar",
