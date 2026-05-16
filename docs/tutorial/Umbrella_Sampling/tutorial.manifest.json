@@ -1,0 +1,40 @@
+{
+  "id": "Umbrella_Sampling",
+  "pipeline_variant": "umbrella_sampling",
+  "system_type": [
+    "protein",
+    "peptide",
+    "free_energy"
+  ],
+  "required_inputs": [
+    "protein_pdb",
+    "reaction_coordinate_definition"
+  ],
+  "defaults": {
+    "forcefield": "charmm36",
+    "water_model": "tip3p",
+    "box_type": "cubic",
+    "box_distance_nm": 1.2,
+    "pull_coord_k": 1000.0
+  },
+  "architecture_steps": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "documents": {
+    "step_1": "generate_topology/prepare_the_topology.md",
+    "step_2": "define_box_and_solvate/defining_the_unit_cell_and_adding_solvent.md",
+    "step_3": "define_box_and_solvate/defining_the_unit_cell_and_adding_solvent.md",
+    "step_7_equilibration": "Equilibration/equilibration.md",
+    "step_7_production": "production_MD/umbrella_sampling_simulations.md",
+    "step_8": "analysis/analysis.md"
+  },
+  "validation_profile": "umbrella_sampling_pmf"
+}

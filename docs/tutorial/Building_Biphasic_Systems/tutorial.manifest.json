@@ -1,0 +1,35 @@
+{
+  "id": "Building_Biphasic_Systems",
+  "pipeline_variant": "biphasic_system",
+  "system_type": [
+    "biphasic",
+    "aqueous",
+    "hydrophobic"
+  ],
+  "required_inputs": [
+    "phase_components",
+    "composition_ratio"
+  ],
+  "defaults": {
+    "forcefield": "charmm36",
+    "water_model": "tip3p",
+    "box_type": "triclinic",
+    "box_distance_nm": 1.0
+  },
+  "architecture_steps": [
+    0,
+    1,
+    2,
+    3,
+    6,
+    7,
+    8
+  ],
+  "documents": {
+    "step_1": "generate_topology/prepare_the_hydrophobic_layer.md",
+    "step_2": "define_box_and_solvate/construct_the_box.md",
+    "step_3": "define_box_and_solvate/construct_the_box.md",
+    "step_7_tips": "tips_and_tricks/tips_and_tricks.md"
+  },
+  "validation_profile": "biphasic_interface"
+}
