@@ -1,113 +1,123 @@
 # GROMACS Harness
 
-Prompt + PDB input 기반으로 GROMACS 분자동역학 파이프라인을 3가지 핵심 스킬(env_builder, md_runner, illustrator)로 자율 실행하기 위한 LLM 오케스트레이션 하네스입니다.
+PDB + 자연어 prompt 입력으로 GROMACS 분자동역학(MD) 파이프라인을 세 capability-aligned skill(`env-builder`, `md-runner`, `illustrator`)로 자율 실행하는 LLM 오케스트레이션 하네스.
 
 ## What This Repository Provides
 
-- 3-skill 기반 실행 모델:
-  - `skills/env_builder`: 시스템 설정 및 환경 구축
-  - `skills/md_runner`: 분자동역학 시뮬레이션 실행
-  - `skills/illustrator`: 결과 시각화 및 보고
-- 상태 기반 계약/아키텍처:
-  - `AGENTS.md`
-  - `ARCHITECTURE.md`
-  - `docs/pipeline_contract.md`
-- 회귀 테스트 스크립트: `scripts/regression/`
+- **3 skill 실행 모델** — 각 skill은 독립 호출 가능하며 파일 기반으로 체이닝됨
+  - `skills/env_builder/` — Step 0–5: 하드웨어 프로파일, 튜토리얼 라우팅, topology/box/solvate/ions (CHARMM-GUI workflow를 로컬에서 GROMACS native로 재현)
+  - `skills/md_runner/` — Step 6–7: phase별 grompp+mdrun, validator gate, retry/WARNING 처리
+  - `skills/illustrator/` — Step 8: RMSD/RMSF/PCA/DSSP/SASA + matplotlib 플롯 + PyMOL/VMD 렌더 + ffmpeg 애니메이션 + markdown 리포트
+- **공용 내부 라이브러리** `lib/` — state.py, validators.py, gmx_wrapper.py, xvg_parser.py, tutorial_registry.py, mdp_templates/
+- **상태 기반 계약** — `workspace/state.json`이 single source of truth ([`docs/STATE_SCHEMA.md`](docs/STATE_SCHEMA.md))
+- **8개 튜토리얼 라우팅** — Lysozyme / KALP15 / Protein-Ligand / Umbrella / Biphasic / FE-Methane / FE-Ethanol / Virtual_Sites
+- **회귀 테스트 스크립트** — `scripts/regression/`
 
 ## Directory Layout
 
-```text
+```
 .
-├── AGENTS.md
-├── ARCHITECTURE.md
+├── AGENTS.md                  운영 규칙 + skill 자원 매핑
+├── ARCHITECTURE.md            Step 0–8 + 3-skill 매핑
+├── CONTRIBUTING.md            기여 가이드
+├── LICENSE                    MIT
+├── pyproject.toml             pytest 설정
+├── lib/                       내부 helper (state, validators, gmx_wrapper, …)
+├── skills/                    3개 skill (SKILL.md + 코드 + references/)
+├── docs/
+│   ├── STATE_SCHEMA.md
+│   ├── WARNING_FLOW.md
+│   ├── independent_entry_guide.md
+│   ├── pipeline_contract.md
+│   ├── runbook.md
+│   ├── simulation_criteria.md
+│   ├── tutorial/              8개 튜토리얼 + 라우팅 가이드
+│   └── superpowers/           spec/plan 이력
 ├── scripts/
 │   ├── check_gromacs_env.py
-│   └── regression/
-│       ├── run_tutorial.sh
-│       ├── lysozyme.sh
-│       ├── kalp15.sh
-│       ├── protein_ligand.sh
-│       ├── umbrella.sh
-│       ├── biphasic.sh
-│       ├── fe_methane.sh
-│       ├── fe_ethanol.sh
-│       └── virtual_sites.sh
-├── skills/
-│   ├── env_builder/
-│   ├── md_runner/
-│   └── illustrator/
-├── lib/
-└── docs/
+│   └── regression/            튜토리얼별 + 공용 runner
+└── tests/{unit,contract,integration}/
 ```
 
 ## Prerequisites
 
-- macOS/Linux shell
-- Conda (권장)
-- GROMACS (conda-forge 패키지 사용 가능)
+- macOS / Linux shell
+- Python 3.11+
+- GROMACS (`gmx` on PATH) — `conda-forge::gromacs` 권장
+- (선택) `pip install matplotlib` — illustrator 플롯
+- (선택) PyMOL 또는 VMD — illustrator 구조 렌더
+- (선택) `ffmpeg` — illustrator 트래젝토리 애니메이션
 
 ## Quick Start
 
-1. Conda env 생성 및 설치
-
 ```bash
-conda create -n GROMACS -y -c conda-forge gromacs
+# 1. 환경 구성
+conda create -n GROMACS -y -c conda-forge gromacs python=3.11
+conda activate GROMACS
+pip install pytest matplotlib
+
+# 2. 환경 확인
+python scripts/check_gromacs_env.py
+pytest tests -v   # GROMACS 없이도 unit/contract 모두 통과
+
+# 3. 회귀 테스트 (GROMACS 머신)
+./scripts/regression/lysozyme.sh        # 1UBQ.pdb 기본 회귀
+./scripts/regression/kalp15.sh          # 막 단백질
+./scripts/regression/protein_ligand.sh  # 단백질-리간드
+# ... umbrella, biphasic, fe_methane, fe_ethanol, virtual_sites
 ```
 
-2. 환경 확인
+## 3-Skill 호출 모델
 
-```bash
-conda run -n GROMACS gmx --version
-conda run -n GROMACS python3 scripts/check_gromacs_env.py
+```
+PDB + prompt ──► env-builder ──► md-runner ──► illustrator ──► report.md
+                  (Step 0–5)      (Step 6–7)      (Step 8)
+                       │             │              │
+                       └── workspace/state.json + stage{1,2,3}_*/ ──┘
 ```
 
-3. 회귀 테스트 실행
+각 skill은 `workspace/state.json` + 디렉터리만 공유한다. 외부 도구(예: CHARMM-GUI 다운로드)에서 받은 산출물로 `md-runner`나 `illustrator`만 단독 실행도 가능 — [`docs/independent_entry_guide.md`](docs/independent_entry_guide.md) 참조.
 
-```bash
-# Lysozyme 기본 회귀 테스트
-./scripts/regression/lysozyme.sh
+## Programmatic Use
 
-# 모든 회귀 스크립트 실행 가능
-./scripts/regression/kalp15.sh
-./scripts/regression/protein_ligand.sh
-./scripts/regression/umbrella.sh
-./scripts/regression/biphasic.sh
-./scripts/regression/fe_methane.sh
-./scripts/regression/fe_ethanol.sh
-./scripts/regression/virtual_sites.sh
+```python
+from pathlib import Path
+from skills.env_builder import build_environment
+from skills.md_runner import run_simulation
+from skills.illustrator import illustrate
+
+ws = Path("runs/my_run").resolve()
+build_environment(
+    pdb_path=Path("1UBQ.pdb").resolve(),
+    prompt="protein in water",
+    workspace_dir=ws,
+    prerequisites={},
+    interactive=False,
+)
+run_simulation(workspace_dir=ws, interactive=False)
+illustrate(workspace_dir=ws, animation={"enabled": False})
+# 결과: ws/stage3_viz/report.md
 ```
-
-## 3-Skill Execution Model
-
-사용자는 3개 핵심 스킬을 직렬로 호출:
-
-1. **env_builder**: PDB + 프롬프트 → 시스템 구축 (Stage 0-1)
-2. **md_runner**: 환경 → 시뮬레이션 실행 (Stage 2)
-3. **illustrator**: 결과 → 시각화 보고서 (Stage 3)
-
-각 스킬의 입출력 계약은 `skills/<name>/SKILL.md`에 명시됩니다.
-
-## Current Notes
-
-- 실행은 기본적으로 run 격리 디렉터리(`runs/<tutorial_id>_<timestamp>`)에서 수행되어 런 간 파일 오염을 줄입니다.
-- 각 회귀 스크립트는 `scripts/regression/run_tutorial.sh`를 호출하여 3개 스킬 체인을 실행합니다.
-- 실제 물리적 타당성은 입력 시스템/force field/파라미터 품질에 의존합니다.
 
 ## Documentation
 
-- 실행 정책/역할: `AGENTS.md`
-- 아키텍처 개요: `ARCHITECTURE.md`
-- 상태/단계 계약: `docs/pipeline_contract.md`
+| 문서 | 용도 |
+|---|---|
+| [`AGENTS.md`](AGENTS.md) | LLM 운영 규칙 + skill 자원 매핑 |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Step 0–8 계약, 3-skill 매핑 |
+| [`docs/STATE_SCHEMA.md`](docs/STATE_SCHEMA.md) | `workspace/state.json` 정식 스키마 |
+| [`docs/pipeline_contract.md`](docs/pipeline_contract.md) | Step별 입출력/안전 계약 |
+| [`docs/simulation_criteria.md`](docs/simulation_criteria.md) | 검증 임계값 (코드와 동기화) |
+| [`docs/WARNING_FLOW.md`](docs/WARNING_FLOW.md) | 사용자 결정형 WARNING 분기 |
+| [`docs/runbook.md`](docs/runbook.md) | 수동 복구 절차 |
+| [`docs/independent_entry_guide.md`](docs/independent_entry_guide.md) | 단독 진입 시나리오 |
+| [`docs/tutorial/LLM_TUTORIAL_GUIDE.md`](docs/tutorial/LLM_TUTORIAL_GUIDE.md) | 튜토리얼 라우팅 결정 트리 |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | 기여 가이드 |
+| [`docs/superpowers/specs/`](docs/superpowers/specs/) | 설계 spec 이력 |
+| [`docs/superpowers/plans/`](docs/superpowers/plans/) | 구현 plan 이력 |
 
-## License Guidance
+## License
 
-이 저장소는 GROMACS 자체 코드를 포함하지 않고, GROMACS를 호출하는 하네스/오케스트레이션 레이어입니다.
+MIT — `LICENSE` 참조.
 
-- 일반적으로는 하네스 코드에 대해 `MIT` 또는 `Apache-2.0`을 선택해도 무방합니다.
-- GROMACS와 라이선스 정합성을 우선한다면 `LGPL-2.1-or-later`도 선택 가능합니다.
-
-권장:
-- 외부 기여/재사용을 넓게 받으려면 `MIT`
-- GROMACS 생태계와 톤을 맞추려면 `LGPL-2.1-or-later`
-
-최종 선택 후 루트에 `LICENSE` 파일을 추가하세요.
+GROMACS 자체는 LGPL-2.1로 별도 배포되며 이 저장소는 GROMACS를 호출만 한다.
