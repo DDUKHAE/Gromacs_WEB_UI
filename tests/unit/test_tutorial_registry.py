@@ -17,7 +17,7 @@ def test_load_manifest_for_lysozyme():
 
 
 def test_load_manifest_missing_returns_none():
-    assert TR.load_manifest("Umbrella_Sampling") is None  # derived, no manifest
+    assert TR.load_manifest("Nonexistent_Tutorial") is None
 
 
 def test_get_entry_for_id():
