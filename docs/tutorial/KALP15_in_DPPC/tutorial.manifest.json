@@ -1,6 +1,6 @@
 {
   "id": "KALP15_in_DPPC",
-  "pipeline_variant": "membrane_protein_dppc",
+  "pipeline_variant": "membrane_md_standard",
   "system_type": [
     "protein",
     "membrane",

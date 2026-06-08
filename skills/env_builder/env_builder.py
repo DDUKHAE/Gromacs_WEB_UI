@@ -181,9 +181,9 @@ def run_step5_genion(workspace_dir: Path, concentration: float = 0.15) -> None:
     n_na = n_cl = 0
     for line in (result.stdout + result.stderr).splitlines():
         if "Will try to add" in line and "NA" in line:
-            n_na = int(line.split()[3])
+            n_na = int(line.split()[4])
         if "Will try to add" in line and "CL" in line:
-            n_cl = int(line.split()[3])
+            n_cl = int(line.split()[4])
     s = state.read(ws)
     s["step_outputs"]["step_5"] = {
         "ion_gro": "stage1_env/ions.gro",

@@ -81,6 +81,8 @@ def route(prompt: str, pdb_hints: dict[str, bool],
     if not _prompt_match(prompt):
         confidence = "low"
 
+    if entry is None:
+        raise ValueError(f"unknown tutorial: {tid}")
     required = set(entry["required_inputs"]) - {"protein_pdb"}
     provided = set(prerequisites.keys())
     # ligand_structure satisfied by ligand_itp too
