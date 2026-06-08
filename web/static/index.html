@@ -201,11 +201,24 @@ function renderSidebar(runs) {
     const el = document.createElement('div');
     el.className = 'run-item' + (run.run_id === currentRunId ? ' active' : '');
     el.onclick = () => selectRun(run.run_id);
-    const date = run.created_at ? run.created_at.replace('T', ' ').substring(0, 16) : '';
-    el.innerHTML = `
-      <div class="run-item-name">${run.protein.toUpperCase()}</div>
-      <div class="run-item-date">${date}</div>
-      <span class="run-item-badge badge-${run.status}">${run.status}</span>`;
+
+    const nameEl = document.createElement('div');
+    nameEl.className = 'run-item-name';
+    nameEl.textContent = run.protein.toUpperCase();
+
+    const dateEl = document.createElement('div');
+    dateEl.className = 'run-item-date';
+    dateEl.textContent = run.created_at ? run.created_at.replace('T', ' ').substring(0, 16) : '';
+
+    const badge = document.createElement('span');
+    const safeStatus = ['running','paused','completed','failed','aborted','pending'].includes(run.status)
+      ? run.status : 'pending';
+    badge.className = `run-item-badge badge-${safeStatus}`;
+    badge.textContent = safeStatus;
+
+    el.appendChild(nameEl);
+    el.appendChild(dateEl);
+    el.appendChild(badge);
     list.appendChild(el);
   });
 }

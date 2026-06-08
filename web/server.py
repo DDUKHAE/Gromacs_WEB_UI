@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -18,6 +19,8 @@ HARNESS_DIR: Path = Path(__file__).parent.parent
 RUNNER_PY: Path = Path(__file__).parent / "runner.py"
 STATIC_DIR: Path = Path(__file__).parent / "static"
 _NEXT_SKILL: dict[str, str] = {"env": "md", "md": "viz"}
+_MAX_PDB_BYTES: int = 50 * 1024 * 1024  # 50 MB
+_RUN_ID_RE = re.compile(r"^[a-z0-9][a-z0-9\-]*_\d{8}_\d{6}$")
 
 
 def get_harness_dir() -> Path:
@@ -25,6 +28,20 @@ def get_harness_dir() -> Path:
 
 
 HarnessDir = Annotated[Path, Depends(get_harness_dir)]
+
+
+def _check_run_id(run_id: str, runs_dir: Path) -> Path:
+    """Validate run_id and return its resolved workspace path.
+
+    Raises HTTPException 400 if the run_id format is invalid or the resolved
+    path escapes runs_dir (path traversal guard).
+    """
+    if not _RUN_ID_RE.match(run_id):
+        raise HTTPException(status_code=400, detail="invalid run_id format")
+    resolved = (runs_dir / run_id).resolve()
+    if not str(resolved).startswith(str(runs_dir.resolve()) + os.sep):
+        raise HTTPException(status_code=400, detail="invalid run_id")
+    return resolved
 
 
 def _run_summary(info: RunInfo) -> dict:
@@ -41,6 +58,13 @@ def _run_summary(info: RunInfo) -> dict:
 def create_app(harness_dir: Path | None = None) -> FastAPI:
     app = FastAPI(title="Gromacs Harness Web UI")
 
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:8000", "http://127.0.0.1:8000"],
+        allow_methods=["GET", "POST"],
+        allow_headers=["Content-Type"],
+    )
+
     if harness_dir is not None:
         app.dependency_overrides[get_harness_dir] = lambda: harness_dir
 
@@ -50,6 +74,7 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
 
     @app.get("/api/runs/{run_id}")
     def api_get_run(run_id: str, hd: HarnessDir) -> dict:
+        _check_run_id(run_id, hd / "runs")
         info = read_run(run_id, hd / "runs")
         if info is None:
             raise HTTPException(status_code=404, detail="run not found")
@@ -73,15 +98,17 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         water: str = Form("tip3p"),
         box_type: str = Form("dodecahedron"),
     ) -> dict:
-        stem = Path(pdb_file.filename or "protein").stem
-        protein = re.sub(r"^\d+", "", stem).lower() or "protein"
+        raw_stem = Path(pdb_file.filename or "protein").stem
+        protein = re.sub(r"[^a-z0-9\-]", "", re.sub(r"^\d+", "", raw_stem).lower())[:40] or "protein"
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         run_id = f"{protein}_{stamp}"
         ws = hd / "runs" / run_id
         inputs_dir = ws / "inputs"
         inputs_dir.mkdir(parents=True)
         pdb_path = inputs_dir / "input.pdb"
-        content = await pdb_file.read()
+        content = await pdb_file.read(_MAX_PDB_BYTES + 1)
+        if len(content) > _MAX_PDB_BYTES:
+            raise HTTPException(status_code=413, detail="PDB file too large (max 50 MB)")
         pdb_path.write_bytes(content)
         log_file = ws / "runner.log"
         log_fd = open(log_file, "w")
@@ -101,7 +128,7 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         action = body.get("action")
         if action not in ("continue", "abort"):
             raise HTTPException(status_code=400, detail="action must be 'continue' or 'abort'")
-        workspace = hd / "runs" / run_id
+        workspace = _check_run_id(run_id, hd / "runs")
         if not workspace.is_dir():
             raise HTTPException(status_code=404, detail="run not found")
         if action == "abort":
@@ -109,6 +136,8 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
             if pid_file.exists():
                 try:
                     pid = int(pid_file.read_text().strip())
+                    if pid <= 0:
+                        raise ValueError
                     os.kill(pid, signal.SIGTERM)
                 except (ValueError, ProcessLookupError, OSError):
                     pass
@@ -138,7 +167,12 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
     @app.websocket("/ws/runs/{run_id}")
     async def ws_logs(websocket: WebSocket, run_id: str, hd: HarnessDir):
         await websocket.accept()
-        log_file = hd / "runs" / run_id / "runner.log"
+        try:
+            workspace = _check_run_id(run_id, hd / "runs")
+        except HTTPException:
+            await websocket.close()
+            return
+        log_file = workspace / "runner.log"
         for _ in range(30):
             if log_file.exists():
                 break
@@ -156,7 +190,7 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
                     if line:
                         await websocket.send_text(line)
                     else:
-                        info = read_run(run_id, hd / "runs")
+                        info = read_run(run_id, workspace.parent)
                         if info is None or info.status != "running":
                             break
                         await asyncio.sleep(0.1)

@@ -33,6 +33,8 @@ def derive_status(workspace: Path) -> str:
     if pid_file.exists():
         try:
             pid = int(pid_file.read_text().strip())
+            if pid <= 0:
+                raise ValueError
         except ValueError:
             return "pending"
         if _process_alive(pid):

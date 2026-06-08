@@ -8,35 +8,31 @@ Usage:
     python main.py --no-browser
 """
 import argparse
-import subprocess
 import sys
 import webbrowser
 from pathlib import Path
 
 HARNESS_DIR = Path(__file__).parent
-REQUIRED = ["fastapi", "uvicorn", "multipart"]  # multipart = python-multipart
+REQUIRED = [("fastapi", "fastapi"), ("uvicorn", "uvicorn"), ("multipart", "python-multipart")]
 
 
 def check_dependencies() -> bool:
-    missing = []
-    for pkg in REQUIRED:
-        try:
-            __import__(pkg)
-        except ImportError:
-            missing.append(pkg)
+    missing = [pip_name for import_name, pip_name in REQUIRED
+               if not _can_import(import_name)]
     if not missing:
         return True
+    print("Missing dependencies. Install them first:\n")
+    print(f"  pip install -r {HARNESS_DIR / 'requirements.txt'}")
+    print(f"\nMissing packages: {', '.join(missing)}")
+    return False
 
-    print("Missing dependencies detected. Installing...")
-    result = subprocess.run(
-        [sys.executable, "-m", "pip", "install", "-e", str(HARNESS_DIR)],
-        capture_output=False,
-    )
-    if result.returncode != 0:
-        print("\nAuto-install failed. Run manually:")
-        print(f"  pip install -e {HARNESS_DIR}")
+
+def _can_import(name: str) -> bool:
+    try:
+        __import__(name)
+        return True
+    except ImportError:
         return False
-    return True
 
 
 def main() -> None:
@@ -56,8 +52,13 @@ def main() -> None:
     try:
         import uvicorn
     except ImportError:
-        print("uvicorn not found even after install attempt. Aborting.")
+        print("uvicorn not importable. Run: pip install -r requirements.txt")
         sys.exit(1)
+
+    if args.host not in ("127.0.0.1", "localhost", "::1"):
+        print(f"WARNING: Binding to {args.host} exposes the server to the network.")
+        print("         There is no authentication. Only do this on a trusted network.")
+        print()
 
     # Add harness root to sys.path so web.server and skills are importable
     if str(HARNESS_DIR) not in sys.path:
@@ -70,7 +71,6 @@ def main() -> None:
     print()
 
     if not args.no_browser:
-        # Open after a brief delay so uvicorn is ready
         import threading
         def _open():
             import time
