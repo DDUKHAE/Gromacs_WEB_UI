@@ -6,6 +6,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated
@@ -66,7 +67,7 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:8000", "http://127.0.0.1:8000"],
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "DELETE"],
         allow_headers=["Content-Type"],
     )
 
@@ -215,6 +216,10 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
                 pid = int(pid_file.read_text().strip())
                 if pid > 0:
                     os.kill(pid, signal.SIGTERM)
+                    try:
+                        time.sleep(0.3)
+                    except Exception:
+                        pass
             except (ValueError, ProcessLookupError, OSError):
                 pass
         shutil.rmtree(workspace, ignore_errors=True)

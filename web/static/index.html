@@ -1619,6 +1619,7 @@ async function startRun() {
     selectedPdb = null;
     document.getElementById('selected-file').textContent = '';
     btnStart.textContent = 'Start Simulation Run';
+    btnStart.disabled = false;
     await loadRuns();
     selectRun(run_id);
   } catch (e) {
@@ -1704,9 +1705,9 @@ function updateStepper(info) {
   if (!stage) {
     activeStep = (status === 'completed') ? 9 : 1;
   } else if (stage === 'env') {
-    activeStep = (status === 'paused' || status === 'running') ? 6 : 6;
+    activeStep = 6;
   } else if (stage === 'md') {
-    activeStep = (status === 'paused' || status === 'running') ? 8 : 8;
+    activeStep = 8;
   } else if (stage === 'viz') {
     activeStep = 9; // 전체 완료
   } else {
@@ -1889,7 +1890,7 @@ function renderRunList(runs) {
       running: '● running', paused: '⏸ paused',
       completed: '✓ completed', failed: '✕ failed',
       aborted: '○ aborted',
-    }[run.status] || run.status;
+    }[run.status] || 'unknown';
 
     el.innerHTML = `
       <div class="run-item-header">
@@ -2014,11 +2015,27 @@ async function loadArtifacts(runId) {
 
       const card = document.createElement('div');
       card.className = 'chart-card';
-      card.innerHTML = `
-        <div class="chart-card-title">${a.title || a.name}</div>
-        <canvas class="chart-canvas" width="280" height="90"></canvas>
-        <div class="chart-stats">min <span>${mn}</span> max <span>${mx}</span> last <span>${last}</span></div>
-      `;
+
+      const titleEl = document.createElement('div');
+      titleEl.className = 'chart-card-title';
+      titleEl.textContent = a.title || a.name;
+
+      const canvas = document.createElement('canvas');
+      canvas.className = 'chart-canvas';
+      canvas.width = 280;
+      canvas.height = 90;
+
+      const statsEl = document.createElement('div');
+      statsEl.className = 'chart-stats';
+      statsEl.innerHTML = 'min <span></span> max <span></span> last <span></span>';
+      const spans = statsEl.querySelectorAll('span');
+      spans[0].textContent = mn;
+      spans[1].textContent = mx;
+      spans[2].textContent = last;
+
+      card.appendChild(titleEl);
+      card.appendChild(canvas);
+      card.appendChild(statsEl);
       grid.appendChild(card);
 
       requestAnimationFrame(() => {
@@ -2230,6 +2247,10 @@ async function doAction(action) {
   }
 }
 
+window.addEventListener('beforeunload', () => {
+  clearInterval(pollTimer);
+  stopWs();
+});
 
 </script>
 <script src="/static/xterm.js"></script>
