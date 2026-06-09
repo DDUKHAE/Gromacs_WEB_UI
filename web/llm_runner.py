@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import fcntl
+import json
 import os
 import pty
 import re
@@ -25,6 +26,14 @@ from pathlib import Path
 from web.llm_adapters import ADAPTERS, LLMAdapter
 
 _ANSI_RE = re.compile(r"\x1b(?:\[[0-9;]*[mGKHFABCDJsr]|\[\?[0-9;]*[hlr]|[=>])")
+
+_PERM_RE = re.compile(
+    r'Allow\?\s*\[|'           # Claude Code: "Allow? ["
+    r'\[y/n\]|'                # Generic [y/n]
+    r'\[Y/n\]|'                # Generic [Y/n]
+    r'\(y/n\)',                # Generic (y/n)
+    re.IGNORECASE,
+)
 
 
 def strip_ansi(text: str) -> str:
@@ -86,15 +95,32 @@ async def run_llm_agent(
 
     def _pty_reader() -> None:
         """Read PTY output in a thread; write to log + enqueue for WebSocket."""
+        perm_context: list[str] = []
         with open(log_path, "a", encoding="utf-8", errors="replace") as log_fh:
             while True:
                 try:
                     data = os.read(master_fd, 4096)
                 except OSError:
                     break
-                log_fh.write(strip_ansi(data.decode("utf-8", errors="replace")))
+                text = data.decode("utf-8", errors="replace")
+                stripped = strip_ansi(text)
+                log_fh.write(stripped)
                 log_fh.flush()
                 loop.call_soon_threadsafe(output_q.put_nowait, data)
+
+                # Accumulate context lines for permission dialog
+                perm_context.extend(stripped.splitlines())
+                if len(perm_context) > 20:
+                    perm_context = perm_context[-20:]
+
+                if _PERM_RE.search(stripped):
+                    detail = "\n".join(perm_context[-8:])
+                    event = json.dumps({
+                        "type": "permission_request",
+                        "detail": detail,
+                    })
+                    loop.call_soon_threadsafe(output_q.put_nowait, event.encode("utf-8"))
+                    perm_context.clear()
 
         loop.call_soon_threadsafe(output_q.put_nowait, None)   # EOF sentinel
 
