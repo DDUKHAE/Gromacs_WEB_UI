@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from lib import xvg_parser
 from web.llm_adapters import ADAPTERS
 from web import llm_runner
 from web.run_reader import RunInfo, list_runs, read_run
@@ -96,6 +97,21 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
     @app.get("/api/llms")
     def api_list_llms() -> list[dict]:
         return [{"key": k, "name": a.name, "cli": a.cli} for k, a in ADAPTERS.items()]
+
+    @app.get("/api/runs/{run_id}/artifacts")
+    def api_get_artifacts(run_id: str, hd: HarnessDir) -> list[dict]:
+        workspace = _check_run_id(run_id, hd / "runs")
+        viz_dir = workspace / "stage3_viz"
+        if not viz_dir.exists():
+            return []
+        results = []
+        for xvg_path in sorted(viz_dir.glob("*.xvg")):
+            try:
+                parsed = xvg_parser.parse(xvg_path, max_points=300)
+                results.append({"name": xvg_path.stem, **parsed})
+            except Exception:
+                pass
+        return results
 
     @app.post("/api/runs", status_code=201)
     async def api_create_run(
