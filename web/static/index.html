@@ -427,7 +427,7 @@ function connectWs(runId) {
       if (bytes[0] === 0x7b) { // starts with '{'
         try {
           const msg = JSON.parse(new TextDecoder().decode(bytes));
-          if (msg.type === 'permission_request') {
+          if (msg && typeof msg === 'object' && msg.type === 'permission_request') {
             showPermissionDialog(msg.detail || '');
             return;
           }
@@ -603,6 +603,7 @@ function drawSparkline(canvas, xData, yData, yLabel) {
 
 // ── 퍼미션 다이얼로그 ─────────────────────────────────
 function showPermissionDialog(detail) {
+  hidePermissionDialog();
   const detailEl = document.getElementById('perm-detail');
   if (detailEl) detailEl.textContent = detail;
   const overlay = document.getElementById('perm-overlay');
@@ -617,7 +618,11 @@ function hidePermissionDialog() {
 function permRespond(allow) {
   hidePermissionDialog();
   if (wsConn && wsConn.readyState === WebSocket.OPEN) {
-    wsConn.send(new TextEncoder().encode(allow ? 'y\r' : 'n\r'));
+    try {
+      wsConn.send(new TextEncoder().encode(allow ? 'y\r' : 'n\r'));
+    } catch (e) {
+      console.warn('Failed to send permission response', e);
+    }
   }
 }
 
