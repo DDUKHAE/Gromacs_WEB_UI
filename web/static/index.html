@@ -1577,6 +1577,8 @@ let currentRunId = null;
 let runsData = [];
 let pollTimer = null;
 let wsConn = null;
+
+const CHART_COLORS = ['#06b6d4', '#6366f1', '#10b981', '#f59e0b', '#ef4444'];
 let term = null;
 let fitAddon = null;
 let selectedPdb = null;
@@ -1927,6 +1929,129 @@ async function loadRuns() {
     pollTimer = setInterval(loadRuns, interval);
   } catch (e) {
     console.error('loadRuns failed:', e);
+  }
+}
+
+function drawSparkline(canvas, yData, color) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  if (!yData || yData.length < 2) {
+    ctx.fillStyle = 'var(--text-muted)';
+    ctx.font = '9px monospace';
+    ctx.fillText('No data', 8, h / 2);
+    return;
+  }
+
+  const minY = Math.min(...yData), maxY = Math.max(...yData);
+  const rangeY = maxY - minY || 1;
+  const pad = { t: 6, r: 6, b: 6, l: 6 };
+  const pw = w - pad.l - pad.r, ph = h - pad.t - pad.b;
+
+  const toX = i => pad.l + (i / (yData.length - 1)) * pw;
+  const toY = v => pad.t + ph - ((v - minY) / rangeY) * ph;
+
+  // 그라디언트 채움
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, color + '30');
+  grad.addColorStop(1, color + '00');
+  ctx.beginPath();
+  ctx.moveTo(toX(0), h - pad.b);
+  yData.forEach((v, i) => ctx.lineTo(toX(i), toY(v)));
+  ctx.lineTo(toX(yData.length - 1), h - pad.b);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // 선
+  ctx.beginPath();
+  ctx.moveTo(toX(0), toY(yData[0]));
+  for (let i = 1; i < yData.length; i++) {
+    const xc = (toX(i) + toX(i - 1)) / 2;
+    const yc = (toY(yData[i]) + toY(yData[i - 1])) / 2;
+    ctx.quadraticCurveTo(toX(i - 1), toY(yData[i - 1]), xc, yc);
+  }
+  ctx.lineTo(toX(yData.length - 1), toY(yData[yData.length - 1]));
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 6;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // 마지막 점 dot
+  const lx = toX(yData.length - 1), ly = toY(yData[yData.length - 1]);
+  ctx.beginPath();
+  ctx.arc(lx, ly, 3, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff';
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.fill();
+  ctx.stroke();
+}
+
+async function loadArtifacts(runId) {
+  const panel = document.getElementById('gallery-panel');
+  try {
+    const resp = await fetch(`/api/runs/${runId}/artifacts`);
+    if (!resp.ok) { panel.style.display = 'none'; return; }
+    const artifacts = await resp.json();
+    if (artifacts.length === 0) { panel.style.display = 'none'; return; }
+
+    panel.style.display = '';
+    const grid = document.getElementById('gallery-grid');
+    grid.innerHTML = '';
+
+    artifacts.forEach((a, idx) => {
+      const cols = a.columns || [];
+      const yData = cols[1] || [];
+      const color = CHART_COLORS[idx % CHART_COLORS.length];
+
+      const mn = yData.length ? Math.min(...yData).toFixed(3) : '—';
+      const mx = yData.length ? Math.max(...yData).toFixed(3) : '—';
+      const last = yData.length ? yData[yData.length - 1].toFixed(3) : '—';
+
+      const card = document.createElement('div');
+      card.className = 'chart-card';
+      card.innerHTML = `
+        <div class="chart-card-title">${a.title || a.name}</div>
+        <canvas class="chart-canvas" width="280" height="90"></canvas>
+        <div class="chart-stats">min <span>${mn}</span> max <span>${mx}</span> last <span>${last}</span></div>
+      `;
+      grid.appendChild(card);
+
+      requestAnimationFrame(() => {
+        drawSparkline(card.querySelector('canvas'), yData, color);
+      });
+    });
+  } catch (e) {
+    console.error('loadArtifacts:', e);
+    panel.style.display = 'none';
+  }
+}
+
+async function deleteRun(runId, displayName) {
+  if (!confirm(`[ ${displayName} ] 실행 내역을 삭제하시겠습니까?`)) return;
+  try {
+    const resp = await fetch(`/api/runs/${runId}`, { method: 'DELETE' });
+    if (!resp.ok) {
+      showToast('삭제에 실패했습니다.', 'error');
+      return;
+    }
+    if (currentRunId === runId) {
+      currentRunId = null;
+      stopWs();
+    }
+    await loadRuns();
+    if (runsData.length > 0) {
+      selectRun(runsData[0].run_id);
+    } else {
+      showNewRunForm();
+    }
+    showToast(`${displayName} 삭제 완료`, 'success');
+  } catch (e) {
+    showToast('서버 연결 오류', 'error');
   }
 }
 
