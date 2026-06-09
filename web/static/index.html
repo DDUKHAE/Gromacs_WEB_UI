@@ -2,6 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gromacs Harness</title>
 <link rel="stylesheet" href="/static/xterm.css">
 <style>
@@ -195,6 +196,30 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace; ba
 }
 .skeleton-text { height: 12px; margin-bottom: 6px; }
 .skeleton-value { height: 20px; width: 60%; }
+/* Responsive */
+@media (max-width: 768px) {
+  body { flex-direction: column; }
+  #sidebar { width: 100%; min-width: unset; height: auto; border-right: none; border-bottom: 1px solid var(--border); flex-direction: row; align-items: center; }
+  #sidebar-header { border-bottom: none; border-right: 1px solid var(--border); display: flex; align-items: center; gap: 8px; padding: 10px 12px; flex-shrink: 0; }
+  #sidebar-title { display: none; }
+  #run-list { display: flex; flex-direction: row; overflow-x: auto; padding: 4px; gap: 4px; flex: 1; }
+  .run-item { padding: 6px 10px; border-left: none; border-bottom: 3px solid transparent; white-space: nowrap; flex-shrink: 0; }
+  .run-item.active { border-bottom-color: var(--accent-blue); border-left: none; }
+  .run-item-date { display: none; }
+  #run-view { padding: 12px; gap: 12px; }
+  #new-run-view { padding: 16px; }
+  #stats-row { grid-template-columns: 1fr 1fr; }
+  .param-grid { grid-template-columns: 1fr; }
+  #gallery-grid { grid-template-columns: 1fr 1fr; }
+  #stepper { flex-wrap: wrap; gap: 8px; padding: 12px; }
+  .step-connector { display: none; }
+  #action-row { flex-wrap: wrap; }
+  #btn-continue, #btn-abort { flex: 1; text-align: center; }
+}
+@media (max-width: 480px) {
+  #stats-row { grid-template-columns: 1fr; }
+  #gallery-grid { grid-template-columns: 1fr; }
+}
 </style>
 </head>
 <body>
