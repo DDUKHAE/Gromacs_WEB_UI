@@ -1469,10 +1469,14 @@ body.resizing * {
 
       <!-- New Run Form -->
       <div id="new-run-view">
-        <form id="new-run-form" onsubmit="event.preventDefault(); startMockRun();" aria-label="새 시뮬레이션 실행 설정">
+        <form id="new-run-form" onsubmit="event.preventDefault(); startRun();" aria-label="새 시뮬레이션 실행 설정">
           <h2>New Simulation Run</h2>
           
-          <div id="drop-zone" onclick="document.getElementById('pdb-input').click()">
+          <div id="drop-zone"
+            onclick="document.getElementById('pdb-input').click()"
+            ondragover="event.preventDefault(); this.style.borderColor='var(--accent-primary)'"
+            ondragleave="this.style.borderColor=''"
+            ondrop="event.preventDefault(); this.style.borderColor=''; handleFileSelect(event.dataTransfer.files[0])">
             <div class="upload-icon">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
             </div>
@@ -1481,7 +1485,7 @@ body.resizing * {
             <div id="selected-file"></div>
           </div>
           
-          <input type="file" id="pdb-input" accept=".pdb" onchange="mockFileSelect(this.files[0])">
+          <input type="file" id="pdb-input" accept=".pdb" onchange="handleFileSelect(this.files[0])">
           
           <div class="param-grid">
             <div class="param-field">
@@ -1576,6 +1580,51 @@ let wsConn = null;
 let term = null;
 let fitAddon = null;
 let selectedPdb = null;
+
+function handleFileSelect(file) {
+  if (!file) return;
+  selectedPdb = file;
+  document.getElementById('selected-file').textContent = `✓ ${file.name}`;
+  document.getElementById('btn-start').disabled = false;
+}
+
+async function startRun() {
+  if (!selectedPdb) return;
+
+  const form = document.getElementById('new-run-form');
+  const data = new FormData();
+  data.append('pdb_file', selectedPdb);
+  data.append('forcefield', form.querySelector('[name="forcefield"]').value);
+  data.append('water', form.querySelector('[name="water"]').value);
+  data.append('box_type', form.querySelector('[name="box_type"]').value);
+  data.append('llm', form.querySelector('[name="llm"]').value);
+  data.append('auto_approve', form.querySelector('[name="auto_approve"]').value);
+
+  const btnStart = document.getElementById('btn-start');
+  btnStart.disabled = true;
+  btnStart.textContent = 'Starting...';
+
+  try {
+    const resp = await fetch('/api/runs', { method: 'POST', body: data });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      showToast(err.detail || '런 시작에 실패했습니다.', 'error');
+      btnStart.disabled = false;
+      btnStart.textContent = 'Start Simulation Run';
+      return;
+    }
+    const { run_id } = await resp.json();
+    selectedPdb = null;
+    document.getElementById('selected-file').textContent = '';
+    btnStart.textContent = 'Start Simulation Run';
+    await loadRuns();
+    selectRun(run_id);
+  } catch (e) {
+    showToast('서버 연결 오류', 'error');
+    btnStart.disabled = false;
+    btnStart.textContent = 'Start Simulation Run';
+  }
+}
 
 function stopWs() {
   if (wsConn) { wsConn.close(); wsConn = null; }
