@@ -51,6 +51,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace; ba
 .step-sublabel { font-size: 9px; color: #8b949e; text-align: center; margin-top: 1px; }
 .step-connector { flex: 1; height: 2px; background: #30363d; margin: 0 10px; margin-bottom: 14px; transition: background .4s ease; }
 .step-connector.done { background: #3fb950; }
+.step-connector.active { background: linear-gradient(to right, #3fb950 40%, #30363d 40%); background-size: 200px 100%; animation: connector-fill 2s linear infinite; }
+@keyframes connector-fill { 0% { background-position: -200px 0; } 100% { background-position: 200px 0; } }
 
 /* Terminal panel */
 #terminal-panel { flex: 1; background: #0d1117; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; min-height: 260px; }
@@ -340,7 +342,7 @@ function renderStepper(lastStage, status, currentStep) {
     const st = states[s];
     const icon = st === 'done' ? '✓' : st === 'active' ? '' : '○';
     const lbl = STAGE_LABELS[s];
-    const connState = states[order[i]] === 'done' ? 'done' : '';
+    const connState = states[order[i]] === 'done' ? 'done' : (states[order[i]] === 'active' ? 'active' : '');
     html += `<div class="step-node">
       <div class="step-circle-wrap">
         <div class="step-circle ${st}" title="${lbl.en} (Steps ${STAGE_STEPS[s]})">${icon}</div>
