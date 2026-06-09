@@ -4,6 +4,7 @@ Gromacs Harness — Web UI entry point
 Usage:
     python main.py
     python main.py --port 8000
+    python main.py --listen            # bind 0.0.0.0, accessible from other devices
     python main.py --host 0.0.0.0 --port 8000
     python main.py --no-browser
 """
@@ -42,9 +43,13 @@ def main() -> None:
     )
     parser.add_argument("--host", default="127.0.0.1", help="Bind host")
     parser.add_argument("--port", type=int, default=8000, help="Bind port")
+    parser.add_argument("--listen", action="store_true", help="Bind to 0.0.0.0 (accessible from other devices on the network)")
     parser.add_argument("--no-browser", action="store_true", help="Do not open browser automatically")
     parser.add_argument("--reload", action="store_true", help="Enable auto-reload (development)")
     args = parser.parse_args()
+
+    if args.listen:
+        args.host = "0.0.0.0"
 
     if not check_dependencies():
         sys.exit(1)
@@ -64,10 +69,17 @@ def main() -> None:
     if str(HARNESS_DIR) not in sys.path:
         sys.path.insert(0, str(HARNESS_DIR))
 
-    url = f"http://{args.host}:{args.port}"
+    local_url = f"http://127.0.0.1:{args.port}"
     print(f"\nGromacs Harness Web UI")
-    print(f"  URL : {url}")
-    print(f"  Runs: {HARNESS_DIR / 'runs'}")
+    print(f"  Local : {local_url}")
+    if args.host == "0.0.0.0":
+        import socket
+        try:
+            lan_ip = socket.gethostbyname(socket.gethostname())
+        except OSError:
+            lan_ip = "<your-ip>"
+        print(f"  Network: http://{lan_ip}:{args.port}")
+    print(f"  Runs  : {HARNESS_DIR / 'runs'}")
     print()
 
     if not args.no_browser:
@@ -75,7 +87,7 @@ def main() -> None:
         def _open():
             import time
             time.sleep(1.2)
-            webbrowser.open(url)
+            webbrowser.open(local_url)
         threading.Thread(target=_open, daemon=True).start()
 
     uvicorn.run(
