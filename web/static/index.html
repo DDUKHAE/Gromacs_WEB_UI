@@ -520,8 +520,8 @@ function renderGallery(artifacts) {
       const y = cols[1] || [];
       drawSparkline(canvas, x, y, a.yaxis_label || '');
       if (y.length > 0) {
-        const mn = Math.min(...y).toFixed(3);
-        const mx = Math.max(...y).toFixed(3);
+        const mn = y.reduce((a, b) => a < b ? a : b).toFixed(3);
+        const mx = y.reduce((a, b) => a > b ? a : b).toFixed(3);
         const last = y[y.length - 1].toFixed(3);
         statsRow.innerHTML = `min <span>${mn}</span> max <span>${mx}</span> last <span>${last}</span>`;
       }
@@ -542,7 +542,7 @@ function drawSparkline(canvas, xData, yData, yLabel) {
     return;
   }
 
-  const minY = Math.min(...yData), maxY = Math.max(...yData);
+  const minY = yData.reduce((a, b) => a < b ? a : b), maxY = yData.reduce((a, b) => a > b ? a : b);
   const rangeY = maxY - minY || 1;
   const plotW = w - pad.left - pad.right;
   const plotH = h - pad.top - pad.bottom;
