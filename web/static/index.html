@@ -59,13 +59,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace; ba
 .run-item.active { background: #21262d; border-left-color: #388bfd; }
 .run-item-name { font-size: 12px; font-weight: 600; color: #e6edf3; }
 .run-item-date { font-size: 10px; color: #8b949e; margin-top: 2px; }
-.run-item-badge { display: inline-block; padding: 1px 5px; border-radius: 10px; font-size: 9px; font-weight: 600; margin-top: 3px; }
-.badge-running { background: #388bfd22; color: #388bfd; }
-.badge-paused   { background: #d2992222; color: #d29922; }
-.badge-completed { background: #23863622; color: #3fb950; }
-.badge-failed   { background: #da363322; color: #f85149; }
-.badge-aborted  { background: #8b949e22; color: #8b949e; }
-.badge-pending  { background: #8b949e22; color: #8b949e; }
+.run-item-badge { display: inline-flex; align-items: center; gap: 3px; padding: 1px 6px; border-radius: 10px; font-size: 9px; font-weight: 600; margin-top: 3px; }
+.badge-running  { background: rgba(56,139,253,.13);  color: var(--accent-blue); }
+.badge-paused   { background: rgba(210,153,34,.13);  color: var(--accent-yellow); }
+.badge-completed{ background: rgba(35,134,54,.13);   color: var(--accent-green); }
+.badge-failed   { background: rgba(218,54,51,.13);   color: var(--accent-red); }
+.badge-aborted  { background: rgba(139,148,158,.13); color: var(--text-muted); }
+.badge-pending  { background: rgba(139,148,158,.13); color: var(--text-muted); }
 
 /* Main panel */
 #main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
@@ -478,8 +478,14 @@ function renderSidebar(runs) {
     const badge = document.createElement('span');
     const safeStatus = ['running','paused','completed','failed','aborted','pending'].includes(run.status)
       ? run.status : 'pending';
+    const STATUS_ICONS = { running:'●', paused:'⏸', completed:'✓', failed:'✕', aborted:'◼', pending:'○' };
     badge.className = `run-item-badge badge-${safeStatus}`;
-    badge.textContent = safeStatus;
+    badge.setAttribute('aria-label', `상태: ${safeStatus}`);
+    const iconSpan = document.createElement('span');
+    iconSpan.setAttribute('aria-hidden', 'true');
+    iconSpan.textContent = STATUS_ICONS[safeStatus] || '○';
+    badge.appendChild(iconSpan);
+    badge.appendChild(document.createTextNode(safeStatus));
 
     el.appendChild(nameEl);
     el.appendChild(dateEl);
@@ -563,7 +569,16 @@ function stageState(skill, lastStage, status) {
 function renderStats(run) {
   document.getElementById('stat-step').textContent = `${run.current_step} / 8`;
   document.getElementById('stat-stage').textContent = run.last_completed_stage || '—';
-  document.getElementById('stat-status').textContent = run.status;
+  const STATUS_ICONS = { running:'●', paused:'⏸', completed:'✓', failed:'✕', aborted:'◼', pending:'○' };
+  const STATUS_COLORS = { running:'var(--accent-blue)', paused:'var(--accent-yellow)', completed:'var(--accent-green)', failed:'var(--accent-red)', aborted:'var(--text-muted)', pending:'var(--text-muted)' };
+  const statusEl = document.getElementById('stat-status');
+  const iconEl = document.createElement('span');
+  iconEl.setAttribute('aria-hidden', 'true');
+  iconEl.style.color = STATUS_COLORS[run.status] || 'inherit';
+  iconEl.textContent = STATUS_ICONS[run.status] || '○';
+  statusEl.textContent = '';
+  statusEl.appendChild(iconEl);
+  statusEl.appendChild(document.createTextNode(' ' + run.status));
   document.getElementById('term-status').textContent = run.status;
 }
 
