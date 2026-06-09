@@ -153,6 +153,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace; ba
 #perm-actions { display: flex; gap: 10px; justify-content: flex-end; }
 #perm-deny  { padding: 8px 20px; background: transparent; border: 1px solid #f8514966; color: #f85149; border-radius: 6px; cursor: pointer; font-size: 13px; }
 #perm-allow { padding: 8px 20px; background: #238636; border: none; color: #fff; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; }
+/* Skeleton loading */
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position:  400px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, #21262d 25%, #30363d 50%, #21262d 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.5s infinite linear;
+  border-radius: 4px;
+}
+.skeleton-text { height: 12px; margin-bottom: 6px; }
+.skeleton-value { height: 20px; width: 60%; }
 </style>
 </head>
 <body>
@@ -284,6 +297,15 @@ let runsData     = [];
 let term         = null;
 let fitAddon     = null;
 
+function renderStatsSkeleton() {
+  ['stat-step', 'stat-stage', 'stat-status'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.innerHTML = '<div class="skeleton skeleton-value"></div>';
+    }
+  });
+}
+
 // ── 초기화 ────────────────────────────────────────────
 (function init() {
   fetchRuns();
@@ -341,6 +363,7 @@ async function selectRun(runId) {
   renderSidebar(runsData);
   document.getElementById('run-view').classList.remove('hidden');
   document.getElementById('new-run-view').classList.add('hidden');
+  renderStatsSkeleton();
   await refreshRunDetail();
   pollTimer = setInterval(refreshRunDetail, 5000);
   connectWs(runId);
