@@ -14,6 +14,13 @@ compatibility: "Claude Code, GPT Agent, Cursor, Antigravity"
 
 # Skill: env-builder
 
+## Entry Point
+
+```python
+from skills.env_builder.env_builder import build_environment
+build_environment(pdb_path, prompt, workspace_dir, prerequisites=None, interactive=False)
+```
+
 ## Input Schema
 
 ```json

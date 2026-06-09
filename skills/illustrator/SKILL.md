@@ -15,6 +15,13 @@ compatibility: "Claude Code, GPT Agent, Cursor, Antigravity"
 
 # Skill: illustrator
 
+## Entry Point
+
+```python
+from skills.illustrator.illustrator import illustrate
+illustrate(workspace_dir, interactive=False)
+```
+
 ## Input Schema
 
 ```json
