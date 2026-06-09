@@ -86,9 +86,35 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace; ba
 #btn-start { padding: 10px; background: #238636; border: none; color: #fff; font-size: 14px; border-radius: 6px; cursor: pointer; font-weight: 600; width: 100%; }
 #btn-start:hover { background: #2ea043; }
 #btn-start:disabled { opacity: .5; cursor: default; }
+/* LLM section */
+.llm-section { background: #161b2255; border: 1px solid #30363d; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.llm-section-title { font-size: 10px; font-weight: 600; color: #8b949e; text-transform: uppercase; letter-spacing: .06em; }
+/* Permission dialog */
+#perm-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 200; align-items: center; justify-content: center; }
+#perm-overlay.show { display: flex; }
+#perm-box { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 24px; width: 90%; max-width: 540px; }
+#perm-box h3 { font-size: 14px; font-weight: 600; color: #e6edf3; margin-bottom: 4px; }
+#perm-tool-label { font-size: 11px; color: #8b949e; margin-bottom: 10px; }
+#perm-detail { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 10px; font-family: "SF Mono","Fira Code",monospace; font-size: 11px; color: #c9d1d9; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; margin-bottom: 16px; }
+#perm-actions { display: flex; gap: 10px; justify-content: flex-end; }
+#perm-deny  { padding: 8px 20px; background: transparent; border: 1px solid #f8514966; color: #f85149; border-radius: 6px; cursor: pointer; font-size: 13px; }
+#perm-allow { padding: 8px 20px; background: #238636; border: none; color: #fff; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; }
 </style>
 </head>
 <body>
+
+<!-- Permission dialog -->
+<div id="perm-overlay">
+  <div id="perm-box">
+    <h3>Permission Required</h3>
+    <div id="perm-tool-label"></div>
+    <pre id="perm-detail"></pre>
+    <div id="perm-actions">
+      <button id="perm-deny"  onclick="sendPermResponse(false)">Deny</button>
+      <button id="perm-allow" onclick="sendPermResponse(true)">Allow</button>
+    </div>
+  </div>
+</div>
 
 <div id="sidebar">
   <div id="sidebar-header">
@@ -161,6 +187,27 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace; ba
           </select>
         </div>
       </div>
+      <div class="llm-section">
+        <div class="llm-section-title">LLM Agent</div>
+        <div class="param-grid">
+          <div class="param-field">
+            <label>LLM</label>
+            <select name="llm" id="llm-select" onchange="onLlmChange()">
+              <option value="">None (direct pipeline)</option>
+              <option value="claude">Claude</option>
+              <option value="gemini">Gemini (agy)</option>
+              <option value="codex">Codex</option>
+            </select>
+          </div>
+          <div class="param-field" id="perm-mode-field" style="display:none;">
+            <label>Permission Mode</label>
+            <select name="auto_approve" id="auto-approve-select">
+              <option value="false">Approve each command</option>
+              <option value="true">Auto-approve all</option>
+            </select>
+          </div>
+        </div>
+      </div>
       <button type="submit" id="btn-start" disabled>&#9654; Start Run</button>
     </form>
   </div>
@@ -173,6 +220,7 @@ let wsConn = null;
 let selectedPdb = null;
 let pollTimer = null;
 let runsData = [];
+let pendingPermId = null;
 
 // ── 초기화 ────────────────────────────────────────────
 (function init() {
@@ -322,19 +370,50 @@ function connectWs(runId) {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   wsConn = new WebSocket(`${proto}://${location.host}/ws/runs/${runId}`);
   wsConn.onmessage = (e) => {
-    logBody.textContent += e.data;
-    const lines = logBody.textContent.split('\n');
-    if (lines.length > 500) {
-      logBody.textContent = lines.slice(-500).join('\n');
+    let msg;
+    try { msg = JSON.parse(e.data); } catch { appendLog(e.data); return; }
+    if (msg.type === 'log') {
+      appendLog(msg.text);
+    } else if (msg.type === 'permission_request') {
+      showPermDialog(msg);
     }
-    logBody.scrollTop = logBody.scrollHeight;
   };
   wsConn.onerror = () => { document.getElementById('log-status').textContent = 'ws error'; };
   wsConn.onclose = () => { wsConn = null; };
 }
 
+function appendLog(text) {
+  const logBody = document.getElementById('log-body');
+  logBody.textContent += text;
+  const lines = logBody.textContent.split('\n');
+  if (lines.length > 500) logBody.textContent = lines.slice(-500).join('\n');
+  logBody.scrollTop = logBody.scrollHeight;
+}
+
 function stopWs() {
   if (wsConn) { wsConn.close(); wsConn = null; }
+}
+
+// ── 권한 다이얼로그 ───────────────────────────────────
+function showPermDialog(req) {
+  pendingPermId = req.id;
+  document.getElementById('perm-tool-label').textContent = `Tool: ${req.tool}`;
+  document.getElementById('perm-detail').textContent = req.detail;
+  document.getElementById('perm-overlay').classList.add('show');
+}
+
+function sendPermResponse(granted) {
+  document.getElementById('perm-overlay').classList.remove('show');
+  if (wsConn && pendingPermId) {
+    wsConn.send(JSON.stringify({ type: 'permission_response', id: pendingPermId, granted }));
+    pendingPermId = null;
+  }
+}
+
+// ── LLM 선택 ─────────────────────────────────────────
+function onLlmChange() {
+  const llm = document.getElementById('llm-select').value;
+  document.getElementById('perm-mode-field').style.display = llm ? 'block' : 'none';
 }
 
 // ── New Run 폼 ────────────────────────────────────────
@@ -370,6 +449,8 @@ async function submitNewRun(e) {
   fd.append('forcefield', form.querySelector('[name=forcefield]').value);
   fd.append('water', form.querySelector('[name=water]').value);
   fd.append('box_type', form.querySelector('[name=box_type]').value);
+  fd.append('llm', form.querySelector('[name=llm]').value);
+  fd.append('auto_approve', form.querySelector('[name=auto_approve]') ? form.querySelector('[name=auto_approve]').value : 'false');
 
   document.getElementById('btn-start').disabled = true;
   document.getElementById('btn-start').textContent = 'Starting…';

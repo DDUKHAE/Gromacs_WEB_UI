@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import re
 import signal
@@ -13,6 +14,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from web.llm_adapters import ADAPTERS
+from web import llm_runner
 from web.run_reader import RunInfo, list_runs, read_run
 
 HARNESS_DIR: Path = Path(__file__).parent.parent
@@ -90,6 +93,10 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         detail["pending_warnings"] = info.pending_warnings
         return detail
 
+    @app.get("/api/llms")
+    def api_list_llms() -> list[dict]:
+        return [{"key": k, "name": a.name, "cli": a.cli} for k, a in ADAPTERS.items()]
+
     @app.post("/api/runs", status_code=201)
     async def api_create_run(
         hd: HarnessDir,
@@ -97,6 +104,8 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         forcefield: str = Form("charmm36"),
         water: str = Form("tip3p"),
         box_type: str = Form("dodecahedron"),
+        llm: str = Form(""),
+        auto_approve: str = Form("false"),
     ) -> dict:
         raw_stem = Path(pdb_file.filename or "protein").stem
         protein = re.sub(r"[^a-z0-9\-]", "", re.sub(r"^\d+", "", raw_stem).lower())[:40] or "protein"
@@ -110,17 +119,31 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         if len(content) > _MAX_PDB_BYTES:
             raise HTTPException(status_code=413, detail="PDB file too large (max 50 MB)")
         pdb_path.write_bytes(content)
-        log_file = ws / "runner.log"
-        log_fd = open(log_file, "w")
-        proc = subprocess.Popen(
-            [sys.executable, str(RUNNER_PY), "--skill", "env",
-             "--workspace", str(ws), "--pdb", str(pdb_path)],
-            cwd=str(hd),
-            stdout=log_fd,
-            stderr=subprocess.STDOUT,
-        )
-        log_fd.close()
-        (ws / "runner.pid").write_text(str(proc.pid))
+
+        if llm and llm in ADAPTERS:
+            if not llm_runner.check_cli(ADAPTERS[llm]):
+                raise HTTPException(status_code=400, detail=f"'{ADAPTERS[llm].cli}' CLI not found. Install and log in first.")
+            (ws / "runner.log").write_text("")
+            asyncio.create_task(llm_runner.run_llm_agent(
+                run_id=run_id,
+                workspace=ws,
+                pdb_path=pdb_path,
+                harness_dir=hd,
+                llm_key=llm,
+                auto_approve=(auto_approve.lower() == "true"),
+            ))
+        else:
+            log_file = ws / "runner.log"
+            log_fd = open(log_file, "w")
+            proc = subprocess.Popen(
+                [sys.executable, str(RUNNER_PY), "--skill", "env",
+                 "--workspace", str(ws), "--pdb", str(pdb_path)],
+                cwd=str(hd),
+                stdout=log_fd,
+                stderr=subprocess.STDOUT,
+            )
+            log_fd.close()
+            (ws / "runner.pid").write_text(str(proc.pid))
         return {"run_id": run_id}
 
     @app.post("/api/runs/{run_id}/action")
@@ -172,6 +195,7 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         except HTTPException:
             await websocket.close()
             return
+
         log_file = workspace / "runner.log"
         for _ in range(30):
             if log_file.exists():
@@ -180,20 +204,66 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         if not log_file.exists():
             await websocket.close()
             return
-        try:
+
+        run_state = llm_runner.get_run_state(run_id)
+
+        async def _send(msg: dict) -> None:
+            await websocket.send_text(json.dumps(msg))
+
+        async def _stream_logs() -> None:
             with open(log_file, encoding="utf-8", errors="replace") as f:
                 existing = f.read()
                 if existing:
-                    await websocket.send_text(existing)
+                    await _send({"type": "log", "text": existing})
                 while True:
                     line = f.readline()
                     if line:
-                        await websocket.send_text(line)
-                    else:
-                        info = read_run(run_id, workspace.parent)
-                        if info is None or info.status != "running":
-                            break
-                        await asyncio.sleep(0.1)
+                        await _send({"type": "log", "text": line})
+                        continue
+                    # Dispatch pending permission request if any
+                    rs = llm_runner.get_run_state(run_id)
+                    if rs and not rs.request_queue.empty():
+                        req = rs.request_queue.get_nowait()
+                        await _send({
+                            "type": "permission_request",
+                            "id": req.id,
+                            "tool": req.tool,
+                            "detail": req.detail,
+                        })
+                        continue
+                    # Check if run is finished
+                    info = read_run(run_id, workspace.parent)
+                    still_running = (
+                        (info and info.status in ("running", "pending"))
+                        or run_id in llm_runner._run_states
+                    )
+                    if not still_running:
+                        break
+                    await asyncio.sleep(0.1)
+
+        async def _receive_messages() -> None:
+            while True:
+                try:
+                    raw = await websocket.receive_text()
+                    msg = json.loads(raw)
+                    if msg.get("type") == "permission_response":
+                        rs = llm_runner.get_run_state(run_id)
+                        if rs:
+                            await rs.response_queue.put(bool(msg.get("granted", False)))
+                except WebSocketDisconnect:
+                    break
+                except Exception:
+                    await asyncio.sleep(0.05)
+
+        try:
+            stream_task = asyncio.create_task(_stream_logs())
+            recv_task = asyncio.create_task(_receive_messages())
+            done, pending = await asyncio.wait(
+                [stream_task, recv_task],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            for t in pending:
+                t.cancel()
         except WebSocketDisconnect:
             pass
         finally:
