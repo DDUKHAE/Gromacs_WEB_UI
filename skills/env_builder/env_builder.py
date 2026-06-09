@@ -45,14 +45,24 @@ def collect_hardware(workspace_dir: Path) -> None:
     state.write(workspace_dir, s)
 
 
+_SOLVENT_AND_IONS = frozenset({
+    "HOH", "WAT", "SOL", "NA", "CL", "MG", "CA", "K", "ZN",
+    "FE", "CU", "MN", "NI", "CO", "LI", "BR", "F", "I",
+})
+
+
 def _pdb_hints(pdb_path: Path) -> dict[str, bool]:
     text = Path(pdb_path).read_text()
+    has_ligand = any(
+        line.startswith("HETATM") and line[17:20].strip() not in _SOLVENT_AND_IONS
+        for line in text.splitlines()
+    )
     return {
         "has_protein": "ATOM" in text and any(
             res in text for res in ("ALA", "GLY", "LEU", "VAL", "ILE")),
         "has_membrane": any(
             lipid in text for lipid in ("DPPC", "POPC", "DMPC", "DOPC")),
-        "has_ligand": "HETATM" in text,
+        "has_ligand": has_ligand,
     }
 
 
@@ -132,9 +142,12 @@ def run_step3_solvate(workspace_dir: Path) -> None:
         GW.restore_topology(top)
         raise RuntimeError(f"solvate failed: {result.stderr[-500:]}")
     n_sol = 0
-    for line in result.stdout.splitlines():
+    for line in (result.stdout + result.stderr).splitlines():
         if "Number of solvent molecules" in line:
-            n_sol = int(line.split()[-1])
+            try:
+                n_sol = int(line.split()[-1])
+            except ValueError:
+                pass
             break
     s = state.read(ws)
     s["step_outputs"]["step_3"] = {
@@ -194,6 +207,39 @@ def run_step5_genion(workspace_dir: Path, concentration: float = 0.15) -> None:
     state.write(ws, s)
 
 
+def _strip_hetatm_water(pdb_path: Path) -> None:
+    """Remove HETATM water/ion records in-place (pdb2gmx handles them poorly)."""
+    lines = pdb_path.read_text().splitlines(keepends=True)
+    cleaned = [
+        l for l in lines
+        if not (l.startswith("HETATM") and l[17:20].strip() in _SOLVENT_AND_IONS)
+    ]
+    pdb_path.write_text("".join(cleaned))
+
+
+def _available_forcefields() -> set[str]:
+    """Return ff names available in the effective GMXLIB."""
+    gmxlib = GW.get_gmxlib()
+    if not gmxlib:
+        return set()
+    top_dir = Path(gmxlib)
+    if not top_dir.is_dir():
+        return set()
+    return {p.name[:-3] for p in top_dir.iterdir() if p.name.endswith(".ff")}
+
+
+def _resolve_forcefield(requested: str) -> str:
+    """Return requested ff if available, else raise with helpful message."""
+    available = _available_forcefields()
+    if not available or requested in available:
+        return requested
+    raise RuntimeError(
+        f"Force field '{requested}' not found in GMXLIB. "
+        f"Available: {sorted(available)}. "
+        f"Update the tutorial manifest or set GMXLIB to a directory that contains '{requested}.ff'."
+    )
+
+
 def build_environment(pdb_path: Path, prompt: str, workspace_dir: Path,
                       prerequisites: dict[str, Any] | None = None,
                       interactive: bool = True) -> dict[str, Any]:
@@ -202,11 +248,12 @@ def build_environment(pdb_path: Path, prompt: str, workspace_dir: Path,
     inputs_pdb = Path(workspace_dir) / "inputs" / "input.pdb"
     if Path(pdb_path).resolve() != inputs_pdb.resolve():
         shutil.copy(pdb_path, inputs_pdb)
+    _strip_hetatm_water(inputs_pdb)
     decision = select_tutorial(workspace_dir, inputs_pdb, prompt,
                                prerequisites or {})
     manifest = TR.load_manifest(decision.tutorial_id) or {}
     defaults = manifest.get("defaults", {})
-    ff = defaults.get("forcefield", "charmm36")
+    ff = _resolve_forcefield(defaults.get("forcefield", "charmm36"))
     water = defaults.get("water_model", "tip3p")
     box_type = defaults.get("box_type", "cubic")
     box_d = defaults.get("box_distance_nm", 1.0)

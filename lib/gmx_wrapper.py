@@ -27,15 +27,42 @@ CLASSIFIERS = [
      re.compile(r"WARNING\s+\d+\s+\[", re.I)),
 ]
 
+_COMMON_GMX_PATHS = [
+    "/usr/local/gromacs/bin/gmx",
+    "/usr/bin/gmx",
+    "/opt/gromacs/bin/gmx",
+    "/opt/local/bin/gmx",
+]
+
 
 def _resolve_gmx_bin(default: str = "gmx") -> str:
-    env_bin = os.environ.get("GMX_BIN")
-    if env_bin:
+    if env_bin := os.environ.get("GMX_BIN"):
         return env_bin
-    found = shutil.which(default)
-    if found:
+    if found := shutil.which(default):
         return found
+    for p in _COMMON_GMX_PATHS:
+        if Path(p).exists():
+            return p
     return default
+
+
+def _resolve_gmxlib(gmx_bin: str) -> str | None:
+    """Infer GMXLIB from gmx binary path when not already set in environment."""
+    if os.environ.get("GMXLIB"):
+        return None
+    p = Path(gmx_bin)
+    if p.is_file():
+        candidate = p.parent.parent / "share" / "gromacs" / "top"
+        if candidate.is_dir():
+            return str(candidate)
+    return None
+
+
+def get_gmxlib() -> str | None:
+    """Return the effective GMXLIB path (env var or auto-detected)."""
+    if lib := os.environ.get("GMXLIB"):
+        return lib
+    return _resolve_gmxlib(_resolve_gmx_bin())
 
 
 def _classify(returncode: int, stderr: str) -> str:
@@ -51,11 +78,18 @@ def run(args: Sequence[str], cwd: Path,
         interactive_inputs: Sequence[str] | None = None,
         env: dict[str, str] | None = None,
         timeout: int | None = None) -> GmxResult:
-    cmd = [_resolve_gmx_bin()] + list(args)
+    gmx_bin = _resolve_gmx_bin()
+    auto_gmxlib = _resolve_gmxlib(gmx_bin)
+    merged_env = {**os.environ}
+    if auto_gmxlib:
+        merged_env["GMXLIB"] = auto_gmxlib
+    if env:
+        merged_env.update(env)
+    cmd = [gmx_bin] + list(args)
     proc_input = "\n".join(interactive_inputs) + "\n" if interactive_inputs else None
     completed = subprocess.run(
         cmd, cwd=str(cwd), input=proc_input, text=True,
-        capture_output=True, env={**os.environ, **(env or {})},
+        capture_output=True, env=merged_env,
         timeout=timeout,
     )
     return GmxResult(
