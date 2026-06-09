@@ -1569,217 +1569,50 @@ body.resizing * {
 </div>
 
 <script>
-// Mocking console messages
-const MOCK_LOGS = [
-  "INFO: Initializing env-builder for Ubiquitin...",
-  "INFO: Loaded structure from input.pdb (76 residues, 1231 atoms)",
-  "INFO: Running pdb2gmx with forcefield CHARMM36...",
-  "DEBUG: Generated topol.top and posre.itp successfully.",
-  "INFO: Creating simulation box (Dodecahedron, distance 1.0 nm)...",
-  "INFO: Solvating system with TIP3P water model...",
-  "INFO: Added 3412 water molecules. Total atoms: 11467",
-  "INFO: Neutralizing system with 0.15M NaCl...",
-  "INFO: Added 8 Na+ ions and 8 Cl- ions. Charge is now neutral.",
-  "INFO: Env-builder stage completed successfully.\n",
-  "INFO: Starting energy minimization (steepest descent)...",
-  "DEBUG: Minimization converged at step 340. Fmax < 1000 kJ/mol/nm",
-  "INFO: Running NVT equilibration (100 ps)...",
-  "DEBUG: Step 10000/50000, Temperature = 300.1 K",
-  "DEBUG: Step 20000/50000, Temperature = 299.8 K",
-  "DEBUG: Step 30000/50000, Temperature = 300.2 K",
-  "DEBUG: Step 40000/50000, Temperature = 300.0 K",
-  "INFO: NVT equilibration completed. Moving to MD Production run...",
-  "INFO: Launching mdrun (Production MD, 10 ns, 5,000,000 steps)...",
-  "DEBUG: Epoch 0: step 100000, RMSD = 0.091 nm, Temp = 300K",
-  "DEBUG: Epoch 1: step 200000, RMSD = 0.112 nm, Temp = 300K",
-  "DEBUG: Epoch 2: step 300000, RMSD = 0.134 nm, Temp = 300K",
-  "DEBUG: Epoch 3: step 400000, RMSD = 0.151 nm, Temp = 300K",
-  "DEBUG: Epoch 4: step 500000, RMSD = 0.173 nm, Temp = 300K",
-  "DEBUG: Epoch 5: step 600000, RMSD = 0.198 nm, Temp = 300K",
-  "DEBUG: Epoch 6: step 700000, RMSD = 0.211 nm, Temp = 300K",
-  "DEBUG: Epoch 7: step 800000, RMSD = 0.218 nm, Temp = 300K",
-  "INFO: MD Production run finished. Writing output files...",
-  "INFO: Launching illustrator analysis pipeline...",
-  "INFO: Parsing energy.xvg and rmsd.xvg...",
-  "INFO: Generating interactive sparklines and plots...",
-  "SUCCESS: Pipeline completed. All outputs stored in workspace."
-];
+let currentRunId = null;
+let runsData = [];
+let pollTimer = null;
+let wsConn = null;
+let term = null;
+let fitAddon = null;
+let selectedPdb = null;
 
-// Interactive Demo State
-let logIndex = 0;
-let demoTimer = null;
-let currentMockStep = 1;
-
-function dismissOnboard() {
-  document.getElementById('onboard-overlay').classList.remove('show');
+function stopWs() {
+  if (wsConn) { wsConn.close(); wsConn = null; }
+  if (term) { term.dispose(); term = null; fitAddon = null; }
 }
 
 function showNewRunForm() {
   document.getElementById('run-view').style.display = 'none';
   document.getElementById('new-run-view').style.display = 'flex';
-  document.getElementById('view-title').textContent = "Configure New Simulation";
-  
-  // Hide header control actions on new run form
+  document.getElementById('view-title').textContent = 'Configure New Simulation';
   document.getElementById('btn-continue').style.display = 'none';
   document.getElementById('btn-abort').style.display = 'none';
-  
-  // Update sidebar active state
-  document.querySelectorAll('.run-item').forEach(item => item.classList.remove('active'));
+  document.querySelectorAll('.run-item').forEach(el => el.classList.remove('active'));
+  currentRunId = null;
+  stopWs();
 }
 
-function mockFileSelect(file) {
-  if (file) {
-    document.getElementById('selected-file').textContent = `✓ Loaded: ${file.name}`;
-    document.getElementById('btn-start').disabled = false;
-  }
-}
-
-function startMockRun() {
-  alert("Mock Simulation Started! Access the running job from the sidebar.");
-  document.getElementById('new-run-view').style.display = 'none';
-  document.getElementById('run-view').style.display = 'flex';
-  document.getElementById('btn-continue').style.display = 'inline-flex';
-  document.getElementById('btn-abort').style.display = 'inline-flex';
-  document.getElementById('view-title').textContent = "Simulation Dashboard";
-  
-  const list = document.getElementById('run-list');
-  const uniqueId = 'mock_run_' + Date.now();
-  const newMockItem = document.createElement('div');
-  newMockItem.className = 'run-item active';
-  newMockItem.id = uniqueId;
-  newMockItem.onclick = () => selectMockRun(uniqueId);
-  newMockItem.innerHTML = `
-    <div class="run-item-header">
-      <span class="run-item-name">NEW_PROTEIN</span>
-      <button class="delete-btn" onclick="deleteMockRun(event, '${uniqueId}', 'NEW_PROTEIN')" title="실행 삭제">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-      </button>
-    </div>
-    <div class="run-item-date">Just now</div>
-    <div class="run-item-footer">
-      <span class="run-item-badge badge-running">● running</span>
-    </div>
-  `;
-  list.insertBefore(newMockItem, list.firstChild);
-
-  runClientDemo();
-}
-
-function selectMockRun(runId) {
-  document.getElementById('new-run-view').style.display = 'none';
-  document.getElementById('run-view').style.display = 'flex';
-  
-  // Show header control actions back on dashboard
-  document.getElementById('btn-continue').style.display = 'inline-flex';
-  document.getElementById('btn-abort').style.display = 'inline-flex';
-  
-  const item = document.getElementById(runId);
-  if (!item) return;
-  const name = item.querySelector('.run-item-name').textContent.trim();
-  document.getElementById('view-title').textContent = "Simulation Dashboard: " + name;
-  
-  document.querySelectorAll('.run-item').forEach(el => {
-    if (el.id === runId) {
-      el.classList.add('active');
-    } else {
-      el.classList.remove('active');
-    }
-  });
-  
-  drawAllCharts();
-}
-
-// Run deletion feature
-function deleteMockRun(event, elementId, runName) {
-  event.stopPropagation();
-  
-  const confirmDelete = confirm(`정말로 [ ${runName} ] 실행 내역을 삭제하시겠습니까?`);
-  if (!confirmDelete) return;
-  
-  const item = document.getElementById(elementId);
-  if (!item) return;
-  
-  item.style.transition = 'all 0.3s ease';
-  item.style.opacity = '0';
-  item.style.transform = 'scale(0.9) translateX(-20px)';
-  
-  setTimeout(() => {
-    const wasActive = item.classList.contains('active');
-    item.remove();
-    
-    if (wasActive) {
-      const remainingItems = document.querySelectorAll('.run-item');
-      if (remainingItems.length > 0) {
-        const nextActiveId = remainingItems[0].id;
-        selectMockRun(nextActiveId);
-      } else {
-        showNewRunForm();
-      }
-    }
-    
-
-
-    showToastNotification(`${runName} 실행 내역이 안전하게 삭제되었습니다.`, 'success');
-  }, 300);
-}
-
-// Toast notification simulator
-function showToastNotification(message, type) {
-  const container = document.body;
+function showToast(message, type = 'info') {
   const toast = document.createElement('div');
-  toast.style.position = 'fixed';
-  toast.style.bottom = '20px';
-  toast.style.right = '20px';
-  toast.style.padding = '10px 16px';
-  toast.style.borderRadius = '8px';
-  toast.style.fontSize = '12px';
-  toast.style.fontWeight = '500';
-  toast.style.color = '#fff';
-  toast.style.zIndex = '500';
-  toast.style.boxShadow = '0 8px 24px rgba(0,0,0,0.5)';
-  toast.style.transition = 'all 0.3s ease';
-  toast.style.opacity = '0';
-  toast.style.transform = 'translateY(10px)';
-  
-  if (type === 'success') {
-    toast.style.background = '#10b981';
-    toast.style.border = '1px solid rgba(255,255,255,0.2)';
-  } else {
-    toast.style.background = '#333';
-  }
-  
+  toast.style.cssText = `
+    position:fixed; bottom:20px; right:20px; padding:10px 16px;
+    border-radius:8px; font-size:12px; font-weight:500; color:#fff;
+    z-index:500; box-shadow:0 8px 24px rgba(0,0,0,0.5);
+    transition:all 0.3s ease; opacity:0; transform:translateY(10px);
+  `;
+  toast.style.background = type === 'error' ? '#ef4444' : type === 'success' ? '#10b981' : '#333';
   toast.textContent = message;
-  container.appendChild(toast);
-  
+  document.body.appendChild(toast);
   requestAnimationFrame(() => {
     toast.style.opacity = '1';
     toast.style.transform = 'translateY(0)';
   });
-  
   setTimeout(() => {
     toast.style.opacity = '0';
     toast.style.transform = 'translateY(10px)';
     setTimeout(() => toast.remove(), 300);
   }, 2500);
-}
-
-// Stats panel toggle function (with SVG arrow flip)
-function toggleStats() {
-  const statsRow = document.getElementById('stats-row');
-  const polyline = document.getElementById('arrow-polyline');
-  const btn = document.getElementById('btn-toggle-stats');
-  
-  if (statsRow.style.display === 'none' || statsRow.style.display === '') {
-    statsRow.style.display = 'flex';
-    polyline.setAttribute('points', '18 15 12 9 6 15');
-    btn.style.background = 'rgba(6, 182, 212, 0.15)';
-    btn.style.borderColor = 'var(--accent-cyan)';
-  } else {
-    statsRow.style.display = 'none';
-    polyline.setAttribute('points', '6 9 12 15 18 9');
-    btn.style.background = 'rgba(99, 102, 241, 0.08)';
-    btn.style.borderColor = 'rgba(99, 102, 241, 0.25)';
-  }
 }
 
 // Theme toggling logic
@@ -1796,148 +1629,8 @@ function toggleTheme() {
     localStorage.setItem('theme', 'dark');
   }
   
-  // Re-draw charts to fit current theme background grid lines
-  drawAllCharts();
 }
 
-// Sparkline Draw helpers
-function drawAllCharts() {
-  drawGradientLineChart('canvas-rmsd', [0.08, 0.09, 0.12, 0.11, 0.14, 0.17, 0.19, 0.21, 0.20, 0.22, 0.218], '#06b6d4');
-  drawGradientLineChart('canvas-rmsf', [0.05, 0.08, 0.15, 0.09, 0.06, 0.18, 0.38, 0.21, 0.12, 0.14, 0.114], '#6366f1');
-  drawGradientLineChart('canvas-energy', [-4.56, -4.62, -4.68, -4.71, -4.75, -4.73, -4.78, -4.79, -4.77, -4.80, -4.79], '#10b981');
-}
-
-function drawGradientLineChart(canvasId, data, colorHex) {
-  const canvas = document.getElementById(canvasId);
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  const w = canvas.width;
-  const h = canvas.height;
-  
-  ctx.clearRect(0, 0, w, h);
-  
-  // Dynamic grid color based on active theme
-  const isLight = document.body.classList.contains('light-theme');
-  ctx.strokeStyle = isLight ? 'rgba(0, 0, 0, 0.04)' : 'rgba(255, 255, 255, 0.03)';
-  ctx.lineWidth = 1;
-  for (let i = 1; i < 4; i++) {
-    ctx.beginPath();
-    ctx.moveTo(0, (h / 4) * i);
-    ctx.lineTo(w, (h / 4) * i);
-    ctx.stroke();
-  }
-  
-  const minVal = Math.min(...data);
-  const maxVal = Math.max(...data);
-  const range = maxVal - minVal || 1;
-  
-  const points = data.map((val, idx) => {
-    const x = (idx / (data.length - 1)) * (w - 20) + 10;
-    const y = h - ((val - minVal) / range) * (h - 20) - 10;
-    return { x, y };
-  });
-  
-  // Draw Area Gradient
-  const grad = ctx.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0, colorHex + (isLight ? '15' : '25'));
-  grad.addColorStop(1, colorHex + '00');
-  
-  ctx.beginPath();
-  ctx.moveTo(points[0].x, h);
-  points.forEach(p => ctx.lineTo(p.x, p.y));
-  ctx.lineTo(points[points.length - 1].x, h);
-  ctx.closePath();
-  ctx.fillStyle = grad;
-  ctx.fill();
-  
-  // Draw Line
-  ctx.beginPath();
-  ctx.moveTo(points[0].x, points[0].y);
-  for(let i = 1; i < points.length; i++) {
-    const xc = (points[i].x + points[i-1].x) / 2;
-    const yc = (points[i].y + points[i-1].y) / 2;
-    ctx.quadraticCurveTo(points[i-1].x, points[i-1].y, xc, yc);
-  }
-  ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
-  ctx.strokeStyle = colorHex;
-  ctx.lineWidth = 2.0;
-  ctx.shadowColor = colorHex;
-  ctx.shadowBlur = isLight ? 2 : 6;
-  ctx.stroke();
-  ctx.shadowBlur = 0;
-  
-  // Draw last point dot
-  const lastP = points[points.length - 1];
-  ctx.beginPath();
-  ctx.arc(lastP.x, lastP.y, 3, 0, Math.PI * 2);
-  ctx.fillStyle = '#ffffff';
-  ctx.strokeStyle = colorHex;
-  ctx.lineWidth = 1.5;
-  ctx.fill();
-  ctx.stroke();
-}
-
-// Dynamic client-side simulation demo
-function runClientDemo() {
-  clearInterval(demoTimer);
-  logIndex = 0;
-  
-  const terminalText = document.getElementById('fallback-terminal-text');
-  terminalText.textContent = "⚡ Initializing Interactive Visual Redesign Simulator...\n";
-  
-  // Set initial stepper state
-  updateStepper(1);
-  document.getElementById('term-status').className = "run-item-badge badge-running";
-  document.getElementById('term-status').textContent = "running";
-  
-  // Disable button while playing
-  const triggerBtn = document.getElementById('btn-demo-trigger');
-  triggerBtn.disabled = true;
-  triggerBtn.textContent = "Simulating Job...";
-  
-  demoTimer = setInterval(() => {
-    if (logIndex < MOCK_LOGS.length) {
-      const line = MOCK_LOGS[logIndex];
-      terminalText.textContent += line + "\n";
-      terminalText.scrollTop = terminalText.scrollHeight;
-      
-      // Determine active stage (1 to 8) based on logIndex progression
-      let stageNum = 1;
-      if (logIndex >= 28) stageNum = 8;
-      else if (logIndex >= 20) stageNum = 7;
-      else if (logIndex >= 15) stageNum = 6;
-      else if (logIndex >= 12) stageNum = 5;
-      else if (logIndex >= 9) stageNum = 4;
-      else if (logIndex >= 6) stageNum = 3;
-      else if (logIndex >= 3) stageNum = 2;
-      
-      updateStepper(stageNum);
-      
-      logIndex++;
-    } else {
-      clearInterval(demoTimer);
-      // Completed state
-      document.getElementById('term-status').className = "run-item-badge badge-completed";
-      document.getElementById('term-status').textContent = "completed";
-      
-      // Update stepper to all done
-      updateStepper(9); // 9 will make all 8 steps marked as 'done'
-      
-      // Draw charts
-      drawAllCharts();
-      
-      triggerBtn.disabled = false;
-      triggerBtn.textContent = "Restart Simulation Demo";
-      
-      // Update sidebar status badge of the active running job
-      const activeItemBadge = document.querySelector('.run-item.active .run-item-badge');
-      if (activeItemBadge) {
-        activeItemBadge.className = "run-item-badge badge-completed";
-        activeItemBadge.textContent = "✓ completed";
-      }
-    }
-  }, 200);
-}
 
 // Check local storage theme on load
 const savedTheme = localStorage.getItem('theme');
@@ -1954,46 +1647,8 @@ if (savedTheme === 'light') {
 
 
 
-// Safely boot mock data display on launch
-selectMockRun('run-item-ubiquitin');
-
-function updateStepper(activeStageNum) {
-  const steps = document.querySelectorAll('#stepper .step-node');
-  const connectors = document.querySelectorAll('#stepper .step-connector');
-  
-  steps.forEach((step, idx) => {
-    const circle = step.querySelector('.step-circle');
-    step.className = 'step-node';
-    if (idx + 1 < activeStageNum) {
-      step.classList.add('done');
-      circle.textContent = '✓';
-    } else if (idx + 1 === activeStageNum) {
-      step.classList.add('active');
-      circle.textContent = (idx + 1).toString();
-    } else {
-      step.classList.add('pending');
-      circle.textContent = (idx + 1).toString();
-    }
-  });
-  
-  connectors.forEach((conn, idx) => {
-    conn.className = 'step-connector';
-    if (idx + 1 < activeStageNum) {
-      conn.classList.add('done');
-    } else if (idx + 1 === activeStageNum) {
-      conn.classList.add('active');
-    }
-  });
-}
-
-function dismissOnboard() {
-  document.getElementById('onboard-overlay').classList.remove('show');
-}
-
 // Initialize on page load
 window.addEventListener('load', () => {
-  drawAllCharts();
-
   // Resizable Sidebar
   const sidebar = document.getElementById('sidebar');
   const resizer = document.getElementById('sidebar-resizer');
@@ -2022,8 +1677,6 @@ window.addEventListener('load', () => {
       } else {
         resizer.classList.remove('will-collapse');
       }
-
-      drawAllCharts();
     });
 
     window.addEventListener('mouseup', function () {
