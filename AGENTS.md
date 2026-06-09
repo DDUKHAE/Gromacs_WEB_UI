@@ -48,11 +48,18 @@ The `state.json` managed by `StateManager` must contain the following keys after
 
 ### Skills (Execution Tools)
 
-| Skill ID | Folder | Purpose |
+| Skill ID | Entry Point | Purpose |
 |---|---|---|
-| `env-builder` | `skills/env_builder/` | Step 0–5: hardware profile, routing, topology, box, solvation, ions |
-| `md-runner` | `skills/md_runner/` | Step 6–7: per-phase grompp+mdrun with validator gates and retry/warning handling |
-| `illustrator` | `skills/illustrator/` | Step 8: analysis, plots, renders, animation, report |
+| `env-builder` | `from skills.env_builder.env_builder import build_environment` | Step 0–5: hardware profile, routing, topology, box, solvation, ions |
+| `md-runner` | `from skills.md_runner.md_runner import run_simulation` | Step 6–7: per-phase grompp+mdrun with validator gates and retry/warning handling |
+| `illustrator` | `from skills.illustrator.illustrator import illustrate` | Step 8: analysis, plots, renders, animation, report |
+
+Call signatures (always `interactive=False` for autonomous runs):
+```python
+build_environment(pdb_path, prompt, workspace_dir, prerequisites=None, interactive=False)
+run_simulation(workspace_dir, phase_overrides=None, interactive=False)
+illustrate(workspace_dir, interactive=False)
+```
 
 ### Internal Helpers (`lib/`, no SKILL.md)
 

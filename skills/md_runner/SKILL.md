@@ -14,6 +14,13 @@ compatibility: "Claude Code, GPT Agent, Cursor, Antigravity"
 
 # Skill: md-runner
 
+## Entry Point
+
+```python
+from skills.md_runner.md_runner import run_simulation
+run_simulation(workspace_dir, phase_overrides=None, interactive=False)
+```
+
 ## Input Schema
 
 ```json
