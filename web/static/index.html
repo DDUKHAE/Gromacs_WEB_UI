@@ -37,18 +37,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace; ba
 
 /* Stepper */
 #stepper { display: flex; align-items: center; gap: 0; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 14px 20px; }
-.step-node { display: flex; align-items: center; gap: 6px; }
-.step-circle { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
-.step-circle.done { background: #238636; color: #fff; }
-.step-circle.active { background: transparent; border: 2px solid #388bfd; color: #388bfd; }
-.step-circle.active::after { content: ''; display: block; width: 8px; height: 8px; background: #388bfd; border-radius: 50%; animation: pulse 1s ease-in-out infinite; }
-.step-circle.active { display: flex; align-items: center; justify-content: center; }
+.step-node { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.step-circle-wrap { display: flex; align-items: center; gap: 6px; }
+.step-circle { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; transition: background .3s, border-color .3s, transform .2s; }
+.step-circle.done { background: #238636; color: #fff; transform: scale(1.05); }
+.step-circle.active { background: transparent; border: 2px solid #388bfd; color: #388bfd; position: relative; }
+.step-circle.active::after { content: ''; display: block; width: 10px; height: 10px; background: #388bfd; border-radius: 50%; animation: pulse 1.2s ease-in-out infinite; position: absolute; }
 .step-circle.pending { background: #21262d; color: #8b949e; }
-@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
-.step-label { font-size: 11px; color: #8b949e; }
+@keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(0.75); } }
+.step-label { font-size: 10px; color: #8b949e; text-align: center; }
 .step-label.done { color: #3fb950; }
 .step-label.active { color: #388bfd; font-weight: 600; }
-.step-connector { flex: 1; height: 2px; background: #30363d; margin: 0 10px; }
+.step-sublabel { font-size: 9px; color: #8b949e; text-align: center; margin-top: 1px; }
+.step-connector { flex: 1; height: 2px; background: #30363d; margin: 0 10px; margin-bottom: 14px; transition: background .4s ease; }
 .step-connector.done { background: #3fb950; }
 
 /* Terminal panel */
@@ -310,7 +311,7 @@ async function refreshRunDetail() {
     const r = await fetch(`/api/runs/${currentRunId}`);
     if (!r.ok) return;
     const run = await r.json();
-    renderStepper(run.last_completed_stage, run.status);
+    renderStepper(run.last_completed_stage, run.status, run.current_step);
     renderStats(run);
     renderActions(run);
     document.getElementById('term-status').textContent = run.status;
@@ -322,23 +323,32 @@ async function refreshRunDetail() {
   } catch (e) { console.error('refreshRunDetail', e); }
 }
 
-function renderStepper(lastStage, status) {
-  const stages = {
-    env: stageState('env', lastStage, status),
-    md:  stageState('md',  lastStage, status),
-    viz: stageState('viz', lastStage, status),
-  };
-  const labels = { env: 'env-builder', md: 'md-runner', viz: 'illustrator' };
+const STAGE_LABELS = {
+  env: { en: 'env-builder', ko: '환경 구축' },
+  md:  { en: 'md-runner',   ko: '시뮬레이션' },
+  viz: { en: 'illustrator', ko: '분석' },
+};
+const STAGE_STEPS = { env: '0–5', md: '6–7', viz: '8' };
+
+function renderStepper(lastStage, status, currentStep) {
   const order = ['env', 'md', 'viz'];
+  const states = {};
+  order.forEach(s => { states[s] = stageState(s, lastStage, status); });
+
   let html = '';
   order.forEach((s, i) => {
-    const st = stages[s];
-    const check = st === 'done' ? '✓' : '';
+    const st = states[s];
+    const icon = st === 'done' ? '✓' : st === 'active' ? '' : '○';
+    const lbl = STAGE_LABELS[s];
+    const connState = states[order[i]] === 'done' ? 'done' : '';
     html += `<div class="step-node">
-      <div class="step-circle ${st}">${st === 'active' ? '' : check}</div>
-      <span class="step-label ${st}">${labels[s]}</span>
+      <div class="step-circle-wrap">
+        <div class="step-circle ${st}" title="${lbl.en} (Steps ${STAGE_STEPS[s]})">${icon}</div>
+      </div>
+      <span class="step-label ${st}">${lbl.en}</span>
+      <span class="step-sublabel">${lbl.ko}</span>
     </div>`;
-    if (i < 2) html += `<div class="step-connector ${stages[order[i]] === 'done' ? 'done' : ''}"></div>`;
+    if (i < 2) html += `<div class="step-connector ${connState}"></div>`;
   });
   document.getElementById('stepper').innerHTML = html;
 }
