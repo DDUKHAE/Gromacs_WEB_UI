@@ -153,6 +153,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace; ba
 #perm-actions { display: flex; gap: 10px; justify-content: flex-end; }
 #perm-deny  { padding: 8px 20px; background: transparent; border: 1px solid #f8514966; color: #f85149; border-radius: 6px; cursor: pointer; font-size: 13px; }
 #perm-allow { padding: 8px 20px; background: #238636; border: none; color: #fff; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; }
+/* Tooltips */
+.tooltip-wrap { position: relative; display: inline-block; }
+.tooltip-btn { background: none; border: 1px solid var(--border); color: var(--text-muted); cursor: pointer; font-size: 10px; padding: 0; vertical-align: middle; border-radius: 50%; width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
+.tooltip-btn:hover { color: var(--accent-blue); border-color: var(--accent-blue); }
+.tooltip-content { display: none; position: absolute; left: 0; top: calc(100% + 4px); background: var(--bg-raised); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; font-size: 11px; color: var(--text-secondary); line-height: 1.5; min-width: 220px; max-width: 260px; z-index: 100; box-shadow: var(--shadow-md); }
+.tooltip-wrap:focus-within .tooltip-content { display: block; }
+.tooltip-btn:hover + .tooltip-content { display: block; }
+.tooltip-content strong { display: block; color: var(--text-primary); margin-bottom: 3px; }
 /* Onboarding Modal */
 #onboard-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.65); z-index: 400; align-items: center; justify-content: center; }
 #onboard-overlay.show { display: flex; }
@@ -244,7 +252,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace; ba
       <input type="file" id="pdb-input" accept=".pdb" onchange="handleFileSelect(this.files[0])">
       <div class="param-grid">
         <div class="param-field">
-          <label>Forcefield</label>
+          <label>Forcefield
+            <span class="tooltip-wrap">
+              <button type="button" class="tooltip-btn" aria-label="Forcefield 설명">?</button>
+              <div class="tooltip-content" role="tooltip">
+                <strong>포스필드 (Force Field)</strong>
+                원자 간 상호작용을 기술하는 파라미터 세트입니다.<br>
+                · CHARMM36: 단백질·막 시스템에 적합<br>
+                · AMBER99SB-ILDN: 단백질 폴딩 연구에 검증<br>
+                · OPLS-AA: 유기 분자 시뮬레이션에 강점
+              </div>
+            </span>
+          </label>
           <select name="forcefield">
             <option value="charmm36">CHARMM36</option>
             <option value="amber99sb-ildn">AMBER99SB-ILDN</option>
@@ -252,7 +271,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace; ba
           </select>
         </div>
         <div class="param-field">
-          <label>Water Model</label>
+          <label>Water Model
+            <span class="tooltip-wrap">
+              <button type="button" class="tooltip-btn" aria-label="수모델 설명">?</button>
+              <div class="tooltip-content" role="tooltip">
+                <strong>수모델 (Water Model)</strong>
+                솔벤트 물 분자의 전하·형태 파라미터입니다.<br>
+                · TIP3P: 계산 비용 낮고 널리 사용<br>
+                · SPC: 간단하고 빠름, 유전율 낮음<br>
+                · TIP4P: 밀도·상변화 특성 향상
+              </div>
+            </span>
+          </label>
           <select name="water">
             <option value="tip3p">TIP3P</option>
             <option value="spc">SPC</option>
@@ -260,7 +290,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace; ba
           </select>
         </div>
         <div class="param-field">
-          <label>Box Type</label>
+          <label>Box Type
+            <span class="tooltip-wrap">
+              <button type="button" class="tooltip-btn" aria-label="박스 타입 설명">?</button>
+              <div class="tooltip-content" role="tooltip">
+                <strong>시뮬레이션 박스</strong>
+                주기적 경계 조건(PBC)의 단위 셀 형태입니다.<br>
+                · Dodecahedron: 구형 단백질에 최적, 물 분자 절약<br>
+                · Cubic: 가장 단순, 비구형 시스템에 큰 박스 필요<br>
+                · Triclinic: 임의 형태, 결정·막 시뮬레이션에 사용
+              </div>
+            </span>
+          </label>
           <select name="box_type">
             <option value="dodecahedron">Dodecahedron</option>
             <option value="cubic">Cubic</option>
