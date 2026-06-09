@@ -1647,8 +1647,99 @@ if (savedTheme === 'light') {
 
 
 
+function renderRunList(runs) {
+  const list = document.getElementById('run-list');
+  list.innerHTML = '';
+  runs.forEach(run => {
+    const el = document.createElement('div');
+    el.className = 'run-item' + (run.run_id === currentRunId ? ' active' : '');
+    el.id = 'run-item-' + run.run_id;
+    el.onclick = () => selectRun(run.run_id);
+
+    const dateStr = run.created_at
+      ? run.created_at.replace('T', ' ').substring(0, 19)
+      : '';
+    const badgeClass = {
+      running: 'badge-running', paused: 'badge-paused',
+      completed: 'badge-completed', failed: 'badge-failed',
+      aborted: 'badge-aborted',
+    }[run.status] || 'badge-aborted';
+    const badgeText = {
+      running: '● running', paused: '⏸ paused',
+      completed: '✓ completed', failed: '✕ failed',
+      aborted: '○ aborted',
+    }[run.status] || run.status;
+
+    el.innerHTML = `
+      <div class="run-item-header">
+        <span class="run-item-name">${run.protein.toUpperCase()}</span>
+        <button class="delete-btn" title="삭제">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+        </button>
+      </div>
+      <div class="run-item-date">${dateStr}</div>
+      <div class="run-item-footer">
+        <span class="run-item-badge ${badgeClass}">${badgeText}</span>
+      </div>
+    `;
+    el.querySelector('.delete-btn').onclick = (e) => {
+      e.stopPropagation();
+      deleteRun(run.run_id, run.protein.toUpperCase());
+    };
+    list.appendChild(el);
+  });
+}
+
+async function loadRuns() {
+  try {
+    const resp = await fetch('/api/runs');
+    if (!resp.ok) return;
+    runsData = await resp.json();
+    renderRunList(runsData);
+
+    // 폴링 속도 조정: 현재 런이 running 상태면 2초, 아니면 5초
+    const activeRun = runsData.find(r => r.run_id === currentRunId);
+    const interval = activeRun && activeRun.status === 'running' ? 2000 : 5000;
+    clearInterval(pollTimer);
+    pollTimer = setInterval(loadRuns, interval);
+  } catch (e) {
+    console.error('loadRuns failed:', e);
+  }
+}
+
+async function loadLlms() {
+  try {
+    const resp = await fetch('/api/llms');
+    if (!resp.ok) return;
+    const llms = await resp.json();
+    const select = document.getElementById('llm-select');
+    select.innerHTML = '<option value="">None (direct pipeline)</option>';
+    llms.forEach(llm => {
+      const opt = document.createElement('option');
+      opt.value = llm.key;
+      opt.textContent = llm.name;
+      select.appendChild(opt);
+    });
+  } catch (e) {
+    console.error('loadLlms failed:', e);
+  }
+}
+
 // Initialize on page load
-window.addEventListener('load', () => {
+window.addEventListener('load', async () => {
+  // 앱 초기화
+  loadLlms();
+  await loadRuns();
+  if (runsData.length > 0) {
+    selectRun(runsData[0].run_id);
+  } else {
+    showNewRunForm();
+  }
+
   // Resizable Sidebar
   const sidebar = document.getElementById('sidebar');
   const resizer = document.getElementById('sidebar-resizer');
