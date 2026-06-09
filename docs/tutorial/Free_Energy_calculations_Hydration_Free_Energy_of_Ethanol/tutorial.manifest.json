@@ -1,0 +1,32 @@
+{
+  "id": "Free_Energy_calculations_Hydration_Free_Energy_of_Ethanol",
+  "pipeline_variant": "free_energy_alchemical",
+  "system_type": [
+    "small_molecule",
+    "hydration",
+    "free_energy"
+  ],
+  "required_inputs": [
+    "solute_topology",
+    "coulomb_vdw_lambda_schedule"
+  ],
+  "defaults": {
+    "forcefield": "charmm36",
+    "water_model": "tip3p",
+    "box_type": "cubic",
+    "box_distance_nm": 1.0,
+    "couple_moltype": "ETH"
+  },
+  "architecture_steps": [
+    0,
+    6,
+    7,
+    8
+  ],
+  "documents": {
+    "step_1": "theory_and_workflow/theory_and_workflow.md",
+    "step_7_production": "running_calculations/running_calculations.md",
+    "step_8": "analysis_and_summary/analysis_and_summary.md"
+  },
+  "validation_profile": "free_energy_bar_staged"
+}

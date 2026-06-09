@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gromacs Harness</title>
+<link rel="stylesheet" href="/static/xterm.css">
+<style>
+:root {
+  --bg-base:    #0d1117;
+  --bg-surface: #161b22;
+  --bg-raised:  #21262d;
+  --border:     #30363d;
+  --text-primary:   #e6edf3;
+  --text-secondary: #a0aab4;
+  --text-muted:     #8b949e;
+  --accent-blue:    #388bfd;
+  --accent-green:   #3fb950;
+  --accent-yellow:  #d29922;
+  --accent-red:     #f85149;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,.3);
+  --shadow-md: 0 4px 12px rgba(0,0,0,.4);
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+}
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+.card-header {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace; background: #0d1117; color: #e6edf3; height: 100vh; display: flex; overflow: hidden; }
+
+/* Sidebar */
+#sidebar { width: 220px; min-width: 220px; background: #161b22; border-right: 1px solid #30363d; display: flex; flex-direction: column; overflow: hidden; }
+#sidebar-header { padding: 14px 12px 10px; border-bottom: 1px solid #30363d; }
+#sidebar-title { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; }
+#new-run-btn { width: 100%; padding: 6px 10px; background: #238636; border: none; color: #fff; font-size: 12px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+#new-run-btn:hover { background: #2ea043; }
+#run-list { flex: 1; overflow-y: auto; padding: 4px 0; }
+.run-item { padding: 8px 12px; cursor: pointer; border-left: 3px solid transparent; }
+.run-item:hover { background: #21262d; }
+.run-item.active { background: #21262d; border-left-color: #388bfd; }
+.run-item-name { font-size: 12px; font-weight: 600; color: #e6edf3; }
+.run-item-date { font-size: 10px; color: #8b949e; margin-top: 2px; }
+.run-item-badge { display: inline-flex; align-items: center; gap: 3px; padding: 1px 6px; border-radius: 10px; font-size: 9px; font-weight: 600; margin-top: 3px; }
+.badge-running  { background: rgba(56,139,253,.13);  color: var(--accent-blue); }
+.badge-paused   { background: rgba(210,153,34,.13);  color: var(--accent-yellow); }
+.badge-completed{ background: rgba(35,134,54,.13);   color: var(--accent-green); }
+.badge-failed   { background: rgba(218,54,51,.13);   color: var(--accent-red); }
+.badge-aborted  { background: rgba(139,148,158,.13); color: var(--text-muted); }
+.badge-pending  { background: rgba(139,148,158,.13); color: var(--text-muted); }
+
+/* Main panel */
+#main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+/* Run view */
+#run-view { flex: 1; display: flex; flex-direction: column; padding: 20px; gap: 16px; overflow: auto; }
+#run-view.hidden, #new-run-view.hidden { display: none; }
+
+/* Stepper */
+#stepper { display: flex; align-items: center; gap: 0; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 14px 20px; }
+.step-node { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.step-circle-wrap { display: flex; align-items: center; gap: 6px; }
+.step-circle { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; transition: background .3s, border-color .3s, transform .2s; }
+.step-circle.done { background: #238636; color: #fff; transform: scale(1.05); }
+.step-circle.active { background: transparent; border: 2px solid #388bfd; color: #388bfd; position: relative; }
+.step-circle.active::after { content: ''; display: block; width: 10px; height: 10px; background: #388bfd; border-radius: 50%; animation: pulse 1.2s ease-in-out infinite; position: absolute; }
+.step-circle.pending { background: #21262d; color: #8b949e; }
+@keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(0.75); } }
+.step-label { font-size: 10px; color: #8b949e; text-align: center; }
+.step-label.done { color: #3fb950; }
+.step-label.active { color: #388bfd; font-weight: 600; }
+.step-sublabel { font-size: 9px; color: #8b949e; text-align: center; margin-top: 1px; }
+.step-connector { flex: 1; height: 2px; background: #30363d; margin: 0 10px; margin-bottom: 14px; transition: background .4s ease; }
+.step-connector.done { background: #3fb950; }
+.step-connector.active { background: linear-gradient(to right, #3fb950 40%, #30363d 40%); background-size: 200px 100%; animation: connector-fill 2s linear infinite; }
+@keyframes connector-fill { 0% { background-position: -200px 0; } 100% { background-position: 200px 0; } }
+
+/* Terminal panel */
+#terminal-panel { flex: 1; background: #0d1117; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; min-height: 260px; }
+#terminal-header { padding: 8px 14px; background: #161b22; border-bottom: 1px solid #30363d; font-size: 11px; color: #8b949e; display: flex; justify-content: space-between; flex-shrink: 0; }
+#terminal-container { flex: 1; padding: 6px; overflow: hidden; }
+
+/* Stats row */
+#stats-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.stat-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px 16px; box-shadow: var(--shadow-sm); transition: box-shadow .2s; }
+.stat-card:hover { box-shadow: var(--shadow-md); }
+.stat-label { font-size: 10px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+.stat-value { font-size: 18px; font-weight: 700; color: var(--text-primary); letter-spacing: -.5px; }
+
+/* Action buttons */
+#action-row { display: flex; gap: 10px; }
+#btn-continue { padding: 8px 20px; background: #238636; border: none; color: #fff; font-size: 13px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+#btn-continue:hover:not(:disabled) { background: #2ea043; }
+#btn-continue:disabled { opacity: .4; cursor: default; }
+#btn-abort { padding: 8px 20px; background: transparent; border: 1px solid #f8514966; color: #f85149; font-size: 13px; border-radius: 6px; cursor: pointer; }
+#btn-abort:hover:not(:disabled) { background: #f8514911; }
+#btn-abort:disabled { opacity: .4; cursor: default; }
+
+/* Results Gallery */
+#gallery-panel { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; }
+#gallery-panel.hidden { display: none; }
+#gallery-title { font-size: 12px; font-weight: 600; color: #8b949e; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 12px; }
+#gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.chart-card { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 10px; }
+.chart-card-title { font-size: 10px; color: #8b949e; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chart-canvas { width: 100%; height: 80px; display: block; }
+.chart-stats { display: flex; justify-content: space-between; margin-top: 5px; font-size: 9px; color: #8b949e; }
+.chart-stats span { color: #e6edf3; }
+
+/* New run view */
+#new-run-view { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px; overflow: auto; }
+#new-run-form { width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 16px; }
+#new-run-form h2 { font-size: 20px; font-weight: 700; color: var(--text-primary); letter-spacing: -.3px; }
+#drop-zone { border: 2px dashed #388bfd66; border-radius: 8px; padding: 32px; text-align: center; cursor: pointer; background: #388bfd08; transition: background .15s; }
+#drop-zone.drag-over { background: #388bfd18; border-color: #388bfd; }
+#drop-zone p { font-size: 13px; color: #388bfd; margin-bottom: 4px; }
+#drop-zone small { font-size: 11px; color: #8b949e; }
+#pdb-input { display: none; }
+#selected-file { font-size: 11px; color: #3fb950; margin-top: 4px; }
+.param-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.param-field label { display: block; font-size: 11px; color: #8b949e; margin-bottom: 4px; }
+.param-field select, .param-field input { width: 100%; padding: 6px 10px; background: #0d1117; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; font-size: 12px; }
+#btn-start { padding: 10px; background: #238636; border: none; color: #fff; font-size: 14px; border-radius: 6px; cursor: pointer; font-weight: 600; width: 100%; }
+#btn-start:hover { background: #2ea043; }
+#btn-start:disabled { opacity: .5; cursor: default; }
+/* LLM section */
+.llm-section { background: #161b2255; border: 1px solid #30363d; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.llm-section-title { font-size: 10px; font-weight: 600; color: #8b949e; text-transform: uppercase; letter-spacing: .06em; }
+/* Permission dialog */
+#perm-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 200; align-items: center; justify-content: center; }
+#perm-overlay.show { display: flex; }
+#perm-box { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 24px; width: 90%; max-width: 540px; }
+#perm-box h3 { font-size: 14px; font-weight: 600; color: #e6edf3; margin-bottom: 4px; }
+#perm-tool-label { font-size: 11px; color: #8b949e; margin-bottom: 10px; }
+#perm-detail { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 10px; font-family: "SF Mono","Fira Code",monospace; font-size: 11px; color: #c9d1d9; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; margin-bottom: 16px; }
+#perm-actions { display: flex; gap: 10px; justify-content: flex-end; }
+#perm-deny  { padding: 8px 20px; background: transparent; border: 1px solid #f8514966; color: #f85149; border-radius: 6px; cursor: pointer; font-size: 13px; }
+#perm-allow { padding: 8px 20px; background: #238636; border: none; color: #fff; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; }
+/* Tooltips */
+.tooltip-wrap { position: relative; display: inline-block; }
+.tooltip-btn { background: none; border: 1px solid var(--border); color: var(--text-muted); cursor: pointer; font-size: 10px; padding: 0; vertical-align: middle; border-radius: 50%; width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
+.tooltip-btn:hover { color: var(--accent-blue); border-color: var(--accent-blue); }
+.tooltip-content { display: none; position: absolute; left: 0; top: calc(100% + 4px); background: var(--bg-raised); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; font-size: 11px; color: var(--text-secondary); line-height: 1.5; min-width: 220px; max-width: 260px; z-index: 100; box-shadow: var(--shadow-md); }
+.tooltip-wrap:focus-within .tooltip-content { display: block; }
+.tooltip-btn:hover + .tooltip-content { display: block; }
+.tooltip-content strong { display: block; color: var(--text-primary); margin-bottom: 3px; }
+/* Onboarding Modal */
+#onboard-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.65); z-index: 400; align-items: center; justify-content: center; }
+#onboard-overlay.show { display: flex; }
+#onboard-box { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 28px 32px; max-width: 480px; width: 90%; box-shadow: var(--shadow-md); }
+#onboard-box h2 { font-size: 18px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; }
+#onboard-box p  { font-size: 13px; color: var(--text-secondary); margin-bottom: 20px; line-height: 1.6; }
+.onboard-steps { display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px; }
+.onboard-step { display: flex; align-items: flex-start; gap: 12px; }
+.onboard-step-icon { width: 28px; height: 28px; border-radius: 50%; background: var(--bg-raised); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: var(--accent-blue); flex-shrink: 0; }
+.onboard-step-text strong { display: block; font-size: 12px; color: var(--text-primary); margin-bottom: 2px; }
+.onboard-step-text span { font-size: 11px; color: var(--text-muted); }
+#onboard-got-it { width: 100%; padding: 10px; background: var(--accent-blue); border: none; color: #fff; font-size: 14px; border-radius: var(--radius-md); cursor: pointer; font-weight: 600; }
+#onboard-got-it:hover { background: #58a6ff; }
+/* Toast notifications */
+#toast-container { position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 300; }
+.toast { padding: 10px 16px; border-radius: var(--radius-md); font-size: 12px; color: #fff; max-width: 320px; opacity: 0; transform: translateY(8px); transition: opacity .25s, transform .25s; pointer-events: none; display: flex; align-items: center; gap: 8px; box-shadow: var(--shadow-md); }
+.toast.show { opacity: 1; transform: none; pointer-events: auto; }
+.toast.error   { background: #6e2020; border: 1px solid var(--accent-red); }
+.toast.success { background: #163a1f; border: 1px solid var(--accent-green); }
+.toast.warning { background: #3d2b00; border: 1px solid var(--accent-yellow); }
+.toast.info    { background: #0f2240; border: 1px solid var(--accent-blue); }
+/* Skeleton loading */
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position:  400px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, #21262d 25%, #30363d 50%, #21262d 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.5s infinite linear;
+  border-radius: 4px;
+}
+.skeleton-text { height: 12px; margin-bottom: 6px; }
+.skeleton-value { height: 20px; width: 60%; }
+/* Responsive */
+@media (max-width: 768px) {
+  body { flex-direction: column; }
+  #sidebar { width: 100%; min-width: unset; height: auto; border-right: none; border-bottom: 1px solid var(--border); flex-direction: row; align-items: center; }
+  #sidebar-header { border-bottom: none; border-right: 1px solid var(--border); display: flex; align-items: center; gap: 8px; padding: 10px 12px; flex-shrink: 0; }
+  #sidebar-title { display: none; }
+  #run-list { display: flex; flex-direction: row; overflow-x: auto; padding: 4px; gap: 4px; flex: 1; }
+  .run-item { padding: 6px 10px; border-left: none; border-bottom: 3px solid transparent; white-space: nowrap; flex-shrink: 0; }
+  .run-item.active { border-bottom-color: var(--accent-blue); border-left: none; }
+  .run-item-date { display: none; }
+  #run-view { padding: 12px; gap: 12px; }
+  #new-run-view { padding: 16px; }
+  #stats-row { grid-template-columns: 1fr 1fr; }
+  .param-grid { grid-template-columns: 1fr; }
+  #gallery-grid { grid-template-columns: 1fr 1fr; }
+  #stepper { flex-wrap: wrap; gap: 8px; padding: 12px; }
+  .step-connector { display: none; }
+  #action-row { flex-wrap: wrap; }
+  #btn-continue, #btn-abort { flex: 1; text-align: center; }
+}
+@media (max-width: 480px) {
+  #stats-row { grid-template-columns: 1fr; }
+  #gallery-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+
+<nav id="sidebar" aria-label="시뮬레이션 실행 목록">
+  <div id="sidebar-header">
+    <div id="sidebar-title">Gromacs Harness</div>
+    <button id="new-run-btn" onclick="showNewRunForm()">+ New Run</button>
+  </div>
+  <div id="run-list" role="list" aria-label="최근 실행 목록"></div>
+</nav>
+
+<main id="main">
+  <!-- Run detail view -->
+  <div id="run-view" class="hidden">
+    <div id="stepper" class="card" role="progressbar" aria-label="파이프라인 진행 상태">
+      <!-- rendered by JS -->
+    </div>
+    <div id="terminal-panel" class="card" role="region" aria-label="실행 터미널">
+      <div id="terminal-header" class="card-header">
+        <span>Terminal</span>
+        <span id="term-status" aria-live="polite">—</span>
+      </div>
+      <div id="terminal-container"></div>
+    </div>
+    <div id="stats-row" role="region" aria-label="실행 통계">
+      <div class="stat-card"><div class="stat-label">Current Step</div><div class="stat-value" id="stat-step" aria-live="polite">—</div></div>
+      <div class="stat-card"><div class="stat-label">Stage</div><div class="stat-value" id="stat-stage" aria-live="polite">—</div></div>
+      <div class="stat-card"><div class="stat-label">Status</div><div class="stat-value" id="stat-status" aria-live="polite">—</div></div>
+    </div>
+    <div id="action-row">
+      <button id="btn-continue" disabled onclick="doAction('continue')" aria-label="다음 단계로 계속">Continue</button>
+      <button id="btn-abort" disabled onclick="doAction('abort')" aria-label="실행 중단">⏹ Abort</button>
+    </div>
+    <!-- Results Gallery -->
+    <div id="gallery-panel" class="card hidden">
+      <div id="gallery-title">Analysis Results</div>
+      <div id="gallery-grid"></div>
+    </div>
+  </div>
+
+  <!-- New run form -->
+  <div id="new-run-view" class="hidden">
+    <form id="new-run-form" onsubmit="submitNewRun(event)" aria-label="새 시뮬레이션 실행 설정">
+      <h2>New Simulation Run</h2>
+      <div id="drop-zone" onclick="document.getElementById('pdb-input').click()"
+           ondragover="event.preventDefault();this.classList.add('drag-over')"
+           ondragleave="this.classList.remove('drag-over')"
+           ondrop="handleDrop(event)">
+        <p>Drop PDB file here</p>
+        <small>or click to browse</small>
+        <div id="selected-file"></div>
+      </div>
+      <input type="file" id="pdb-input" accept=".pdb" onchange="handleFileSelect(this.files[0])" aria-label="PDB 파일 선택">
+      <div class="param-grid">
+        <div class="param-field">
+          <label>Forcefield
+            <span class="tooltip-wrap">
+              <button type="button" class="tooltip-btn" aria-label="Forcefield 설명">?</button>
+              <div class="tooltip-content" role="tooltip">
+                <strong>포스필드 (Force Field)</strong>
+                원자 간 상호작용을 기술하는 파라미터 세트입니다.<br>
+                · CHARMM36: 단백질·막 시스템에 적합<br>
+                · AMBER99SB-ILDN: 단백질 폴딩 연구에 검증<br>
+                · OPLS-AA: 유기 분자 시뮬레이션에 강점
+              </div>
+            </span>
+          </label>
+          <select name="forcefield">
+            <option value="charmm36">CHARMM36</option>
+            <option value="amber99sb-ildn">AMBER99SB-ILDN</option>
+            <option value="oplsaa">OPLS-AA</option>
+          </select>
+        </div>
+        <div class="param-field">
+          <label>Water Model
+            <span class="tooltip-wrap">
+              <button type="button" class="tooltip-btn" aria-label="수모델 설명">?</button>
+              <div class="tooltip-content" role="tooltip">
+                <strong>수모델 (Water Model)</strong>
+                솔벤트 물 분자의 전하·형태 파라미터입니다.<br>
+                · TIP3P: 계산 비용 낮고 널리 사용<br>
+                · SPC: 간단하고 빠름, 유전율 낮음<br>
+                · TIP4P: 밀도·상변화 특성 향상
+              </div>
+            </span>
+          </label>
+          <select name="water">
+            <option value="tip3p">TIP3P</option>
+            <option value="spc">SPC</option>
+            <option value="tip4p">TIP4P</option>
+          </select>
+        </div>
+        <div class="param-field">
+          <label>Box Type
+            <span class="tooltip-wrap">
+              <button type="button" class="tooltip-btn" aria-label="박스 타입 설명">?</button>
+              <div class="tooltip-content" role="tooltip">
+                <strong>시뮬레이션 박스</strong>
+                주기적 경계 조건(PBC)의 단위 셀 형태입니다.<br>
+                · Dodecahedron: 구형 단백질에 최적, 물 분자 절약<br>
+                · Cubic: 가장 단순, 비구형 시스템에 큰 박스 필요<br>
+                · Triclinic: 임의 형태, 결정·막 시뮬레이션에 사용
+              </div>
+            </span>
+          </label>
+          <select name="box_type">
+            <option value="dodecahedron">Dodecahedron</option>
+            <option value="cubic">Cubic</option>
+            <option value="triclinic">Triclinic</option>
+          </select>
+        </div>
+      </div>
+      <div class="llm-section">
+        <div class="llm-section-title">LLM Agent</div>
+        <div class="param-grid">
+          <div class="param-field">
+            <label>LLM</label>
+            <select name="llm" id="llm-select" onchange="onLlmChange()">
+              <option value="">None (direct pipeline)</option>
+              <option value="claude">Claude</option>
+              <option value="gemini">Gemini (agy)</option>
+              <option value="codex">Codex</option>
+            </select>
+          </div>
+          <div class="param-field" id="perm-mode-field" style="display:none;">
+            <label>Permission Mode</label>
+            <select name="auto_approve" id="auto-approve-select">
+              <option value="false">Approve each command</option>
+              <option value="true">Auto-approve all</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <button type="submit" id="btn-start" disabled>&#9654; Start Run</button>
+    </form>
+  </div>
+</main>
+
+<div id="onboard-overlay" role="dialog" aria-modal="true" aria-labelledby="onboard-title">
+  <div id="onboard-box">
+    <h2 id="onboard-title">Gromacs Harness에 오신 것을 환영합니다</h2>
+    <p>이 대시보드로 분자 동역학 시뮬레이션을 브라우저에서 실행하고 모니터링할 수 있습니다.</p>
+    <div class="onboard-steps">
+      <div class="onboard-step">
+        <div class="onboard-step-icon">1</div>
+        <div class="onboard-step-text">
+          <strong>PDB 파일 업로드</strong>
+          <span>New Run 버튼 → PDB 파일 드래그&드롭 또는 클릭하여 선택</span>
+        </div>
+      </div>
+      <div class="onboard-step">
+        <div class="onboard-step-icon">2</div>
+        <div class="onboard-step-text">
+          <strong>파라미터 설정 후 실행</strong>
+          <span>포스필드·수모델·박스 타입 선택 → ▶ Start Run</span>
+        </div>
+      </div>
+      <div class="onboard-step">
+        <div class="onboard-step-icon">3</div>
+        <div class="onboard-step-text">
+          <strong>3단계 파이프라인 진행</strong>
+          <span>env-builder(환경 구축) → md-runner(시뮬레이션) → illustrator(분석)</span>
+        </div>
+      </div>
+      <div class="onboard-step">
+        <div class="onboard-step-icon">4</div>
+        <div class="onboard-step-text">
+          <strong>결과 확인</strong>
+          <span>완료 후 Analysis Results 섹션에서 RMSD·RMSF·에너지 차트 확인</span>
+        </div>
+      </div>
+    </div>
+    <button id="onboard-got-it" onclick="dismissOnboarding()">시작하기</button>
+  </div>
+</div>
+
+<div id="toast-container" role="status" aria-live="polite"></div>
+
+<div id="perm-overlay">
+  <div id="perm-box">
+    <h3>Permission Required</h3>
+    <div id="perm-tool-label">LLM agent is requesting to execute a command</div>
+    <pre id="perm-detail"></pre>
+    <div id="perm-actions">
+      <button id="perm-deny" onclick="permRespond(false)">&#x2715; Deny</button>
+      <button id="perm-allow" onclick="permRespond(true)">&#x2713; Allow</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/xterm.js"></script>
+<script src="/static/xterm-addon-fit.js"></script>
+<script>
+// ── 상태 ──────────────────────────────────────────────
+let currentRunId = null;
+let wsConn       = null;
+let selectedPdb  = null;
+let pollTimer    = null;
+let runsData     = [];
+let term         = null;
+let fitAddon     = null;
+
+function renderStatsSkeleton() {
+  ['stat-step', 'stat-stage', 'stat-status'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.innerHTML = '<div class="skeleton skeleton-value"></div>';
+    }
+  });
+}
+
+// ── 초기화 ────────────────────────────────────────────
+(function init() {
+  fetchRuns();
+  setInterval(fetchRuns, 10000);
+  checkOnboarding();
+})();
+
+// ── 사이드바 ─────────────────────────────────────────
+async function fetchRuns() {
+  try {
+    const r = await fetch('/api/runs');
+    if (!r.ok) return;
+    runsData = await r.json();
+    renderSidebar(runsData);
+  } catch (e) { console.error('fetchRuns', e); }
+}
+
+function renderSidebar(runs) {
+  const list = document.getElementById('run-list');
+  list.innerHTML = '';
+  if (runs.length === 0) {
+    list.innerHTML = '<div style="padding:12px;font-size:11px;color:#8b949e;">No runs yet.</div>';
+    return;
+  }
+  runs.forEach(run => {
+    const el = document.createElement('div');
+    el.className = 'run-item' + (run.run_id === currentRunId ? ' active' : '');
+    el.onclick = () => selectRun(run.run_id);
+    el.setAttribute('role', 'listitem');
+    el.setAttribute('tabindex', '0');
+    el.setAttribute('aria-label', `${run.protein.toUpperCase()} 실행, 상태: ${run.status}`);
+    el.setAttribute('aria-current', run.run_id === currentRunId ? 'true' : 'false');
+    el.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectRun(run.run_id); } };
+
+    const nameEl = document.createElement('div');
+    nameEl.className = 'run-item-name';
+    nameEl.textContent = run.protein.toUpperCase();
+
+    const dateEl = document.createElement('div');
+    dateEl.className = 'run-item-date';
+    dateEl.textContent = run.created_at ? run.created_at.replace('T', ' ').substring(0, 16) : '';
+
+    const badge = document.createElement('span');
+    const safeStatus = ['running','paused','completed','failed','aborted','pending'].includes(run.status)
+      ? run.status : 'pending';
+    const STATUS_ICONS = { running:'●', paused:'⏸', completed:'✓', failed:'✕', aborted:'◼', pending:'○' };
+    badge.className = `run-item-badge badge-${safeStatus}`;
+    badge.setAttribute('aria-label', `상태: ${safeStatus}`);
+    const iconSpan = document.createElement('span');
+    iconSpan.setAttribute('aria-hidden', 'true');
+    iconSpan.textContent = STATUS_ICONS[safeStatus] || '○';
+    badge.appendChild(iconSpan);
+    badge.appendChild(document.createTextNode(safeStatus));
+
+    el.appendChild(nameEl);
+    el.appendChild(dateEl);
+    el.appendChild(badge);
+    list.appendChild(el);
+  });
+}
+
+// ── Run 선택 ─────────────────────────────────────────
+async function selectRun(runId) {
+  currentRunId = runId;
+  stopWs();
+  clearInterval(pollTimer);
+  renderSidebar(runsData);
+  document.getElementById('run-view').classList.remove('hidden');
+  document.getElementById('new-run-view').classList.add('hidden');
+  renderStatsSkeleton();
+  await refreshRunDetail();
+  pollTimer = setInterval(refreshRunDetail, 5000);
+  connectWs(runId);
+}
+
+async function refreshRunDetail() {
+  if (!currentRunId) return;
+  try {
+    const r = await fetch(`/api/runs/${currentRunId}`);
+    if (!r.ok) return;
+    const run = await r.json();
+    renderStepper(run.last_completed_stage, run.status, run.current_step);
+    renderStats(run);
+    renderActions(run);
+    document.getElementById('term-status').textContent = run.status;
+    if (run.status === 'completed') {
+      fetchAndRenderGallery(currentRunId);
+    } else {
+      document.getElementById('gallery-panel').classList.add('hidden');
+    }
+  } catch (e) { console.error('refreshRunDetail', e); }
+}
+
+const STAGE_LABELS = {
+  env: { en: 'env-builder', ko: '환경 구축' },
+  md:  { en: 'md-runner',   ko: '시뮬레이션' },
+  viz: { en: 'illustrator', ko: '분석' },
+};
+const STAGE_STEPS = { env: '0–5', md: '6–7', viz: '8' };
+
+function renderStepper(lastStage, status, currentStep) {
+  const order = ['env', 'md', 'viz'];
+  const states = {};
+  order.forEach(s => { states[s] = stageState(s, lastStage, status); });
+
+  let html = '';
+  order.forEach((s, i) => {
+    const st = states[s];
+    const icon = st === 'done' ? '✓' : st === 'active' ? '' : '○';
+    const lbl = STAGE_LABELS[s];
+    const connState = states[order[i]] === 'done' ? 'done' : (states[order[i]] === 'active' ? 'active' : '');
+    html += `<div class="step-node">
+      <div class="step-circle-wrap">
+        <div class="step-circle ${st}" title="${lbl.en} (Steps ${STAGE_STEPS[s]})">${icon}</div>
+      </div>
+      <span class="step-label ${st}">${lbl.en}</span>
+      <span class="step-sublabel">${lbl.ko}</span>
+    </div>`;
+    if (i < 2) html += `<div class="step-connector ${connState}"></div>`;
+  });
+  document.getElementById('stepper').innerHTML = html;
+}
+
+function stageState(skill, lastStage, status) {
+  const order = ['env', 'md', 'viz'];
+  const lastIdx = order.indexOf(lastStage);
+  const skillIdx = order.indexOf(skill);
+  if (lastIdx >= 0 && skillIdx <= lastIdx) return 'done';
+  if (skillIdx === lastIdx + 1 && status === 'running') return 'active';
+  if (lastStage === null && status === 'running' && skillIdx === 0) return 'active';
+  return 'pending';
+}
+
+function renderStats(run) {
+  document.getElementById('stat-step').textContent = `${run.current_step} / 8`;
+  document.getElementById('stat-stage').textContent = run.last_completed_stage || '—';
+  const STATUS_ICONS = { running:'●', paused:'⏸', completed:'✓', failed:'✕', aborted:'◼', pending:'○' };
+  const STATUS_COLORS = { running:'var(--accent-blue)', paused:'var(--accent-yellow)', completed:'var(--accent-green)', failed:'var(--accent-red)', aborted:'var(--text-muted)', pending:'var(--text-muted)' };
+  const statusEl = document.getElementById('stat-status');
+  const iconEl = document.createElement('span');
+  iconEl.setAttribute('aria-hidden', 'true');
+  iconEl.style.color = STATUS_COLORS[run.status] || 'inherit';
+  iconEl.textContent = STATUS_ICONS[run.status] || '○';
+  statusEl.textContent = '';
+  statusEl.appendChild(iconEl);
+  statusEl.appendChild(document.createTextNode(' ' + run.status));
+  document.getElementById('term-status').textContent = run.status;
+}
+
+function renderActions(run) {
+  const btnContinue = document.getElementById('btn-continue');
+  const btnAbort = document.getElementById('btn-abort');
+  const nextLabels = { env: 'md-runner', md: 'illustrator' };
+  if (run.status === 'paused' && nextLabels[run.last_completed_stage]) {
+    btnContinue.disabled = false;
+    btnContinue.textContent = `▶ Continue (${nextLabels[run.last_completed_stage]})`;
+  } else {
+    btnContinue.disabled = true;
+    btnContinue.textContent = 'Continue';
+  }
+  btnAbort.disabled = run.status !== 'running';
+}
+
+async function doAction(action) {
+  if (!currentRunId) return;
+  try {
+    const r = await fetch(`/api/runs/${currentRunId}/action`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({action}),
+    });
+    if (!r.ok) { showToast(await r.text(), 'error'); return; }
+    await refreshRunDetail();
+    if (action === 'continue') connectWs(currentRunId);
+  } catch (e) { console.error('doAction', e); }
+}
+
+// ── xterm.js 터미널 ───────────────────────────────────
+function initTerminal() {
+  if (term) { term.dispose(); term = null; }
+  term = new Terminal({
+    theme: { background: '#0d1117', foreground: '#c9d1d9', cursor: '#58a6ff', selectionBackground: '#388bfd44' },
+    cursorBlink: true,
+    fontSize: 12,
+    fontFamily: '"SF Mono","Fira Code","Menlo",monospace',
+    scrollback: 5000,
+    convertEol: false,
+  });
+  fitAddon = new FitAddon.FitAddon();
+  term.loadAddon(fitAddon);
+  const container = document.getElementById('terminal-container');
+  container.innerHTML = '';
+  term.open(container);
+  fitAddon.fit();
+}
+
+// ── WebSocket ─────────────────────────────────────────
+function connectWs(runId) {
+  stopWs();
+  initTerminal();
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  wsConn = new WebSocket(`${proto}://${location.host}/ws/runs/${runId}`);
+  wsConn.binaryType = 'arraybuffer';
+
+  wsConn.onopen = () => {
+    // Send initial terminal size
+    if (term) wsConn.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+  };
+
+  wsConn.onmessage = (e) => {
+    if (e.data instanceof ArrayBuffer) {
+      // Try to detect JSON permission events in binary data
+      const bytes = new Uint8Array(e.data);
+      if (bytes[0] === 0x7b) { // starts with '{'
+        try {
+          const msg = JSON.parse(new TextDecoder().decode(bytes));
+          if (msg && typeof msg === 'object' && msg.type === 'permission_request') {
+            showPermissionDialog(msg.detail || '');
+            return;
+          }
+        } catch {}
+      }
+      if (term) term.write(bytes);
+    } else {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'exit') {
+          document.getElementById('term-status').textContent = 'finished';
+        } else if (msg.type === 'permission_request') {
+          showPermissionDialog(msg.detail || '');
+        }
+      } catch {}
+    }
+  };
+
+  wsConn.onerror = () => { document.getElementById('term-status').textContent = 'ws error'; };
+  wsConn.onclose = () => { wsConn = null; };
+
+  // Forward keystrokes to server
+  if (term) {
+    term.onData((data) => {
+      if (wsConn && wsConn.readyState === WebSocket.OPEN) {
+        wsConn.send(new TextEncoder().encode(data));
+      }
+    });
+  }
+}
+
+function stopWs() {
+  if (wsConn) { wsConn.close(); wsConn = null; }
+}
+
+// ── 터미널 리사이즈 ───────────────────────────────────
+function handleTermResize() {
+  if (!fitAddon || !term) return;
+  fitAddon.fit();
+  if (wsConn && wsConn.readyState === WebSocket.OPEN) {
+    wsConn.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+  }
+}
+window.addEventListener('resize', handleTermResize);
+
+// ── LLM 선택 ─────────────────────────────────────────
+function onLlmChange() {
+  const llm = document.getElementById('llm-select').value;
+  document.getElementById('perm-mode-field').style.display = llm ? 'block' : 'none';
+}
+
+// ── New Run 폼 ────────────────────────────────────────
+function showNewRunForm() {
+  document.getElementById('run-view').classList.add('hidden');
+  document.getElementById('new-run-view').classList.remove('hidden');
+  currentRunId = null;
+  clearInterval(pollTimer);
+  stopWs();
+  renderSidebar(runsData);
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) handleFileSelect(file);
+}
+
+function handleFileSelect(file) {
+  if (!file) return;
+  selectedPdb = file;
+  document.getElementById('selected-file').textContent = `Selected: ${file.name}`;
+  document.getElementById('btn-start').disabled = false;
+}
+
+// ── 결과 갤러리 ───────────────────────────────────────
+async function fetchAndRenderGallery(runId) {
+  const panel = document.getElementById('gallery-panel');
+  try {
+    const r = await fetch(`/api/runs/${runId}/artifacts`);
+    if (!r.ok) return;
+    const artifacts = await r.json();
+    if (artifacts.length === 0) { panel.classList.add('hidden'); return; }
+    panel.classList.remove('hidden');
+    renderGallery(artifacts);
+  } catch (e) { console.error('fetchAndRenderGallery', e); }
+}
+
+function renderGallery(artifacts) {
+  const grid = document.getElementById('gallery-grid');
+  grid.innerHTML = '';
+  artifacts.forEach(a => {
+    const card = document.createElement('div');
+    card.className = 'chart-card';
+    const title = document.createElement('div');
+    title.className = 'chart-card-title';
+    title.textContent = a.title || a.name;
+    title.title = `${a.xaxis_label || 'x'} vs ${a.yaxis_label || 'y'}`;
+
+    const canvas = document.createElement('canvas');
+    canvas.className = 'chart-canvas';
+    canvas.width = 200;
+    canvas.height = 80;
+
+    const statsRow = document.createElement('div');
+    statsRow.className = 'chart-stats';
+
+    card.appendChild(title);
+    card.appendChild(canvas);
+    card.appendChild(statsRow);
+    grid.appendChild(card);
+
+    // Render after DOM insertion so canvas has layout
+    requestAnimationFrame(() => {
+      const cols = a.columns || [];
+      const x = cols[0] || [];
+      const y = cols[1] || [];
+      drawSparkline(canvas, x, y, a.yaxis_label || '');
+      if (y.length > 0) {
+        const mn = y.reduce((a, b) => a < b ? a : b).toFixed(3);
+        const mx = y.reduce((a, b) => a > b ? a : b).toFixed(3);
+        const last = y[y.length - 1].toFixed(3);
+        statsRow.innerHTML = `min <span>${mn}</span> max <span>${mx}</span> last <span>${last}</span>`;
+      }
+    });
+  });
+}
+
+function drawSparkline(canvas, xData, yData, yLabel) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  const pad = { top: 4, right: 4, bottom: 14, left: 4 };
+  ctx.clearRect(0, 0, w, h);
+
+  if (yData.length < 2) {
+    ctx.fillStyle = '#8b949e';
+    ctx.font = '9px monospace';
+    ctx.fillText('No data', pad.left, h / 2);
+    return;
+  }
+
+  const minY = yData.reduce((a, b) => a < b ? a : b), maxY = yData.reduce((a, b) => a > b ? a : b);
+  const rangeY = maxY - minY || 1;
+  const plotW = w - pad.left - pad.right;
+  const plotH = h - pad.top - pad.bottom;
+
+  const toX = (i) => pad.left + (i / (yData.length - 1)) * plotW;
+  const toY = (v) => pad.top + plotH - ((v - minY) / rangeY) * plotH;
+
+  // Fill area
+  ctx.beginPath();
+  ctx.moveTo(toX(0), toY(yData[0]));
+  for (let i = 1; i < yData.length; i++) ctx.lineTo(toX(i), toY(yData[i]));
+  ctx.lineTo(toX(yData.length - 1), h - pad.bottom);
+  ctx.lineTo(pad.left, h - pad.bottom);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(56, 139, 253, 0.12)';
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  ctx.moveTo(toX(0), toY(yData[0]));
+  for (let i = 1; i < yData.length; i++) ctx.lineTo(toX(i), toY(yData[i]));
+  ctx.strokeStyle = '#388bfd';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Y-axis label
+  ctx.fillStyle = '#8b949e';
+  ctx.font = '8px monospace';
+  ctx.fillText(yLabel.substring(0, 20), pad.left, h - 2);
+}
+
+// ── 퍼미션 다이얼로그 ─────────────────────────────────
+function showPermissionDialog(detail) {
+  hidePermissionDialog();
+  const detailEl = document.getElementById('perm-detail');
+  if (detailEl) detailEl.textContent = detail;
+  const overlay = document.getElementById('perm-overlay');
+  if (overlay) overlay.classList.add('show');
+}
+
+function hidePermissionDialog() {
+  const overlay = document.getElementById('perm-overlay');
+  if (overlay) overlay.classList.remove('show');
+}
+
+function permRespond(allow) {
+  hidePermissionDialog();
+  if (wsConn && wsConn.readyState === WebSocket.OPEN) {
+    try {
+      wsConn.send(new TextEncoder().encode(allow ? 'y\r' : 'n\r'));
+    } catch (e) {
+      console.warn('Failed to send permission response', e);
+    }
+  }
+}
+
+// ── 온보딩 모달 ───────────────────────────────────────
+function checkOnboarding() {
+  if (!localStorage.getItem('gmx_onboarded')) {
+    document.getElementById('onboard-overlay').classList.add('show');
+  }
+}
+
+function dismissOnboarding() {
+  localStorage.setItem('gmx_onboarded', '1');
+  document.getElementById('onboard-overlay').classList.remove('show');
+}
+
+// ── Toast 알림 ────────────────────────────────────────
+const TOAST_ICONS = { error: '✕', success: '✓', warning: '⚠', info: 'ℹ' };
+
+function showToast(message, type = 'info', duration = 4000) {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.innerHTML = `<span>${TOAST_ICONS[type] || 'ℹ'}</span><span></span>`;
+  toast.querySelector('span:last-child').textContent = message;
+  container.appendChild(toast);
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => toast.classList.add('show'));
+  });
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }, duration);
+}
+
+async function submitNewRun(e) {
+  e.preventDefault();
+  if (!selectedPdb) return;
+  const form = document.getElementById('new-run-form');
+  const fd = new FormData();
+  fd.append('pdb_file', selectedPdb, selectedPdb.name);
+  fd.append('forcefield', form.querySelector('[name=forcefield]').value);
+  fd.append('water', form.querySelector('[name=water]').value);
+  fd.append('box_type', form.querySelector('[name=box_type]').value);
+  fd.append('llm', form.querySelector('[name=llm]').value);
+  fd.append('auto_approve', form.querySelector('[name=auto_approve]') ? form.querySelector('[name=auto_approve]').value : 'false');
+
+  document.getElementById('btn-start').disabled = true;
+  document.getElementById('btn-start').textContent = 'Starting…';
+
+  try {
+    const r = await fetch('/api/runs', { method: 'POST', body: fd });
+    if (!r.ok) {
+      showToast('Failed to start run: ' + await r.text(), 'error');
+      document.getElementById('btn-start').disabled = false;
+      document.getElementById('btn-start').textContent = '▶ Start Run';
+      return;
+    }
+    const data = await r.json();
+    selectedPdb = null;
+    document.getElementById('selected-file').textContent = '';
+    document.getElementById('btn-start').disabled = true;
+    document.getElementById('btn-start').textContent = '▶ Start Run';
+    await fetchRuns();
+    selectRun(data.run_id);
+  } catch (err) {
+    console.error('submitNewRun', err);
+    document.getElementById('btn-start').disabled = false;
+    document.getElementById('btn-start').textContent = '▶ Start Run';
+  }
+}
+</script>
+</body>
+</html>

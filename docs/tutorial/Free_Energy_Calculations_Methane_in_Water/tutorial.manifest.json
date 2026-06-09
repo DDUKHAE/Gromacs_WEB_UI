@@ -1,0 +1,40 @@
+{
+  "id": "Free_Energy_Calculations_Methane_in_Water",
+  "pipeline_variant": "free_energy_alchemical",
+  "system_type": [
+    "small_molecule",
+    "aqueous",
+    "free_energy"
+  ],
+  "required_inputs": [
+    "solute_topology",
+    "lambda_schedule"
+  ],
+  "defaults": {
+    "forcefield": "charmm36",
+    "water_model": "tip3p",
+    "box_type": "cubic",
+    "box_distance_nm": 1.0,
+    "couple_moltype": "MET"
+  },
+  "architecture_steps": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "documents": {
+    "step_1": "theory_and_topology/theory_and_topology.md",
+    "step_2": "workflow/free_energy_workflow.md",
+    "step_6": "energy_minimization/energy_minimization.md",
+    "step_7_equilibration": "Equilibration/equilibration.md",
+    "step_7_production": "production_MD/production_MD.md",
+    "step_8": "analysis/analysis_and_advanced.md"
+  },
+  "validation_profile": "free_energy_bar"
+}
