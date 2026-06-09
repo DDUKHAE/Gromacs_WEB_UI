@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+.venv/
+venv/
+dist/
+build/
+.pytest_cache/
+
+# GROMACS output / backup files
+#*#
+*.gro
+*.tpr
+*.edr
+*.trr
+*.cpt
+*.xvg
+*.xtc
+*.ndx
+*.itp
+*.mdp
+posre*.itp
+mdout.mdp
+step*.pdb
+topol.top*
+
+# Simulation runs and root-level user data
+runs/
+simulation_state.json
+*.pdb
+
+# macOS / Editor
+.DS_Store
+.AppleDouble
+.vscode/
+.idea/
+*.swp
+*~
+
+# Logs
+*.log

@@ -1,0 +1,30 @@
+{
+  "id": "Virtual_Sites",
+  "pipeline_variant": "virtual_sites_topology",
+  "system_type": [
+    "linear_molecule",
+    "virtual_sites",
+    "topology"
+  ],
+  "required_inputs": [
+    "molecule_topology",
+    "virtual_site_definition"
+  ],
+  "defaults": {
+    "forcefield": "charmm36",
+    "water_model": "tip3p",
+    "box_type": "cubic",
+    "box_distance_nm": 1.0
+  },
+  "architecture_steps": [
+    1,
+    6,
+    7
+  ],
+  "documents": {
+    "step_1": "generate_topology/introduction_and_topology.md",
+    "step_7_production": "simulation_and_analysis/simulation_and_summary.md",
+    "step_8": "simulation_and_analysis/simulation_and_summary.md"
+  },
+  "validation_profile": "topology_research_only"
+}

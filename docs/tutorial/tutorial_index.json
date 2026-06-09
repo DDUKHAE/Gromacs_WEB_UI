@@ -1,0 +1,195 @@
+{
+  "version": "2026-05-14",
+  "entries": [
+    {
+      "id": "Lysozyme_in_water",
+      "domain": "standard_md",
+      "system_type": ["protein", "aqueous"],
+      "difficulty": "basic",
+      "manifest_path": "docs/tutorial/Lysozyme_in_water/tutorial.manifest.json",
+      "derived": false,
+      "confidence": "high",
+      "applicable_steps": [0, 1, 2, 3, 4, 5, 6, 7, 8],
+      "variant_steps": [],
+      "required_inputs": ["protein_pdb"],
+      "prerequisites": ["valid_protein_coordinates"],
+      "risk_flags": ["topology_mutation_steps_3_5"],
+      "recommended_docs": {
+        "minimal": [
+          "docs/tutorial/Lysozyme_in_water/tutorial.manifest.json",
+          "docs/tutorial/Lysozyme_in_water/generate_topology/prepare_the_topology.md"
+        ],
+        "deep": [
+          "docs/tutorial/Lysozyme_in_water/analysis/analysis.md"
+        ]
+      },
+      "unsupported_autonomy_level": "none"
+    },
+    {
+      "id": "KALP15_in_DPPC",
+      "domain": "membrane_md",
+      "system_type": ["protein", "membrane", "lipid"],
+      "difficulty": "advanced",
+      "manifest_path": "docs/tutorial/KALP15_in_DPPC/tutorial.manifest.json",
+      "derived": false,
+      "confidence": "high",
+      "applicable_steps": [0, 1, 2, 3, 4, 5, 6, 7, 8],
+      "variant_steps": [2, 3, 6, 7],
+      "required_inputs": ["protein_pdb", "membrane_composition"],
+      "prerequisites": ["valid_protein_coordinates", "membrane_build_prerequisite"],
+      "risk_flags": ["membrane_instability_risk", "topology_mutation_steps_3_5"],
+      "recommended_docs": {
+        "minimal": [
+          "docs/tutorial/KALP15_in_DPPC/tutorial.manifest.json",
+          "docs/tutorial/KALP15_in_DPPC/generate_topology/prepare_the_topology.md"
+        ],
+        "deep": [
+          "docs/tutorial/KALP15_in_DPPC/equilibration/equilibration.md"
+        ]
+      },
+      "unsupported_autonomy_level": "partial"
+    },
+    {
+      "id": "Protein_Ligand_Complex",
+      "domain": "protein_ligand_md",
+      "system_type": ["protein", "ligand", "aqueous"],
+      "difficulty": "advanced",
+      "manifest_path": "docs/tutorial/Protein_Ligand_Complex/tutorial.manifest.json",
+      "derived": false,
+      "confidence": "high",
+      "applicable_steps": [0, 1, 2, 3, 4, 5, 6, 7, 8],
+      "variant_steps": [1, 6, 8],
+      "required_inputs": ["protein_pdb", "ligand_structure"],
+      "prerequisites": ["ligand_parameterization_ready"],
+      "risk_flags": ["ligand_topology_mismatch", "topology_mutation_steps_3_5"],
+      "recommended_docs": {
+        "minimal": [
+          "docs/tutorial/Protein_Ligand_Complex/tutorial.manifest.json",
+          "docs/tutorial/Protein_Ligand_Complex/generate_topology/prepare_the_ligand_topology.md"
+        ],
+        "deep": [
+          "docs/tutorial/Protein_Ligand_Complex/analysis/analysis.md"
+        ]
+      },
+      "unsupported_autonomy_level": "partial"
+    },
+    {
+      "id": "Umbrella_Sampling",
+      "domain": "umbrella_sampling",
+      "system_type": ["protein", "peptide", "free_energy"],
+      "difficulty": "advanced",
+      "manifest_path": "docs/tutorial/Umbrella_Sampling/tutorial.manifest.json",
+      "derived": true,
+      "confidence": "medium",
+      "applicable_steps": [0, 1, 2, 3, 4, 5, 6, 7, 8],
+      "variant_steps": [6, 7, 8],
+      "required_inputs": ["protein_pdb", "reaction_coordinate_definition"],
+      "prerequisites": ["window_schedule_defined", "pulling_protocol_defined"],
+      "risk_flags": ["insufficient_window_overlap", "unsupported_wham_configuration"],
+      "recommended_docs": {
+        "minimal": [
+          "docs/tutorial/Umbrella_Sampling/generate_topology/prepare_the_topology.md",
+          "docs/tutorial/Umbrella_Sampling/production_MD/umbrella_sampling_simulations.md"
+        ],
+        "deep": [
+          "docs/tutorial/Umbrella_Sampling/analysis/analysis.md"
+        ]
+      },
+      "unsupported_autonomy_level": "manual_prerequisite_required"
+    },
+    {
+      "id": "Building_Biphasic_Systems",
+      "domain": "biphasic_system",
+      "system_type": ["biphasic", "aqueous", "hydrophobic"],
+      "difficulty": "advanced",
+      "manifest_path": "docs/tutorial/Building_Biphasic_Systems/tutorial.manifest.json",
+      "derived": true,
+      "confidence": "medium",
+      "applicable_steps": [0, 1, 2, 3, 6, 7, 8],
+      "variant_steps": [2, 3],
+      "required_inputs": ["phase_components", "composition_ratio"],
+      "prerequisites": ["component_topologies_available"],
+      "risk_flags": ["phase_boundary_artifacts", "manual_box_assembly"],
+      "recommended_docs": {
+        "minimal": [
+          "docs/tutorial/Building_Biphasic_Systems/define_box_and_solvate/construct_the_box.md"
+        ],
+        "deep": [
+          "docs/tutorial/Building_Biphasic_Systems/tips_and_tricks/tips_and_tricks.md"
+        ]
+      },
+      "unsupported_autonomy_level": "manual_prerequisite_required"
+    },
+    {
+      "id": "Free_Energy_Calculations_Methane_in_Water",
+      "domain": "free_energy",
+      "system_type": ["small_molecule", "aqueous", "free_energy"],
+      "difficulty": "advanced",
+      "manifest_path": "docs/tutorial/Free_Energy_Calculations_Methane_in_Water/tutorial.manifest.json",
+      "derived": true,
+      "confidence": "medium",
+      "applicable_steps": [0, 1, 2, 3, 4, 5, 6, 7, 8],
+      "variant_steps": [6, 7, 8],
+      "required_inputs": ["solute_topology", "lambda_schedule"],
+      "prerequisites": ["free_energy_mdp_profile_defined"],
+      "risk_flags": ["lambda_schedule_instability", "bar_input_incomplete"],
+      "recommended_docs": {
+        "minimal": [
+          "docs/tutorial/Free_Energy_Calculations_Methane_in_Water/workflow/free_energy_workflow.md",
+          "docs/tutorial/Free_Energy_Calculations_Methane_in_Water/theory_and_topology/theory_and_topology.md"
+        ],
+        "deep": [
+          "docs/tutorial/Free_Energy_Calculations_Methane_in_Water/analysis/analysis_and_advanced.md"
+        ]
+      },
+      "unsupported_autonomy_level": "manual_prerequisite_required"
+    },
+    {
+      "id": "Free_Energy_calculations_Hydration_Free_Energy_of_Ethanol",
+      "domain": "free_energy",
+      "system_type": ["small_molecule", "hydration", "free_energy"],
+      "difficulty": "advanced",
+      "manifest_path": "docs/tutorial/Free_Energy_calculations_Hydration_Free_Energy_of_Ethanol/tutorial.manifest.json",
+      "derived": true,
+      "confidence": "low",
+      "applicable_steps": [0, 6, 7, 8],
+      "variant_steps": [6, 7, 8],
+      "required_inputs": ["solute_topology", "coulomb_vdw_lambda_schedule"],
+      "prerequisites": ["staged_decoupling_protocol_defined"],
+      "risk_flags": ["lambda_path_error", "insufficient_sampling"],
+      "recommended_docs": {
+        "minimal": [
+          "docs/tutorial/Free_Energy_calculations_Hydration_Free_Energy_of_Ethanol/theory_and_workflow/theory_and_workflow.md",
+          "docs/tutorial/Free_Energy_calculations_Hydration_Free_Energy_of_Ethanol/running_calculations/running_calculations.md"
+        ],
+        "deep": [
+          "docs/tutorial/Free_Energy_calculations_Hydration_Free_Energy_of_Ethanol/analysis_and_summary/analysis_and_summary.md"
+        ]
+      },
+      "unsupported_autonomy_level": "manual_prerequisite_required"
+    },
+    {
+      "id": "Virtual_Sites",
+      "domain": "topology_modeling",
+      "system_type": ["linear_molecule", "virtual_sites", "topology"],
+      "difficulty": "advanced",
+      "manifest_path": "docs/tutorial/Virtual_Sites/tutorial.manifest.json",
+      "derived": true,
+      "confidence": "low",
+      "applicable_steps": [1, 6, 7],
+      "variant_steps": [1],
+      "required_inputs": ["molecule_topology", "virtual_site_definition"],
+      "prerequisites": ["manual_topology_editing_capability"],
+      "risk_flags": ["manual_topology_error", "unsupported_automation_scope"],
+      "recommended_docs": {
+        "minimal": [
+          "docs/tutorial/Virtual_Sites/generate_topology/introduction_and_topology.md"
+        ],
+        "deep": [
+          "docs/tutorial/Virtual_Sites/simulation_and_analysis/simulation_and_summary.md"
+        ]
+      },
+      "unsupported_autonomy_level": "research_only"
+    }
+  ]
+}

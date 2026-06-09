@@ -1,0 +1,81 @@
+# Running the Calculations
+
+The `job.sh` script provided for running these calculations will create the following directory hierarchy:
+
+```text
+Lambda_0/
+    Lambda_0/EM/
+    Lambda_0/NVT/
+    Lambda_0/NPT/
+    Lambda_0/Production_MD/
+```
+
+This way, all steps in the workflow are executed within a single directory for each value of `init_lambda_state`. I find this to be a convenient way to organize the jobs and their output.
+
+The script also assumes that the `.mdp` files are also organized hierarchically within some directory `$MDP`. The relevant section in the `job.sh` script is:
+
+```bash
+mkdir Lambda_$LAMBDA
+cd Lambda_$LAMBDA
+
+coorfile=$FREE_ENERGY/etoh_solv.gro
+if [[ $i -gt 1 ]]; then
+    coorfile=$FREE_ENERGY/Lambda_$prevlambda/Production_MD/md$prevlambda.gro
+fi
+
+#################################
+# ENERGY MINIMIZATION 1: STEEP  #
+#################################
+echo "Starting minimization for lambda = $LAMBDA..."
+
+mkdir EM
+cd EM
+
+# Iterative calls to grompp and mdrun to run the simulations
+gmx grompp -f $MDP/em_steep_$LAMBDA.mdp -c $coorfile -p $FREE_ENERGY/topol.top -o min$LAMBDA.tpr
+gmx mdrun -deffnm min$LAMBDA
+
+echo "Minimization complete."
+
+#####################
+# NVT EQUILIBRATION #
+#####################
+echo "Starting constant volume equilibration..."
+
+cd ../
+mkdir NVT
+cd NVT
+
+gmx grompp -f $MDP/nvt_$LAMBDA.mdp -c ../EM/min$LAMBDA.gro -p $FREE_ENERGY/topol.top -o nvt$LAMBDA.tpr
+gmx mdrun -deffnm nvt$LAMBDA
+
+echo "Constant volume equilibration complete."
+
+#####################
+# NPT EQUILIBRATION #
+#####################
+echo "Starting constant pressure equilibration..."
+
+cd ../
+mkdir NPT
+cd NPT
+
+gmx grompp -f $MDP/npt_$LAMBDA.mdp -c ../NVT/nvt$LAMBDA.gro -p $FREE_ENERGY/topol.top -t ../NVT/nvt$LAMBDA.cpt -o npt$LAMBDA.tpr
+gmx mdrun -deffnm npt$LAMBDA
+
+echo "Constant pressure equilibration complete."
+
+#################
+# PRODUCTION MD #
+#################
+echo "Starting production MD simulation..."
+
+cd ../
+mkdir Production_MD
+cd Production_MD
+
+gmx grompp -f $MDP/md_$LAMBDA.mdp -c ../NPT/npt$LAMBDA.gro -p $FREE_ENERGY/topol.top -t ../NPT/npt$LAMBDA.cpt -o md$LAMBDA.tpr
+gmx mdrun -deffnm md$LAMBDA
+
+echo "Production MD complete."
+```

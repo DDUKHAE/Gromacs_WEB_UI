@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Gromacs Harness</title>
+<link rel="stylesheet" href="/static/xterm.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace; background: #0d1117; color: #e6edf3; height: 100vh; display: flex; overflow: hidden; }
+
+/* Sidebar */
+#sidebar { width: 220px; min-width: 220px; background: #161b22; border-right: 1px solid #30363d; display: flex; flex-direction: column; overflow: hidden; }
+#sidebar-header { padding: 14px 12px 10px; border-bottom: 1px solid #30363d; }
+#sidebar-title { font-size: 12px; font-weight: 600; color: #8b949e; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
+#new-run-btn { width: 100%; padding: 6px 10px; background: #238636; border: none; color: #fff; font-size: 12px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+#new-run-btn:hover { background: #2ea043; }
+#run-list { flex: 1; overflow-y: auto; padding: 4px 0; }
+.run-item { padding: 8px 12px; cursor: pointer; border-left: 3px solid transparent; }
+.run-item:hover { background: #21262d; }
+.run-item.active { background: #21262d; border-left-color: #388bfd; }
+.run-item-name { font-size: 12px; font-weight: 600; color: #e6edf3; }
+.run-item-date { font-size: 10px; color: #8b949e; margin-top: 2px; }
+.run-item-badge { display: inline-block; padding: 1px 5px; border-radius: 10px; font-size: 9px; font-weight: 600; margin-top: 3px; }
+.badge-running { background: #388bfd22; color: #388bfd; }
+.badge-paused   { background: #d2992222; color: #d29922; }
+.badge-completed { background: #23863622; color: #3fb950; }
+.badge-failed   { background: #da363322; color: #f85149; }
+.badge-aborted  { background: #8b949e22; color: #8b949e; }
+.badge-pending  { background: #8b949e22; color: #8b949e; }
+
+/* Main panel */
+#main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+/* Run view */
+#run-view { flex: 1; display: flex; flex-direction: column; padding: 20px; gap: 16px; overflow: auto; }
+#run-view.hidden, #new-run-view.hidden { display: none; }
+
+/* Stepper */
+#stepper { display: flex; align-items: center; gap: 0; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 14px 20px; }
+.step-node { display: flex; align-items: center; gap: 6px; }
+.step-circle { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+.step-circle.done { background: #238636; color: #fff; }
+.step-circle.active { background: transparent; border: 2px solid #388bfd; color: #388bfd; }
+.step-circle.active::after { content: ''; display: block; width: 8px; height: 8px; background: #388bfd; border-radius: 50%; animation: pulse 1s ease-in-out infinite; }
+.step-circle.active { display: flex; align-items: center; justify-content: center; }
+.step-circle.pending { background: #21262d; color: #8b949e; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+.step-label { font-size: 11px; color: #8b949e; }
+.step-label.done { color: #3fb950; }
+.step-label.active { color: #388bfd; font-weight: 600; }
+.step-connector { flex: 1; height: 2px; background: #30363d; margin: 0 10px; }
+.step-connector.done { background: #3fb950; }
+
+/* Terminal panel */
+#terminal-panel { flex: 1; background: #0d1117; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; min-height: 260px; }
+#terminal-header { padding: 8px 14px; background: #161b22; border-bottom: 1px solid #30363d; font-size: 11px; color: #8b949e; display: flex; justify-content: space-between; flex-shrink: 0; }
+#terminal-container { flex: 1; padding: 6px; overflow: hidden; }
+
+/* Stats row */
+#stats-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.stat-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px 16px; }
+.stat-label { font-size: 9px; color: #8b949e; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 4px; }
+.stat-value { font-size: 16px; font-weight: 600; color: #e6edf3; }
+
+/* Action buttons */
+#action-row { display: flex; gap: 10px; }
+#btn-continue { padding: 8px 20px; background: #238636; border: none; color: #fff; font-size: 13px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+#btn-continue:hover:not(:disabled) { background: #2ea043; }
+#btn-continue:disabled { opacity: .4; cursor: default; }
+#btn-abort { padding: 8px 20px; background: transparent; border: 1px solid #f8514966; color: #f85149; font-size: 13px; border-radius: 6px; cursor: pointer; }
+#btn-abort:hover:not(:disabled) { background: #f8514911; }
+#btn-abort:disabled { opacity: .4; cursor: default; }
+
+/* New run view */
+#new-run-view { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px; overflow: auto; }
+#new-run-form { width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 16px; }
+#new-run-form h2 { font-size: 18px; color: #e6edf3; }
+#drop-zone { border: 2px dashed #388bfd66; border-radius: 8px; padding: 32px; text-align: center; cursor: pointer; background: #388bfd08; transition: background .15s; }
+#drop-zone.drag-over { background: #388bfd18; border-color: #388bfd; }
+#drop-zone p { font-size: 13px; color: #388bfd; margin-bottom: 4px; }
+#drop-zone small { font-size: 11px; color: #8b949e; }
+#pdb-input { display: none; }
+#selected-file { font-size: 11px; color: #3fb950; margin-top: 4px; }
+.param-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.param-field label { display: block; font-size: 11px; color: #8b949e; margin-bottom: 4px; }
+.param-field select, .param-field input { width: 100%; padding: 6px 10px; background: #0d1117; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; font-size: 12px; }
+#btn-start { padding: 10px; background: #238636; border: none; color: #fff; font-size: 14px; border-radius: 6px; cursor: pointer; font-weight: 600; width: 100%; }
+#btn-start:hover { background: #2ea043; }
+#btn-start:disabled { opacity: .5; cursor: default; }
+/* LLM section */
+.llm-section { background: #161b2255; border: 1px solid #30363d; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.llm-section-title { font-size: 10px; font-weight: 600; color: #8b949e; text-transform: uppercase; letter-spacing: .06em; }
+/* Permission dialog */
+#perm-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 200; align-items: center; justify-content: center; }
+#perm-overlay.show { display: flex; }
+#perm-box { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 24px; width: 90%; max-width: 540px; }
+#perm-box h3 { font-size: 14px; font-weight: 600; color: #e6edf3; margin-bottom: 4px; }
+#perm-tool-label { font-size: 11px; color: #8b949e; margin-bottom: 10px; }
+#perm-detail { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 10px; font-family: "SF Mono","Fira Code",monospace; font-size: 11px; color: #c9d1d9; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; margin-bottom: 16px; }
+#perm-actions { display: flex; gap: 10px; justify-content: flex-end; }
+#perm-deny  { padding: 8px 20px; background: transparent; border: 1px solid #f8514966; color: #f85149; border-radius: 6px; cursor: pointer; font-size: 13px; }
+#perm-allow { padding: 8px 20px; background: #238636; border: none; color: #fff; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; }
+</style>
+</head>
+<body>
+
+
+<div id="sidebar">
+  <div id="sidebar-header">
+    <div id="sidebar-title">Gromacs Harness</div>
+    <button id="new-run-btn" onclick="showNewRunForm()">+ New Run</button>
+  </div>
+  <div id="run-list"></div>
+</div>
+
+<div id="main">
+  <!-- Run detail view -->
+  <div id="run-view" class="hidden">
+    <div id="stepper">
+      <!-- rendered by JS -->
+    </div>
+    <div id="terminal-panel">
+      <div id="terminal-header">
+        <span>Terminal</span>
+        <span id="term-status">—</span>
+      </div>
+      <div id="terminal-container"></div>
+    </div>
+    <div id="stats-row">
+      <div class="stat-card"><div class="stat-label">Current Step</div><div class="stat-value" id="stat-step">—</div></div>
+      <div class="stat-card"><div class="stat-label">Stage</div><div class="stat-value" id="stat-stage">—</div></div>
+      <div class="stat-card"><div class="stat-label">Status</div><div class="stat-value" id="stat-status">—</div></div>
+    </div>
+    <div id="action-row">
+      <button id="btn-continue" disabled onclick="doAction('continue')">Continue</button>
+      <button id="btn-abort" disabled onclick="doAction('abort')">⏹ Abort</button>
+    </div>
+  </div>
+
+  <!-- New run form -->
+  <div id="new-run-view" class="hidden">
+    <form id="new-run-form" onsubmit="submitNewRun(event)">
+      <h2>New Simulation Run</h2>
+      <div id="drop-zone" onclick="document.getElementById('pdb-input').click()"
+           ondragover="event.preventDefault();this.classList.add('drag-over')"
+           ondragleave="this.classList.remove('drag-over')"
+           ondrop="handleDrop(event)">
+        <p>Drop PDB file here</p>
+        <small>or click to browse</small>
+        <div id="selected-file"></div>
+      </div>
+      <input type="file" id="pdb-input" accept=".pdb" onchange="handleFileSelect(this.files[0])">
+      <div class="param-grid">
+        <div class="param-field">
+          <label>Forcefield</label>
+          <select name="forcefield">
+            <option value="charmm36">CHARMM36</option>
+            <option value="amber99sb-ildn">AMBER99SB-ILDN</option>
+            <option value="oplsaa">OPLS-AA</option>
+          </select>
+        </div>
+        <div class="param-field">
+          <label>Water Model</label>
+          <select name="water">
+            <option value="tip3p">TIP3P</option>
+            <option value="spc">SPC</option>
+            <option value="tip4p">TIP4P</option>
+          </select>
+        </div>
+        <div class="param-field">
+          <label>Box Type</label>
+          <select name="box_type">
+            <option value="dodecahedron">Dodecahedron</option>
+            <option value="cubic">Cubic</option>
+            <option value="triclinic">Triclinic</option>
+          </select>
+        </div>
+      </div>
+      <div class="llm-section">
+        <div class="llm-section-title">LLM Agent</div>
+        <div class="param-grid">
+          <div class="param-field">
+            <label>LLM</label>
+            <select name="llm" id="llm-select" onchange="onLlmChange()">
+              <option value="">None (direct pipeline)</option>
+              <option value="claude">Claude</option>
+              <option value="gemini">Gemini (agy)</option>
+              <option value="codex">Codex</option>
+            </select>
+          </div>
+          <div class="param-field" id="perm-mode-field" style="display:none;">
+            <label>Permission Mode</label>
+            <select name="auto_approve" id="auto-approve-select">
+              <option value="false">Approve each command</option>
+              <option value="true">Auto-approve all</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <button type="submit" id="btn-start" disabled>&#9654; Start Run</button>
+    </form>
+  </div>
+</div>
+
+<script src="/static/xterm.js"></script>
+<script src="/static/xterm-addon-fit.js"></script>
+<script>
+// ── 상태 ──────────────────────────────────────────────
+let currentRunId = null;
+let wsConn       = null;
+let selectedPdb  = null;
+let pollTimer    = null;
+let runsData     = [];
+let term         = null;
+let fitAddon     = null;
+
+// ── 초기화 ────────────────────────────────────────────
+(function init() {
+  fetchRuns();
+  setInterval(fetchRuns, 10000);
+})();
+
+// ── 사이드바 ─────────────────────────────────────────
+async function fetchRuns() {
+  try {
+    const r = await fetch('/api/runs');
+    if (!r.ok) return;
+    runsData = await r.json();
+    renderSidebar(runsData);
+  } catch (e) { console.error('fetchRuns', e); }
+}
+
+function renderSidebar(runs) {
+  const list = document.getElementById('run-list');
+  list.innerHTML = '';
+  if (runs.length === 0) {
+    list.innerHTML = '<div style="padding:12px;font-size:11px;color:#8b949e;">No runs yet.</div>';
+    return;
+  }
+  runs.forEach(run => {
+    const el = document.createElement('div');
+    el.className = 'run-item' + (run.run_id === currentRunId ? ' active' : '');
+    el.onclick = () => selectRun(run.run_id);
+
+    const nameEl = document.createElement('div');
+    nameEl.className = 'run-item-name';
+    nameEl.textContent = run.protein.toUpperCase();
+
+    const dateEl = document.createElement('div');
+    dateEl.className = 'run-item-date';
+    dateEl.textContent = run.created_at ? run.created_at.replace('T', ' ').substring(0, 16) : '';
+
+    const badge = document.createElement('span');
+    const safeStatus = ['running','paused','completed','failed','aborted','pending'].includes(run.status)
+      ? run.status : 'pending';
+    badge.className = `run-item-badge badge-${safeStatus}`;
+    badge.textContent = safeStatus;
+
+    el.appendChild(nameEl);
+    el.appendChild(dateEl);
+    el.appendChild(badge);
+    list.appendChild(el);
+  });
+}
+
+// ── Run 선택 ─────────────────────────────────────────
+async function selectRun(runId) {
+  currentRunId = runId;
+  stopWs();
+  clearInterval(pollTimer);
+  renderSidebar(runsData);
+  document.getElementById('run-view').classList.remove('hidden');
+  document.getElementById('new-run-view').classList.add('hidden');
+  await refreshRunDetail();
+  pollTimer = setInterval(refreshRunDetail, 5000);
+  connectWs(runId);
+}
+
+async function refreshRunDetail() {
+  if (!currentRunId) return;
+  try {
+    const r = await fetch(`/api/runs/${currentRunId}`);
+    if (!r.ok) return;
+    const run = await r.json();
+    renderStepper(run.last_completed_stage, run.status);
+    renderStats(run);
+    renderActions(run);
+    document.getElementById('term-status').textContent = run.status;
+  } catch (e) { console.error('refreshRunDetail', e); }
+}
+
+function renderStepper(lastStage, status) {
+  const stages = {
+    env: stageState('env', lastStage, status),
+    md:  stageState('md',  lastStage, status),
+    viz: stageState('viz', lastStage, status),
+  };
+  const labels = { env: 'env-builder', md: 'md-runner', viz: 'illustrator' };
+  const order = ['env', 'md', 'viz'];
+  let html = '';
+  order.forEach((s, i) => {
+    const st = stages[s];
+    const check = st === 'done' ? '✓' : '';
+    html += `<div class="step-node">
+      <div class="step-circle ${st}">${st === 'active' ? '' : check}</div>
+      <span class="step-label ${st}">${labels[s]}</span>
+    </div>`;
+    if (i < 2) html += `<div class="step-connector ${stages[order[i]] === 'done' ? 'done' : ''}"></div>`;
+  });
+  document.getElementById('stepper').innerHTML = html;
+}
+
+function stageState(skill, lastStage, status) {
+  const order = ['env', 'md', 'viz'];
+  const lastIdx = order.indexOf(lastStage);
+  const skillIdx = order.indexOf(skill);
+  if (lastIdx >= 0 && skillIdx <= lastIdx) return 'done';
+  if (skillIdx === lastIdx + 1 && status === 'running') return 'active';
+  if (lastStage === null && status === 'running' && skillIdx === 0) return 'active';
+  return 'pending';
+}
+
+function renderStats(run) {
+  document.getElementById('stat-step').textContent = `${run.current_step} / 8`;
+  document.getElementById('stat-stage').textContent = run.last_completed_stage || '—';
+  document.getElementById('stat-status').textContent = run.status;
+  document.getElementById('term-status').textContent = run.status;
+}
+
+function renderActions(run) {
+  const btnContinue = document.getElementById('btn-continue');
+  const btnAbort = document.getElementById('btn-abort');
+  const nextLabels = { env: 'md-runner', md: 'illustrator' };
+  if (run.status === 'paused' && nextLabels[run.last_completed_stage]) {
+    btnContinue.disabled = false;
+    btnContinue.textContent = `▶ Continue (${nextLabels[run.last_completed_stage]})`;
+  } else {
+    btnContinue.disabled = true;
+    btnContinue.textContent = 'Continue';
+  }
+  btnAbort.disabled = run.status !== 'running';
+}
+
+async function doAction(action) {
+  if (!currentRunId) return;
+  try {
+    const r = await fetch(`/api/runs/${currentRunId}/action`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({action}),
+    });
+    if (!r.ok) { alert(await r.text()); return; }
+    await refreshRunDetail();
+    if (action === 'continue') connectWs(currentRunId);
+  } catch (e) { console.error('doAction', e); }
+}
+
+// ── xterm.js 터미널 ───────────────────────────────────
+function initTerminal() {
+  if (term) { term.dispose(); term = null; }
+  term = new Terminal({
+    theme: { background: '#0d1117', foreground: '#c9d1d9', cursor: '#58a6ff', selectionBackground: '#388bfd44' },
+    cursorBlink: true,
+    fontSize: 12,
+    fontFamily: '"SF Mono","Fira Code","Menlo",monospace',
+    scrollback: 5000,
+    convertEol: false,
+  });
+  fitAddon = new FitAddon.FitAddon();
+  term.loadAddon(fitAddon);
+  const container = document.getElementById('terminal-container');
+  container.innerHTML = '';
+  term.open(container);
+  fitAddon.fit();
+}
+
+// ── WebSocket ─────────────────────────────────────────
+function connectWs(runId) {
+  stopWs();
+  initTerminal();
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  wsConn = new WebSocket(`${proto}://${location.host}/ws/runs/${runId}`);
+  wsConn.binaryType = 'arraybuffer';
+
+  wsConn.onopen = () => {
+    // Send initial terminal size
+    if (term) wsConn.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+  };
+
+  wsConn.onmessage = (e) => {
+    if (e.data instanceof ArrayBuffer) {
+      if (term) term.write(new Uint8Array(e.data));
+    } else {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'exit') document.getElementById('term-status').textContent = 'finished';
+      } catch {}
+    }
+  };
+
+  wsConn.onerror = () => { document.getElementById('term-status').textContent = 'ws error'; };
+  wsConn.onclose = () => { wsConn = null; };
+
+  // Forward keystrokes to server
+  if (term) {
+    term.onData((data) => {
+      if (wsConn && wsConn.readyState === WebSocket.OPEN) {
+        wsConn.send(new TextEncoder().encode(data));
+      }
+    });
+  }
+}
+
+function stopWs() {
+  if (wsConn) { wsConn.close(); wsConn = null; }
+}
+
+// ── 터미널 리사이즈 ───────────────────────────────────
+function handleTermResize() {
+  if (!fitAddon || !term) return;
+  fitAddon.fit();
+  if (wsConn && wsConn.readyState === WebSocket.OPEN) {
+    wsConn.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+  }
+}
+window.addEventListener('resize', handleTermResize);
+
+// ── LLM 선택 ─────────────────────────────────────────
+function onLlmChange() {
+  const llm = document.getElementById('llm-select').value;
+  document.getElementById('perm-mode-field').style.display = llm ? 'block' : 'none';
+}
+
+// ── New Run 폼 ────────────────────────────────────────
+function showNewRunForm() {
+  document.getElementById('run-view').classList.add('hidden');
+  document.getElementById('new-run-view').classList.remove('hidden');
+  currentRunId = null;
+  clearInterval(pollTimer);
+  stopWs();
+  renderSidebar(runsData);
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) handleFileSelect(file);
+}
+
+function handleFileSelect(file) {
+  if (!file) return;
+  selectedPdb = file;
+  document.getElementById('selected-file').textContent = `Selected: ${file.name}`;
+  document.getElementById('btn-start').disabled = false;
+}
+
+async function submitNewRun(e) {
+  e.preventDefault();
+  if (!selectedPdb) return;
+  const form = document.getElementById('new-run-form');
+  const fd = new FormData();
+  fd.append('pdb_file', selectedPdb, selectedPdb.name);
+  fd.append('forcefield', form.querySelector('[name=forcefield]').value);
+  fd.append('water', form.querySelector('[name=water]').value);
+  fd.append('box_type', form.querySelector('[name=box_type]').value);
+  fd.append('llm', form.querySelector('[name=llm]').value);
+  fd.append('auto_approve', form.querySelector('[name=auto_approve]') ? form.querySelector('[name=auto_approve]').value : 'false');
+
+  document.getElementById('btn-start').disabled = true;
+  document.getElementById('btn-start').textContent = 'Starting…';
+
+  try {
+    const r = await fetch('/api/runs', { method: 'POST', body: fd });
+    if (!r.ok) {
+      alert('Failed to start run: ' + await r.text());
+      document.getElementById('btn-start').disabled = false;
+      document.getElementById('btn-start').textContent = '▶ Start Run';
+      return;
+    }
+    const data = await r.json();
+    selectedPdb = null;
+    document.getElementById('selected-file').textContent = '';
+    document.getElementById('btn-start').disabled = true;
+    document.getElementById('btn-start').textContent = '▶ Start Run';
+    await fetchRuns();
+    selectRun(data.run_id);
+  } catch (err) {
+    console.error('submitNewRun', err);
+    document.getElementById('btn-start').disabled = false;
+    document.getElementById('btn-start').textContent = '▶ Start Run';
+  }
+}
+</script>
+</body>
+</html>

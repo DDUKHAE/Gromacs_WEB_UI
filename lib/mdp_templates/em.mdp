@@ -1,0 +1,11 @@
+; em.mdp - energy minimization
+integrator               = steep
+emtol                    = {emtol}
+emstep                   = {emstep}
+nsteps                   = {nsteps}
+nstlist                  = 1
+cutoff-scheme            = Verlet
+coulombtype              = PME
+rcoulomb                 = 1.0
+rvdw                     = 1.0
+pbc                      = xyz
