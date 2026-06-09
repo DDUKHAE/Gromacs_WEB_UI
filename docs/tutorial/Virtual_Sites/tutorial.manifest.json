@@ -11,7 +11,7 @@
     "virtual_site_definition"
   ],
   "defaults": {
-    "forcefield": "charmm36",
+    "forcefield": "oplsaa",
     "water_model": "tip3p",
     "box_type": "cubic",
     "box_distance_nm": 1.0

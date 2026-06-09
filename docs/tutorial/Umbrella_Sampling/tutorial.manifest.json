@@ -11,8 +11,8 @@
     "reaction_coordinate_definition"
   ],
   "defaults": {
-    "forcefield": "charmm36",
-    "water_model": "tip3p",
+    "forcefield": "gromos53a6",
+    "water_model": "spc",
     "box_type": "cubic",
     "box_distance_nm": 1.2,
     "pull_coord_k": 1000.0

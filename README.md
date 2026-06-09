@@ -91,12 +91,68 @@ LLM(Claude / Codex / Gemini)을 오케스트레이터로 활용하거나, 직접
 | 항목 | 비고 |
 |------|------|
 | Python 3.11+ | |
-| GROMACS (`gmx` on PATH) | `conda-forge::gromacs` 권장 |
+| GROMACS 2021+ | `conda-forge::gromacs` 권장, 또는 시스템 설치 |
 | `pip install -r requirements.txt` | FastAPI, uvicorn 포함 |
 | matplotlib (선택) | illustrator 플롯 |
 | PyMOL 또는 VMD (선택) | 구조 렌더링 |
 | ffmpeg (선택) | 트래젝토리 애니메이션 |
 | Claude Code / Codex / Gemini CLI (선택) | LLM 자율 실행 |
+
+---
+
+## Force Field 설치 안내
+
+각 튜토리얼은 원본(mdtutorials.com) 기준의 force field를 그대로 사용합니다.  
+GROMACS 기본 설치에 포함된 force field와 **별도 설치가 필요한 force field**는 아래와 같습니다.
+
+### GROMACS 기본 포함 Force Field
+
+`conda-forge::gromacs` 또는 공식 바이너리를 설치하면 아래 force field가 `$GMXLIB`에 자동 포함됩니다.
+
+| Force Field | 해당 튜토리얼 |
+|-------------|--------------|
+| `oplsaa` | Lysozyme (대체), Free Energy (Methane), Virtual Sites |
+| `gromos53a6` | Umbrella Sampling, KALP15 in DPPC |
+| `gromos43a1` | Building Biphasic Systems |
+| `amber99sb-ildn` | — |
+| `charmm27` | — |
+
+### 별도 설치 필요: CHARMM36
+
+CHARMM36은 GROMACS 패키지에 포함되지 않으며, 아래 튜토리얼에서 요구합니다.
+
+| 튜토리얼 | 이유 |
+|----------|------|
+| **Lysozyme in Water** | Justin Lemkul 최신 튜토리얼 기준 force field |
+| **Protein-Ligand Complex** | CGenFF 리간드 파라미터와 동일 계열 |
+| **Free Energy (Ethanol)** | CHARMM General Force Field (CGenFF) 사용 |
+
+**설치 방법:**
+
+```bash
+# 1. MacKerell 연구실 공식 배포 페이지에서 GROMACS용 CHARMM36 다운로드
+#    https://mackerell.umaryland.edu/charmm_ff.shtml
+#    → "CHARMM36 force field for GROMACS" 항목에서 최신 파일 다운로드
+
+# 2. 압축 해제 후 .ff 디렉터리를 GMXLIB 경로에 복사
+#    GMXLIB 위치 확인:
+echo $GMXLIB
+# 또는 (conda 환경 기준):
+# ~/miniforge3/envs/gromacs/share/gromacs/top/
+
+# 3. 복사 예시
+tar xzf charmm36-jul2022.ff.tgz
+cp -r charmm36-jul2022.ff $GMXLIB/
+# 또는 conda 환경에 직접:
+cp -r charmm36-jul2022.ff ~/miniforge3/envs/gromacs/share/gromacs/top/
+
+# 4. 설치 확인
+gmx pdb2gmx -h 2>&1 | grep charmm36
+# 또는 하네스 내에서:
+python -c "from skills.env_builder.env_builder import _available_forcefields; print('charmm36' in _available_forcefields())"
+```
+
+> **참고:** CHARMM36 미설치 상태에서 해당 튜토리얼을 실행하면 하네스가 설치된 force field 목록을 포함한 오류 메시지를 출력합니다.
 
 ---
 

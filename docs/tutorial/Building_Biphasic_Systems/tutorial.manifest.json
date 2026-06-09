@@ -11,8 +11,8 @@
     "composition_ratio"
   ],
   "defaults": {
-    "forcefield": "charmm36",
-    "water_model": "tip3p",
+    "forcefield": "gromos43a1",
+    "water_model": "spc",
     "box_type": "triclinic",
     "box_distance_nm": 1.0
   },
