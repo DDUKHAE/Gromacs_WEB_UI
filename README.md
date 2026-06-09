@@ -81,7 +81,6 @@ LLM(Claude / Codex / Gemini)을 오케스트레이터로 활용하거나, 직접
     ├── pipeline_contract.md   Step별 입출력/안전 계약
     ├── WARNING_FLOW.md        사용자 결정형 WARNING 분기
     ├── runbook.md             수동 복구 절차
-    ├── TESTING_WITH_TUTORIAL_DATA.md  튜토리얼 데이터 테스트 가이드
     └── tutorial/              8개 튜토리얼 매니페스트 + LLM 가이드
 ```
 
@@ -227,7 +226,7 @@ illustrator  (Step 8)
 | [`docs/WARNING_FLOW.md`](docs/WARNING_FLOW.md) | 사용자 결정형 WARNING 분기 |
 | [`docs/runbook.md`](docs/runbook.md) | 수동 복구 절차 |
 | [`docs/tutorial/LLM_TUTORIAL_GUIDE.md`](docs/tutorial/LLM_TUTORIAL_GUIDE.md) | 튜토리얼 라우팅 결정 트리 |
-| [`docs/TESTING_WITH_TUTORIAL_DATA.md`](docs/TESTING_WITH_TUTORIAL_DATA.md) | 튜토리얼 데이터 테스트 가이드 |
+| [`TESTING_WITH_TUTORIAL_DATA.md`](TESTING_WITH_TUTORIAL_DATA.md) | 튜토리얼 데이터 테스트 가이드 |
 
 ---
 
