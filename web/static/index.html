@@ -1389,11 +1389,11 @@ body.resizing * {
               </div>
             </label>
           </div>
-          <button id="btn-continue" class="btn" disabled style="display: inline-flex !important; align-items: center !important; flex-shrink: 0 !important;">
+          <button id="btn-continue" class="btn" disabled onclick="doAction('continue')" style="display: inline-flex !important; align-items: center !important; flex-shrink: 0 !important;">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"></polygon></svg>
             Run
           </button>
-          <button id="btn-abort" class="btn" style="display: inline-flex !important; align-items: center !important; flex-shrink: 0 !important;">
+          <button id="btn-abort" class="btn" onclick="doAction('abort')" style="display: inline-flex !important; align-items: center !important; flex-shrink: 0 !important;">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
             Stop
           </button>
@@ -2083,6 +2083,27 @@ window.addEventListener('load', async () => {
     }
   });
 });
+
+
+async function doAction(action) {
+  if (!currentRunId) return;
+  try {
+    const resp = await fetch(`/api/runs/${currentRunId}/action`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      showToast(err.detail || `${action} 실패`, 'error');
+      return;
+    }
+    // 즉시 상태 재조회
+    await selectRun(currentRunId, action === 'continue');
+  } catch (e) {
+    showToast('서버 연결 오류', 'error');
+  }
+}
 
 
 </script>
