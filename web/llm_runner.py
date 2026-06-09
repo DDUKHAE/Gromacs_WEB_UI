@@ -28,10 +28,10 @@ from web.llm_adapters import ADAPTERS, LLMAdapter
 _ANSI_RE = re.compile(r"\x1b(?:\[[0-9;]*[mGKHFABCDJsr]|\[\?[0-9;]*[hlr]|[=>])")
 
 _PERM_RE = re.compile(
-    r'Allow\?\s*\[|'           # Claude Code: "Allow? ["
-    r'\[y/n\]|'                # Generic [y/n]
-    r'\[Y/n\]|'                # Generic [Y/n]
-    r'\(y/n\)',                # Generic (y/n)
+    r'Allow\?\s*\[\s*y\s*/\s*n\s*\]|'  # Claude Code: "Allow? [y/n]"
+    r'\[y/n\]|'                          # Generic [y/n]
+    r'\[Y/n\]|'                          # Generic [Y/n]
+    r'\(y/n\)',                           # Generic (y/n)
     re.IGNORECASE,
 )
 
@@ -120,7 +120,7 @@ async def run_llm_agent(
                         "detail": detail,
                     })
                     loop.call_soon_threadsafe(output_q.put_nowait, event.encode("utf-8"))
-                    perm_context.clear()
+                    perm_context = perm_context[-8:]
 
         loop.call_soon_threadsafe(output_q.put_nowait, None)   # EOF sentinel
 
