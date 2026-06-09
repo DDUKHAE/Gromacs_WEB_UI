@@ -218,6 +218,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace; ba
   </div>
 </div>
 
+<div id="perm-overlay">
+  <div id="perm-box">
+    <h3>Permission Required</h3>
+    <div id="perm-tool-label">LLM agent is requesting to execute a command</div>
+    <pre id="perm-detail"></pre>
+    <div id="perm-actions">
+      <button id="perm-deny" onclick="permRespond(false)">&#x2715; Deny</button>
+      <button id="perm-allow" onclick="permRespond(true)">&#x2713; Allow</button>
+    </div>
+  </div>
+</div>
+
 <script src="/static/xterm.js"></script>
 <script src="/static/xterm-addon-fit.js"></script>
 <script>
@@ -410,11 +422,26 @@ function connectWs(runId) {
 
   wsConn.onmessage = (e) => {
     if (e.data instanceof ArrayBuffer) {
-      if (term) term.write(new Uint8Array(e.data));
+      // Try to detect JSON permission events in binary data
+      const bytes = new Uint8Array(e.data);
+      if (bytes[0] === 0x7b) { // starts with '{'
+        try {
+          const msg = JSON.parse(new TextDecoder().decode(bytes));
+          if (msg.type === 'permission_request') {
+            showPermissionDialog(msg.detail || '');
+            return;
+          }
+        } catch {}
+      }
+      if (term) term.write(bytes);
     } else {
       try {
         const msg = JSON.parse(e.data);
-        if (msg.type === 'exit') document.getElementById('term-status').textContent = 'finished';
+        if (msg.type === 'exit') {
+          document.getElementById('term-status').textContent = 'finished';
+        } else if (msg.type === 'permission_request') {
+          showPermissionDialog(msg.detail || '');
+        }
       } catch {}
     }
   };
@@ -572,6 +599,26 @@ function drawSparkline(canvas, xData, yData, yLabel) {
   ctx.fillStyle = '#8b949e';
   ctx.font = '8px monospace';
   ctx.fillText(yLabel.substring(0, 20), pad.left, h - 2);
+}
+
+// ── 퍼미션 다이얼로그 ─────────────────────────────────
+function showPermissionDialog(detail) {
+  const detailEl = document.getElementById('perm-detail');
+  if (detailEl) detailEl.textContent = detail;
+  const overlay = document.getElementById('perm-overlay');
+  if (overlay) overlay.classList.add('show');
+}
+
+function hidePermissionDialog() {
+  const overlay = document.getElementById('perm-overlay');
+  if (overlay) overlay.classList.remove('show');
+}
+
+function permRespond(allow) {
+  hidePermissionDialog();
+  if (wsConn && wsConn.readyState === WebSocket.OPEN) {
+    wsConn.send(new TextEncoder().encode(allow ? 'y\r' : 'n\r'));
+  }
 }
 
 async function submitNewRun(e) {
