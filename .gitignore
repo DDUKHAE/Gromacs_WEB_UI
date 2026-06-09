@@ -31,6 +31,10 @@ runs/
 simulation_state.json
 *.pdb
 
+# Allow tutorial_data directory despite extension ignores above
+!tutorial_data/
+!tutorial_data/**
+
 # macOS / Editor
 .DS_Store
 .AppleDouble
