@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>Gromacs Harness</title>
+<link rel="stylesheet" href="/static/xterm.css">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace; background: #0d1117; color: #e6edf3; height: 100vh; display: flex; overflow: hidden; }
@@ -50,10 +51,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace; ba
 .step-connector { flex: 1; height: 2px; background: #30363d; margin: 0 10px; }
 .step-connector.done { background: #3fb950; }
 
-/* Log panel */
-#log-panel { flex: 1; background: #0d1117; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; min-height: 200px; }
-#log-header { padding: 8px 14px; background: #161b22; border-bottom: 1px solid #30363d; font-size: 11px; color: #8b949e; display: flex; justify-content: space-between; }
-#log-body { flex: 1; overflow-y: auto; padding: 10px 14px; font-family: "SF Mono", "Fira Code", monospace; font-size: 11px; line-height: 1.6; color: #c9d1d9; white-space: pre-wrap; word-break: break-all; }
+/* Terminal panel */
+#terminal-panel { flex: 1; background: #0d1117; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; min-height: 260px; }
+#terminal-header { padding: 8px 14px; background: #161b22; border-bottom: 1px solid #30363d; font-size: 11px; color: #8b949e; display: flex; justify-content: space-between; flex-shrink: 0; }
+#terminal-container { flex: 1; padding: 6px; overflow: hidden; }
 
 /* Stats row */
 #stats-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
@@ -103,18 +104,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace; ba
 </head>
 <body>
 
-<!-- Permission dialog -->
-<div id="perm-overlay">
-  <div id="perm-box">
-    <h3>Permission Required</h3>
-    <div id="perm-tool-label"></div>
-    <pre id="perm-detail"></pre>
-    <div id="perm-actions">
-      <button id="perm-deny"  onclick="sendPermResponse(false)">Deny</button>
-      <button id="perm-allow" onclick="sendPermResponse(true)">Allow</button>
-    </div>
-  </div>
-</div>
 
 <div id="sidebar">
   <div id="sidebar-header">
@@ -130,12 +119,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace; ba
     <div id="stepper">
       <!-- rendered by JS -->
     </div>
-    <div id="log-panel">
-      <div id="log-header">
-        <span>Output Log</span>
-        <span id="log-status">—</span>
+    <div id="terminal-panel">
+      <div id="terminal-header">
+        <span>Terminal</span>
+        <span id="term-status">—</span>
       </div>
-      <div id="log-body"></div>
+      <div id="terminal-container"></div>
     </div>
     <div id="stats-row">
       <div class="stat-card"><div class="stat-label">Current Step</div><div class="stat-value" id="stat-step">—</div></div>
@@ -213,14 +202,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace; ba
   </div>
 </div>
 
+<script src="/static/xterm.js"></script>
+<script src="/static/xterm-addon-fit.js"></script>
 <script>
 // ── 상태 ──────────────────────────────────────────────
 let currentRunId = null;
-let wsConn = null;
-let selectedPdb = null;
-let pollTimer = null;
-let runsData = [];
-let pendingPermId = null;
+let wsConn       = null;
+let selectedPdb  = null;
+let pollTimer    = null;
+let runsData     = [];
+let term         = null;
+let fitAddon     = null;
 
 // ── 초기화 ────────────────────────────────────────────
 (function init() {
@@ -293,7 +285,7 @@ async function refreshRunDetail() {
     renderStepper(run.last_completed_stage, run.status);
     renderStats(run);
     renderActions(run);
-    document.getElementById('log-status').textContent = run.status;
+    document.getElementById('term-status').textContent = run.status;
   } catch (e) { console.error('refreshRunDetail', e); }
 }
 
@@ -332,6 +324,7 @@ function renderStats(run) {
   document.getElementById('stat-step').textContent = `${run.current_step} / 8`;
   document.getElementById('stat-stage').textContent = run.last_completed_stage || '—';
   document.getElementById('stat-status').textContent = run.status;
+  document.getElementById('term-status').textContent = run.status;
 }
 
 function renderActions(run) {
@@ -362,53 +355,75 @@ async function doAction(action) {
   } catch (e) { console.error('doAction', e); }
 }
 
-// ── WebSocket 로그 ────────────────────────────────────
-function connectWs(runId) {
-  stopWs();
-  const logBody = document.getElementById('log-body');
-  logBody.textContent = '';
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  wsConn = new WebSocket(`${proto}://${location.host}/ws/runs/${runId}`);
-  wsConn.onmessage = (e) => {
-    let msg;
-    try { msg = JSON.parse(e.data); } catch { appendLog(e.data); return; }
-    if (msg.type === 'log') {
-      appendLog(msg.text);
-    } else if (msg.type === 'permission_request') {
-      showPermDialog(msg);
-    }
-  };
-  wsConn.onerror = () => { document.getElementById('log-status').textContent = 'ws error'; };
-  wsConn.onclose = () => { wsConn = null; };
+// ── xterm.js 터미널 ───────────────────────────────────
+function initTerminal() {
+  if (term) { term.dispose(); term = null; }
+  term = new Terminal({
+    theme: { background: '#0d1117', foreground: '#c9d1d9', cursor: '#58a6ff', selectionBackground: '#388bfd44' },
+    cursorBlink: true,
+    fontSize: 12,
+    fontFamily: '"SF Mono","Fira Code","Menlo",monospace',
+    scrollback: 5000,
+    convertEol: false,
+  });
+  fitAddon = new FitAddon.FitAddon();
+  term.loadAddon(fitAddon);
+  const container = document.getElementById('terminal-container');
+  container.innerHTML = '';
+  term.open(container);
+  fitAddon.fit();
 }
 
-function appendLog(text) {
-  const logBody = document.getElementById('log-body');
-  logBody.textContent += text;
-  const lines = logBody.textContent.split('\n');
-  if (lines.length > 500) logBody.textContent = lines.slice(-500).join('\n');
-  logBody.scrollTop = logBody.scrollHeight;
+// ── WebSocket ─────────────────────────────────────────
+function connectWs(runId) {
+  stopWs();
+  initTerminal();
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  wsConn = new WebSocket(`${proto}://${location.host}/ws/runs/${runId}`);
+  wsConn.binaryType = 'arraybuffer';
+
+  wsConn.onopen = () => {
+    // Send initial terminal size
+    if (term) wsConn.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+  };
+
+  wsConn.onmessage = (e) => {
+    if (e.data instanceof ArrayBuffer) {
+      if (term) term.write(new Uint8Array(e.data));
+    } else {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'exit') document.getElementById('term-status').textContent = 'finished';
+      } catch {}
+    }
+  };
+
+  wsConn.onerror = () => { document.getElementById('term-status').textContent = 'ws error'; };
+  wsConn.onclose = () => { wsConn = null; };
+
+  // Forward keystrokes to server
+  if (term) {
+    term.onData((data) => {
+      if (wsConn && wsConn.readyState === WebSocket.OPEN) {
+        wsConn.send(new TextEncoder().encode(data));
+      }
+    });
+  }
 }
 
 function stopWs() {
   if (wsConn) { wsConn.close(); wsConn = null; }
 }
 
-// ── 권한 다이얼로그 ───────────────────────────────────
-function showPermDialog(req) {
-  pendingPermId = req.id;
-  document.getElementById('perm-tool-label').textContent = `Tool: ${req.tool}`;
-  document.getElementById('perm-detail').textContent = req.detail;
-  document.getElementById('perm-overlay').classList.add('show');
-}
-
-function sendPermResponse(granted) {
-  document.getElementById('perm-overlay').classList.remove('show');
-  if (wsConn && pendingPermId) {
-    wsConn.send(JSON.stringify({ type: 'permission_response', id: pendingPermId, granted }));
-    pendingPermId = null;
+// ── 터미널 리사이즈 ───────────────────────────────────
+function handleTermResize() {
+  if (!fitAddon || !term) return;
+  fitAddon.fit();
+  if (wsConn && wsConn.readyState === WebSocket.OPEN) {
+    wsConn.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
   }
 }
+window.addEventListener('resize', handleTermResize);
 
 // ── LLM 선택 ─────────────────────────────────────────
 function onLlmChange() {

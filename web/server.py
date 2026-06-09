@@ -188,7 +188,7 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         return {"status": "started", "skill": next_skill}
 
     @app.websocket("/ws/runs/{run_id}")
-    async def ws_logs(websocket: WebSocket, run_id: str, hd: HarnessDir):
+    async def ws_terminal(websocket: WebSocket, run_id: str, hd: HarnessDir):
         await websocket.accept()
         try:
             workspace = _check_run_id(run_id, hd / "runs")
@@ -196,76 +196,92 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
             await websocket.close()
             return
 
-        log_file = workspace / "runner.log"
-        for _ in range(30):
-            if log_file.exists():
-                break
-            await asyncio.sleep(0.5)
-        if not log_file.exists():
-            await websocket.close()
-            return
-
         run_state = llm_runner.get_run_state(run_id)
 
-        async def _send(msg: dict) -> None:
-            await websocket.send_text(json.dumps(msg))
-
-        async def _stream_logs() -> None:
-            with open(log_file, encoding="utf-8", errors="replace") as f:
-                existing = f.read()
-                if existing:
-                    await _send({"type": "log", "text": existing})
+        if run_state:
+            # ── LLM run: full bidirectional PTY proxy ────────────────────────
+            async def _send_output() -> None:
+                # Replay log history first so reconnects see prior output
+                log_file = workspace / "runner.log"
+                if log_file.exists():
+                    history = log_file.read_bytes()
+                    if history:
+                        await websocket.send_bytes(history)
                 while True:
-                    line = f.readline()
-                    if line:
-                        await _send({"type": "log", "text": line})
-                        continue
-                    # Dispatch pending permission request if any
-                    rs = llm_runner.get_run_state(run_id)
-                    if rs and not rs.request_queue.empty():
-                        req = rs.request_queue.get_nowait()
-                        await _send({
-                            "type": "permission_request",
-                            "id": req.id,
-                            "tool": req.tool,
-                            "detail": req.detail,
-                        })
-                        continue
-                    # Check if run is finished
-                    info = read_run(run_id, workspace.parent)
-                    still_running = (
-                        (info and info.status in ("running", "pending"))
-                        or run_id in llm_runner._run_states
-                    )
-                    if not still_running:
+                    data = await run_state.output_queue.get()
+                    if data is None:
+                        await websocket.send_text(json.dumps({"type": "exit"}))
                         break
-                    await asyncio.sleep(0.1)
+                    await websocket.send_bytes(data)
 
-        async def _receive_messages() -> None:
-            while True:
-                try:
-                    raw = await websocket.receive_text()
-                    msg = json.loads(raw)
-                    if msg.get("type") == "permission_response":
-                        rs = llm_runner.get_run_state(run_id)
-                        if rs:
-                            await rs.response_queue.put(bool(msg.get("granted", False)))
-                except WebSocketDisconnect:
+            async def _recv_input() -> None:
+                while True:
+                    try:
+                        msg = await websocket.receive()
+                    except WebSocketDisconnect:
+                        break
+                    if msg.get("bytes"):
+                        await run_state.input_queue.put(msg["bytes"])
+                    elif msg.get("text"):
+                        try:
+                            ctrl = json.loads(msg["text"])
+                            if ctrl.get("type") == "resize":
+                                llm_runner.set_winsize(
+                                    run_state.master_fd,
+                                    int(ctrl.get("rows", 50)),
+                                    int(ctrl.get("cols", 220)),
+                                )
+                        except Exception:
+                            pass
+
+            tasks = [
+                asyncio.create_task(_send_output()),
+                asyncio.create_task(_recv_input()),
+            ]
+        else:
+            # ── Direct run: stream runner.log (read-only) ─────────────────────
+            log_file = workspace / "runner.log"
+            for _ in range(30):
+                if log_file.exists():
                     break
-                except Exception:
-                    await asyncio.sleep(0.05)
+                await asyncio.sleep(0.5)
+
+            async def _stream_log() -> None:
+                if not log_file.exists():
+                    return
+                with open(log_file, "rb") as f:
+                    while True:
+                        data = f.read(4096)
+                        if data:
+                            await websocket.send_bytes(data)
+                            continue
+                        info = read_run(run_id, workspace.parent)
+                        if info and info.status not in ("running", "pending"):
+                            await websocket.send_text(json.dumps({"type": "exit"}))
+                            break
+                        await asyncio.sleep(0.1)
+
+            async def _recv_ignore() -> None:
+                while True:
+                    try:
+                        msg = await websocket.receive()
+                        if msg.get("type") == "websocket.disconnect":
+                            break
+                    except WebSocketDisconnect:
+                        break
+
+            tasks = [
+                asyncio.create_task(_stream_log()),
+                asyncio.create_task(_recv_ignore()),
+            ]
 
         try:
-            stream_task = asyncio.create_task(_stream_logs())
-            recv_task = asyncio.create_task(_receive_messages())
-            done, pending = await asyncio.wait(
-                [stream_task, recv_task],
-                return_when=asyncio.FIRST_COMPLETED,
-            )
+            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
             for t in pending:
                 t.cancel()
         except WebSocketDisconnect:
-            pass
+            for t in tasks:
+                t.cancel()
         finally:
             try:
                 await websocket.close()
