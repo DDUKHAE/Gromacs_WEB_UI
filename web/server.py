@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -202,6 +203,22 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         (info.workspace / "runner.pid").write_text(str(proc.pid))
         (info.workspace / "runner.exit").unlink(missing_ok=True)
         return {"status": "started", "skill": next_skill}
+
+    @app.delete("/api/runs/{run_id}", status_code=200)
+    def api_delete_run(run_id: str, hd: HarnessDir) -> dict:
+        workspace = _check_run_id(run_id, hd / "runs")
+        if not workspace.is_dir():
+            raise HTTPException(status_code=404, detail="run not found")
+        pid_file = workspace / "runner.pid"
+        if pid_file.exists():
+            try:
+                pid = int(pid_file.read_text().strip())
+                if pid > 0:
+                    os.kill(pid, signal.SIGTERM)
+            except (ValueError, ProcessLookupError, OSError):
+                pass
+        shutil.rmtree(workspace, ignore_errors=True)
+        return {"status": "deleted"}
 
     @app.websocket("/ws/runs/{run_id}")
     async def ws_terminal(websocket: WebSocket, run_id: str, hd: HarnessDir):

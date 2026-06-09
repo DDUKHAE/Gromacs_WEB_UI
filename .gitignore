@@ -46,6 +46,5 @@ simulation_state.json
 !tutorial_data/
 !tutorial_data/**
 
-# Exclude CI and test directories from public repo
+# Exclude CI directories from public repo
 .github/
-tests/
