@@ -27,6 +27,22 @@
   --space-md: 16px;
   --space-lg: 24px;
 }
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+.card-header {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace; background: #0d1117; color: #e6edf3; height: 100vh; display: flex; overflow: hidden; }
 
@@ -83,7 +99,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace; ba
 
 /* Stats row */
 #stats-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
-.stat-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px 16px; }
+.stat-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px 16px; box-shadow: var(--shadow-sm); transition: box-shadow .2s; }
+.stat-card:hover { box-shadow: var(--shadow-md); }
 .stat-label { font-size: 10px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
 .stat-value { font-size: 18px; font-weight: 700; color: var(--text-primary); letter-spacing: -.5px; }
 
@@ -152,11 +169,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace; ba
 <div id="main">
   <!-- Run detail view -->
   <div id="run-view" class="hidden">
-    <div id="stepper">
+    <div id="stepper" class="card">
       <!-- rendered by JS -->
     </div>
-    <div id="terminal-panel">
-      <div id="terminal-header">
+    <div id="terminal-panel" class="card">
+      <div id="terminal-header" class="card-header">
         <span>Terminal</span>
         <span id="term-status">—</span>
       </div>
@@ -172,7 +189,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace; ba
       <button id="btn-abort" disabled onclick="doAction('abort')">⏹ Abort</button>
     </div>
     <!-- Results Gallery -->
-    <div id="gallery-panel" class="hidden">
+    <div id="gallery-panel" class="card hidden">
       <div id="gallery-title">Analysis Results</div>
       <div id="gallery-grid"></div>
     </div>
