@@ -1324,6 +1324,23 @@ body.resizing * {
   pointer-events: none !important;
   user-select: none !important;
 }
+
+#ff-manager-btn {
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+#ff-manager-btn:hover {
+  color: var(--accent-primary) !important;
+  transform: scale(1.15);
+}
+.ff-tab.active {
+  border-bottom-color: var(--accent-primary) !important;
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+#ff-drop-zone.dragover {
+  border-color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 8%, transparent);
+}
 </style>
 </head>
 <body>
@@ -1511,14 +1528,12 @@ body.resizing * {
                     · OPLS-AA: 유기 분자 시뮬레이션에 강점
                   </div>
                 </span>
+                <button type="button" id="ff-manager-btn" title="Force Field 추가"
+                  style="margin-left:6px;padding:2px;font-size:16px;line-height:1;border:none;background:transparent;color:var(--text-secondary);cursor:pointer;vertical-align:middle;">+</button>
               </label>
-              <div style="display:flex;gap:6px;align-items:center;">
-                <select name="forcefield" id="forcefield-select" style="flex:1">
-                  <option value="">Loading...</option>
-                </select>
-                <button type="button" id="ff-manager-btn" title="Force Field Manager"
-                  style="flex-shrink:0;padding:4px 8px;font-size:16px;line-height:1;border:1px solid var(--border);border-radius:6px;background:var(--bg-secondary);color:var(--text-primary);cursor:pointer;">+</button>
-              </div>
+              <select name="forcefield" id="forcefield-select">
+                <option value="">Loading...</option>
+              </select>
             </div>
             <div class="param-field">
               <label>Water Model
@@ -1578,6 +1593,65 @@ body.resizing * {
           
           <button type="submit" id="btn-start" disabled>Start Simulation Run</button>
         </form>
+      </div>
+
+      <!-- Force Field Manager Modal -->
+      <div id="ff-modal-overlay" style="display:none;position:absolute;inset:0;background:rgba(6, 8, 19, 0.6);backdrop-filter:blur(8px);z-index:1000;align-items:center;justify-content:center;">
+        <div style="background:var(--bg-surface,#0b0f24);border:1px solid var(--border-color,rgba(255,255,255,0.12));border-radius:12px;width:480px;max-width:95vw;padding:0;overflow:hidden;box-shadow:var(--shadow-lg,0 16px 48px rgba(0,0,0,.65));pointer-events:auto;">
+          <!-- Header -->
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border-color);">
+            <span style="font-weight:600;font-size:15px;color:var(--text-primary);">Force Field Manager</span>
+            <button id="ff-modal-close" type="button" style="background:none;border:none;cursor:pointer;font-size:18px;color:var(--text-secondary);">✕</button>
+          </div>
+          <!-- Installed list -->
+          <div style="padding:12px 20px 8px;border-bottom:1px solid var(--border-color);">
+            <div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">Installed</div>
+            <div id="ff-installed-list" style="display:flex;flex-wrap:wrap;gap:6px;min-height:28px;"></div>
+          </div>
+          <!-- Tabs -->
+          <div style="display:flex;border-bottom:1px solid var(--border-color);">
+            <button type="button" class="ff-tab active" data-tab="upload"
+              style="flex:1;padding:10px;background:none;border:none;cursor:pointer;font-size:13px;border-bottom:2px solid transparent;color:var(--text-primary);">
+              📁 Upload File
+            </button>
+            <button type="button" class="ff-tab" data-tab="path"
+              style="flex:1;padding:10px;background:none;border:none;cursor:pointer;font-size:13px;border-bottom:2px solid transparent;color:var(--text-primary);">
+              🗂 Server Path
+            </button>
+          </div>
+          <!-- Tab: Upload -->
+          <div id="ff-tab-upload" class="ff-tab-panel" style="padding:20px;">
+            <div id="ff-drop-zone"
+              style="border:2px dashed var(--border-color);border-radius:8px;padding:32px 20px;text-align:center;cursor:pointer;transition:border-color .2s;">
+              <div style="font-size:28px;margin-bottom:8px;">📦</div>
+              <div style="font-size:13px;color:var(--text-secondary);">Drop <strong>.tar.gz</strong> / <strong>.tgz</strong> / <strong>.zip</strong> here</div>
+              <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">or click to browse</div>
+              <input type="file" id="ff-file-input" accept=".tar.gz,.tgz,.zip" style="display:none;">
+            </div>
+            <div id="ff-upload-filename" style="font-size:12px;color:var(--text-secondary);margin-top:8px;min-height:18px;"></div>
+            <button type="button" id="ff-upload-btn" disabled
+              style="margin-top:12px;width:100%;padding:9px;border-radius:6px;border:none;background:var(--accent-primary);color:#fff;font-size:13px;cursor:pointer;opacity:.5;">
+              Install from File
+            </button>
+          </div>
+          <!-- Tab: Server Path -->
+          <div id="ff-tab-path" class="ff-tab-panel" style="padding:20px;display:none;">
+            <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:6px;">
+              Path to <code>.ff</code> directory on this server
+            </label>
+            <input type="text" id="ff-path-input" placeholder="/path/to/charmm36.ff"
+              style="width:100%;padding:8px 10px;border:1px solid var(--border-color);border-radius:6px;background:var(--bg-base);color:var(--text-primary);font-size:13px;box-sizing:border-box;">
+            <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;">
+              Must be a directory ending in <code>.ff</code> and containing <code>forcefield.itp</code>
+            </div>
+            <button type="button" id="ff-path-btn"
+              style="margin-top:12px;width:100%;padding:9px;border-radius:6px;border:none;background:var(--accent-primary);color:#fff;font-size:13px;cursor:pointer;">
+              Install from Path
+            </button>
+          </div>
+          <!-- Status -->
+          <div id="ff-status" style="padding:0 20px 16px;font-size:13px;min-height:22px;color:var(--text-primary);"></div>
+        </div>
       </div>
     </main>
   </div>
@@ -2247,6 +2321,7 @@ async function loadForcefields() {
 // Initialize on page load
 window.addEventListener('load', async () => {
   // 앱 초기화
+  initFFManager();
   loadLlms();
   loadForcefields();
   document.getElementById('forcefield-select').addEventListener('change', e => {
@@ -2450,7 +2525,7 @@ async function pollChatLog() {
 }
 
 // ── Force Field Manager ─────────────────────────────────────────────────────
-(function () {
+function initFFManager() {
   const overlay  = document.getElementById('ff-modal-overlay');
   const closeBtn = document.getElementById('ff-modal-close');
   const status   = document.getElementById('ff-status');
@@ -2487,7 +2562,7 @@ async function pollChatLog() {
       const r = await fetch('/api/forcefields');
       const ffs = await r.json();
       list.innerHTML = ffs.map(ff =>
-        `<span style="padding:2px 8px;border-radius:12px;background:var(--bg-secondary);border:1px solid var(--border);font-size:12px;">${escapeHtml(ff)}</span>`
+        `<span style="padding:2px 8px;border-radius:12px;background:var(--bg-surface);border:1px solid var(--border-color);font-size:12px;color:var(--text-primary);">${escapeHtml(ff)}</span>`
       ).join('') || '<span style="font-size:12px;color:var(--text-secondary);">None found</span>';
     } catch (_) {
       list.innerHTML = '<span style="font-size:12px;color:var(--text-secondary);">Error loading list</span>';
@@ -2577,7 +2652,7 @@ async function pollChatLog() {
       pathBtn.textContent = 'Install from Path';
     }
   });
-})();
+}
 
 window.addEventListener('beforeunload', () => {
   clearInterval(pollTimer);
@@ -2588,68 +2663,5 @@ window.addEventListener('beforeunload', () => {
 <script src="/static/xterm.js"></script>
 <script src="/static/xterm-addon-fit.js"></script>
 
-<!-- Force Field Manager Modal -->
-<div id="ff-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;align-items:center;justify-content:center;">
-  <div style="background:var(--bg-primary);border:1px solid var(--border);border-radius:12px;width:480px;max-width:95vw;padding:0;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.4);">
-    <!-- Header -->
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);">
-      <span style="font-weight:600;font-size:15px;">Force Field Manager</span>
-      <button id="ff-modal-close" type="button" style="background:none;border:none;cursor:pointer;font-size:18px;color:var(--text-secondary);">✕</button>
-    </div>
-    <!-- Installed list -->
-    <div style="padding:12px 20px 8px;border-bottom:1px solid var(--border);">
-      <div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">Installed</div>
-      <div id="ff-installed-list" style="display:flex;flex-wrap:wrap;gap:6px;min-height:28px;"></div>
-    </div>
-    <!-- Tabs -->
-    <div style="display:flex;border-bottom:1px solid var(--border);">
-      <button type="button" class="ff-tab active" data-tab="upload"
-        style="flex:1;padding:10px;background:none;border:none;cursor:pointer;font-size:13px;border-bottom:2px solid transparent;">
-        📁 Upload File
-      </button>
-      <button type="button" class="ff-tab" data-tab="path"
-        style="flex:1;padding:10px;background:none;border:none;cursor:pointer;font-size:13px;border-bottom:2px solid transparent;">
-        🗂 Server Path
-      </button>
-    </div>
-    <!-- Tab: Upload -->
-    <div id="ff-tab-upload" class="ff-tab-panel" style="padding:20px;">
-      <div id="ff-drop-zone"
-        style="border:2px dashed var(--border);border-radius:8px;padding:32px 20px;text-align:center;cursor:pointer;transition:border-color .2s;">
-        <div style="font-size:28px;margin-bottom:8px;">📦</div>
-        <div style="font-size:13px;color:var(--text-secondary);">Drop <strong>.tar.gz</strong> / <strong>.tgz</strong> / <strong>.zip</strong> here</div>
-        <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">or click to browse</div>
-        <input type="file" id="ff-file-input" accept=".tar.gz,.tgz,.zip" style="display:none;">
-      </div>
-      <div id="ff-upload-filename" style="font-size:12px;color:var(--text-secondary);margin-top:8px;min-height:18px;"></div>
-      <button type="button" id="ff-upload-btn" disabled
-        style="margin-top:12px;width:100%;padding:9px;border-radius:6px;border:none;background:var(--accent);color:#fff;font-size:13px;cursor:pointer;opacity:.5;">
-        Install from File
-      </button>
-    </div>
-    <!-- Tab: Server Path -->
-    <div id="ff-tab-path" class="ff-tab-panel" style="padding:20px;display:none;">
-      <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:6px;">
-        Path to <code>.ff</code> directory on this server
-      </label>
-      <input type="text" id="ff-path-input" placeholder="/path/to/charmm36.ff"
-        style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-secondary);color:var(--text-primary);font-size:13px;box-sizing:border-box;">
-      <div style="font-size:11px;color:var(--text-secondary);margin-top:6px;">
-        Must be a directory ending in <code>.ff</code> and containing <code>forcefield.itp</code>
-      </div>
-      <button type="button" id="ff-path-btn"
-        style="margin-top:12px;width:100%;padding:9px;border-radius:6px;border:none;background:var(--accent);color:#fff;font-size:13px;cursor:pointer;">
-        Install from Path
-      </button>
-    </div>
-    <!-- Status -->
-    <div id="ff-status" style="padding:0 20px 16px;font-size:13px;min-height:22px;"></div>
-  </div>
-</div>
-
-<style>
-.ff-tab.active { border-bottom-color: var(--accent) !important; color: var(--accent); font-weight:600; }
-#ff-drop-zone.dragover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
-</style>
 </body>
 </html>
