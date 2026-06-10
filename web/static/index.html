@@ -1909,9 +1909,10 @@ function startRename(runId, evt) {
   input.select();
 
   async function commitRename() {
+    input.removeEventListener('blur', commitRename);  // prevent double-fire
     const newName = input.value.trim();
     if (!newName || newName === current) {
-      input.replaceWith(span);
+      if (input.isConnected) input.replaceWith(span);
       return;
     }
     try {
@@ -1924,7 +1925,7 @@ function startRename(runId, evt) {
         const run = runsData.find(r => r.run_id === runId);
         if (run) run.display_name = newName;
         span.textContent = newName;
-        input.replaceWith(span);
+        if (input.isConnected) input.replaceWith(span);
         if (currentRunId === runId) {
           document.getElementById('view-title').textContent = 'Simulation: ' + newName;
         }
@@ -1932,11 +1933,11 @@ function startRename(runId, evt) {
       } else {
         const err = await resp.json().catch(() => ({}));
         showToast(err.detail || '이름 변경 실패', 'error');
-        input.replaceWith(span);
+        if (input.isConnected) input.replaceWith(span);
       }
     } catch (_) {
       showToast('서버 연결 오류', 'error');
-      input.replaceWith(span);
+      if (input.isConnected) input.replaceWith(span);
     }
   }
 
