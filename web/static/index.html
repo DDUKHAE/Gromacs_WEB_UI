@@ -833,7 +833,9 @@ body.light-theme .chart-card-title {
 }
 
 /* New Run */
-#new-run-view {
+#new-run-view,
+#new-run-select-view,
+#new-visualization-view {
   flex: 1;
   display: none; /* Controlled explicitly via JS style.display */
   flex-direction: column;
@@ -1589,6 +1591,81 @@ body.resizing * {
         </form>
       </div>
 
+      <!-- New Run Choice View (Type Selection) -->
+      <div id="new-run-select-view">
+        <div style="text-align: center; margin-bottom: 24px;">
+          <h2 style="font-size: 24px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px;">Select Run Type</h2>
+          <p style="color: var(--text-secondary); font-size: 14px;">Choose whether to configure a new simulation or analyze an XVG file.</p>
+        </div>
+        <div style="display: flex; gap: 24px; width: 100%; max-width: 600px; flex-wrap: wrap; justify-content: center;">
+          <!-- Choice Card 1: Simulation -->
+          <div onclick="selectRunType('simulation')" style="flex: 1; min-width: 250px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 24px; cursor: pointer; text-align: center; transition: all 0.3s ease; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; box-shadow: var(--shadow-sm);" onmouseover="this.style.borderColor='var(--accent-primary)'; this.style.transform='translateY(-4px)'; this.style.background='var(--bg-card-hover)';" onmouseout="this.style.borderColor='var(--border-color)'; this.style.transform='none'; this.style.background='var(--bg-card)';">
+            <div style="width: 48px; height: 48px; border-radius: 50%; background: rgba(99, 102, 241, 0.1); display: flex; align-items: center; justify-content: center; color: var(--accent-primary);">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
+            </div>
+            <h3 style="font-size: 18px; font-weight: 600; color: var(--text-primary);">Simulation</h3>
+            <p style="color: var(--text-secondary); font-size: 13px; line-height: 1.4;">Configure and run parameters for a new molecular dynamics simulation.</p>
+          </div>
+          <!-- Choice Card 2: Visualization -->
+          <div onclick="selectRunType('visualization')" style="flex: 1; min-width: 250px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 24px; cursor: pointer; text-align: center; transition: all 0.3s ease; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; box-shadow: var(--shadow-sm);" onmouseover="this.style.borderColor='var(--accent-cyan)'; this.style.transform='translateY(-4px)'; this.style.background='var(--bg-card-hover)';" onmouseout="this.style.borderColor='var(--border-color)'; this.style.transform='none'; this.style.background='var(--bg-card)';">
+            <div style="width: 48px; height: 48px; border-radius: 50%; background: rgba(6, 182, 212, 0.1); display: flex; align-items: center; justify-content: center; color: var(--accent-cyan);">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+            </div>
+            <h3 style="font-size: 18px; font-weight: 600; color: var(--text-primary);">Visualization</h3>
+            <p style="color: var(--text-secondary); font-size: 13px; line-height: 1.4;">Upload GROMACS output files (.xvg, etc.) to perform visualization analysis.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- New Visualization View -->
+      <div id="new-visualization-view">
+        <div style="width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 16px;">
+          <h2 style="font-size: 20px; font-weight: 700; color: var(--text-primary); text-align: center;">New Visualization</h2>
+          
+          <div id="xvg-drop-zone"
+            onclick="document.getElementById('xvg-input').click()"
+            ondragover="event.preventDefault(); this.style.borderColor='var(--accent-cyan)'"
+            ondragleave="this.style.borderColor=''"
+            ondrop="event.preventDefault(); this.style.borderColor=''; handleXvgFileSelect(event.dataTransfer.files)"
+            style="border: 2px dashed var(--border-color); border-radius: var(--radius-md); padding: 32px 20px; text-align: center; cursor: pointer; background: rgba(255,255,255,0.01); transition: all 0.2s ease;"
+            onmouseover="this.style.background='rgba(255,255,255,0.03)'"
+            onmouseout="this.style.background='rgba(255,255,255,0.01)'">
+            <div style="color: var(--accent-cyan); margin-bottom: 12px; display: flex; justify-content: center;">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            </div>
+            <p style="font-size: 13px; font-weight: 600; color: var(--text-primary);">Drop XVG files here</p>
+            <small style="color: var(--text-secondary); font-size: 11px;">or click to browse — multiple files supported</small>
+            <div id="selected-xvg-file" style="margin-top: 8px; font-size: 12px; font-weight: 500; color: var(--accent-cyan);"></div>
+          </div>
+          <input type="file" id="xvg-input" accept=".xvg" multiple style="display: none;" onchange="handleXvgFileSelect(this.files)">
+
+          <!-- Preview Chart Area Placeholder -->
+          <div id="xvg-preview-card" class="card" style="display: none; padding: 16px;">
+            <div class="card-header" style="margin-bottom: 12px;">
+              <span style="font-size: 11px; color: var(--text-primary); font-weight: 700; text-transform: uppercase;">DATA PREVIEW</span>
+            </div>
+            <div id="xvg-chart-placeholder" style="height: 200px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-secondary); font-size: 12px; background: rgba(0,0,0,0.2);">
+              Chart preview will be rendered here
+            </div>
+          </div>
+
+          <button type="button" id="btn-start-vis" disabled style="width: 100%; padding: 12px; border-radius: var(--radius-md); border: none; background: var(--accent-cyan); color: #fff; font-weight: 600; cursor: pointer; transition: opacity 0.2s; opacity: 0.5;">
+            Start Visualization Analysis
+          </button>
+        </div>
+      </div>
+
+      <!-- XVG Visualization Result Modal -->
+      <div id="xvg-result-modal" style="display:none;position:fixed;inset:0;background:transparent;z-index:1050;align-items:flex-start;justify-content:center;overflow-y:auto;padding:40px 16px;">
+        <div style="background:var(--bg-surface,#0b0f24);border:1px solid var(--border-color);border-radius:14px;width:100%;max-width:860px;overflow:hidden;box-shadow:var(--shadow-lg);pointer-events:auto;margin:auto;">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--border-color);">
+            <span style="font-weight:700;font-size:16px;color:var(--text-primary);">XVG Analysis Results</span>
+            <button id="xvg-result-close" type="button" style="background:none;border:none;cursor:pointer;font-size:18px;color:var(--text-secondary);">✕</button>
+          </div>
+          <div id="xvg-result-cards" style="padding:20px;display:flex;flex-direction:column;gap:20px;"></div>
+        </div>
+      </div>
+
       <!-- Force Field Manager Modal -->
       <div id="ff-modal-overlay" style="display:none;position:absolute;inset:0;background:rgba(6, 8, 19, 0.6);backdrop-filter:blur(8px);z-index:1000;align-items:center;justify-content:center;">
         <div style="background:var(--bg-surface,#0b0f24);border:1px solid var(--border-color,rgba(255,255,255,0.12));border-radius:12px;width:480px;max-width:95vw;padding:0;overflow:hidden;box-shadow:var(--shadow-lg,0 16px 48px rgba(0,0,0,.65));pointer-events:auto;">
@@ -1719,13 +1796,55 @@ function stopWs() {
 
 function showNewRunForm() {
   document.getElementById('run-view').style.display = 'none';
-  document.getElementById('new-run-view').style.display = 'flex';
-  document.getElementById('view-title').textContent = 'Configure New Simulation';
+  document.getElementById('new-run-view').style.display = 'none';
+  document.getElementById('new-visualization-view').style.display = 'none';
+  document.getElementById('new-run-select-view').style.display = 'flex';
+  document.getElementById('view-title').textContent = 'New Run Type';
   document.getElementById('btn-continue').style.display = 'none';
   document.getElementById('btn-abort').style.display = 'none';
   document.querySelectorAll('.run-item').forEach(el => el.classList.remove('active'));
   currentRunId = null;
   stopWs();
+}
+
+function selectRunType(type) {
+  document.getElementById('new-run-select-view').style.display = 'none';
+  if (type === 'simulation') {
+    document.getElementById('new-run-view').style.display = 'flex';
+    document.getElementById('view-title').textContent = 'Configure New Simulation';
+  } else if (type === 'visualization') {
+    document.getElementById('new-visualization-view').style.display = 'flex';
+    document.getElementById('view-title').textContent = 'New Visualization';
+    // Clear drop zone state
+    document.getElementById('selected-xvg-file').textContent = '';
+    document.getElementById('xvg-preview-card').style.display = 'none';
+    const btn = document.getElementById('btn-start-vis');
+    btn.disabled = true;
+    btn.style.opacity = '0.5';
+  }
+}
+
+let _selectedXvgFiles = null;
+
+function handleXvgFileSelect(fileList) {
+  if (!fileList || fileList.length === 0) return;
+  _selectedXvgFiles = fileList;
+
+  const selectedFileDiv = document.getElementById('selected-xvg-file');
+  if (fileList.length === 1) {
+    selectedFileDiv.textContent = `Selected: ${fileList[0].name} (${(fileList[0].size / 1024).toFixed(1)} KB)`;
+  } else {
+    const total = Array.from(fileList).reduce((s, f) => s + f.size, 0);
+    selectedFileDiv.textContent = `Selected: ${fileList.length} files (${(total / 1024).toFixed(1)} KB total)`;
+  }
+
+  document.getElementById('xvg-preview-card').style.display = 'block';
+  document.getElementById('xvg-chart-placeholder').innerHTML =
+    `<span style="font-size:12px;color:var(--text-secondary);">${fileList.length} file(s) ready — click Start to analyze</span>`;
+
+  const btn = document.getElementById('btn-start-vis');
+  btn.disabled = false;
+  btn.style.opacity = '1';
 }
 
 function showToast(message, type = 'info') {
@@ -1927,6 +2046,8 @@ async function selectRun(runId, reconnectWs = true) {
   });
 
   document.getElementById('new-run-view').style.display = 'none';
+  document.getElementById('new-run-select-view').style.display = 'none';
+  document.getElementById('new-visualization-view').style.display = 'none';
   document.getElementById('run-view').style.display = 'flex';
 
   try {
@@ -2158,6 +2279,182 @@ function drawSparkline(canvas, yData, color) {
   ctx.stroke();
 }
 
+// ── XVG multi-series chart ───────────────────────────────────────────────────
+const XVG_COLORS = ['#06b6d4','#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899'];
+
+function drawFullChart(canvas, xData, ySeriesArr, colors) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  if (!xData || xData.length < 2 || !ySeriesArr.length) return;
+
+  const pad = { t: 14, r: 20, b: 34, l: 56 };
+  const pw = w - pad.l - pad.r, ph = h - pad.t - pad.b;
+
+  const allY = ySeriesArr.flat();
+  const minY = Math.min(...allY), maxY = Math.max(...allY);
+  const rangeY = maxY - minY || 1;
+  const minX = xData[0], maxX = xData[xData.length - 1];
+  const rangeX = maxX - minX || 1;
+
+  const toX = v => pad.l + ((v - minX) / rangeX) * pw;
+  const toY = v => pad.t + ph - ((v - minY) / rangeY) * ph;
+
+  // Grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.t + (ph / 4) * i;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + pw, y); ctx.stroke();
+  }
+
+  // Y-axis labels
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  ctx.font = '9px monospace';
+  ctx.textAlign = 'right';
+  for (let i = 0; i <= 4; i++) {
+    const val = maxY - (rangeY / 4) * i;
+    ctx.fillText(val.toFixed(3), pad.l - 4, pad.t + (ph / 4) * i + 3);
+  }
+
+  // X-axis labels
+  ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.fillText(minX.toFixed(1), pad.l, h - 6);
+  ctx.fillText(((minX + maxX) / 2).toFixed(1), pad.l + pw / 2, h - 6);
+  ctx.fillText(maxX.toFixed(1), pad.l + pw, h - 6);
+
+  // Series
+  ySeriesArr.forEach((yData, si) => {
+    if (!yData || yData.length < 2) return;
+    const color = colors[si % colors.length];
+
+    const grad = ctx.createLinearGradient(0, pad.t, 0, pad.t + ph);
+    grad.addColorStop(0, color + '28');
+    grad.addColorStop(1, color + '00');
+    ctx.beginPath();
+    ctx.moveTo(toX(xData[0]), pad.t + ph);
+    xData.forEach((x, i) => ctx.lineTo(toX(x), toY(yData[i])));
+    ctx.lineTo(toX(xData[xData.length - 1]), pad.t + ph);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(toX(xData[0]), toY(yData[0]));
+    for (let i = 1; i < xData.length; i++) {
+      const xc = (toX(xData[i]) + toX(xData[i - 1])) / 2;
+      const yc = (toY(yData[i]) + toY(yData[i - 1])) / 2;
+      ctx.quadraticCurveTo(toX(xData[i - 1]), toY(yData[i - 1]), xc, yc);
+    }
+    ctx.lineTo(toX(xData[xData.length - 1]), toY(yData[yData.length - 1]));
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.8;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 5;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  });
+}
+
+function renderXvgResultModal(dataList) {
+  const container = document.getElementById('xvg-result-cards');
+  container.innerHTML = '';
+
+  dataList.forEach(d => {
+    const cols = d.columns || [];
+    const xData = cols[0] || [];
+    const ySeries = cols.slice(1);
+    const legends = (d.column_labels && d.column_labels.length)
+      ? d.column_labels : ySeries.map((_, i) => `Series ${i + 1}`);
+    const stats = d.stats || [];
+    const active = ySeries.map(() => true);
+
+    const card = document.createElement('div');
+    card.style.cssText = 'background:rgba(255,255,255,0.03);border:1px solid var(--border-color);border-radius:10px;padding:16px;';
+
+    // Title
+    const titleRow = document.createElement('div');
+    titleRow.style.cssText = 'display:flex;align-items:baseline;gap:8px;margin-bottom:4px;';
+    const titleEl = document.createElement('span');
+    titleEl.style.cssText = 'font-weight:600;font-size:14px;color:var(--text-primary);';
+    titleEl.textContent = d.title || d.filename;
+    titleRow.appendChild(titleEl);
+    if (d.title && d.title !== d.filename) {
+      const fnEl = document.createElement('span');
+      fnEl.style.cssText = 'font-size:11px;color:var(--text-secondary);';
+      fnEl.textContent = d.filename;
+      titleRow.appendChild(fnEl);
+    }
+    card.appendChild(titleRow);
+
+    // Axis label
+    const axisStr = [d.xaxis_label, d.yaxis_label].filter(Boolean).join(' / ');
+    if (axisStr) {
+      const axEl = document.createElement('div');
+      axEl.style.cssText = 'font-size:11px;color:var(--text-secondary);margin-bottom:10px;';
+      axEl.textContent = axisStr;
+      card.appendChild(axEl);
+    }
+
+    // Legend chips (multi-series toggle)
+    if (ySeries.length > 1) {
+      const legendRow = document.createElement('div');
+      legendRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;';
+      ySeries.forEach((_, si) => {
+        const color = XVG_COLORS[si % XVG_COLORS.length];
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.style.cssText = `padding:2px 10px;border-radius:12px;border:1px solid ${color};background:${color}22;color:${color};font-size:11px;cursor:pointer;transition:opacity .15s;`;
+        chip.textContent = legends[si] || `S${si + 1}`;
+        chip.addEventListener('click', () => {
+          active[si] = !active[si];
+          chip.style.opacity = active[si] ? '1' : '0.3';
+          redraw();
+        });
+        legendRow.appendChild(chip);
+      });
+      card.appendChild(legendRow);
+    }
+
+    // Canvas
+    const canvas = document.createElement('canvas');
+    canvas.width = 800;
+    canvas.height = 200;
+    canvas.style.cssText = 'width:100%;height:auto;display:block;border-radius:6px;';
+    card.appendChild(canvas);
+
+    function redraw() {
+      const activeSeries = ySeries.filter((_, i) => active[i]);
+      const activeColors = XVG_COLORS.filter((_, i) => i < ySeries.length && active[i]);
+      requestAnimationFrame(() => drawFullChart(canvas, xData, activeSeries, activeColors));
+    }
+
+    // Stats row
+    if (stats.length > 0) {
+      const statsRow = document.createElement('div');
+      statsRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:12px;margin-top:10px;';
+      stats.forEach((s, si) => {
+        if (!s.count) return;
+        const color = XVG_COLORS[si % XVG_COLORS.length];
+        const label = legends[si] || `S${si + 1}`;
+        const cell = document.createElement('div');
+        cell.style.cssText = `font-size:11px;color:var(--text-secondary);border-left:2px solid ${color};padding-left:8px;`;
+        cell.innerHTML = `<span style="color:${color};font-weight:600;">${escapeHtml(label)}</span><br>`
+          + `min <b>${s.min.toFixed(3)}</b> · max <b>${s.max.toFixed(3)}</b>`
+          + ` · mean <b>${s.mean.toFixed(3)}</b> · std <b>${s.std.toFixed(3)}</b>`;
+        statsRow.appendChild(cell);
+      });
+      card.appendChild(statsRow);
+    }
+
+    container.appendChild(card);
+    redraw();
+  });
+
+  document.getElementById('xvg-result-modal').style.display = 'flex';
+}
+
 async function loadArtifacts(runId) {
   const panel = document.getElementById('gallery-panel');
   try {
@@ -2320,6 +2617,39 @@ window.addEventListener('load', async () => {
   loadForcefields();
   document.getElementById('forcefield-select').addEventListener('change', e => {
     loadWaterModels(e.target.value);
+  });
+  document.getElementById('btn-start-vis').addEventListener('click', async () => {
+    if (!_selectedXvgFiles || _selectedXvgFiles.length === 0) return;
+    const btn = document.getElementById('btn-start-vis');
+    btn.disabled = true;
+    btn.textContent = 'Analyzing…';
+    const fd = new FormData();
+    Array.from(_selectedXvgFiles).forEach(f => fd.append('files', f));
+    try {
+      const resp = await fetch('/api/xvg/parse', { method: 'POST', body: fd });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        showToast(err.detail || `Parse error (${resp.status})`, 'error');
+        return;
+      }
+      const dataList = await resp.json();
+      renderXvgResultModal(dataList);
+    } catch (e) {
+      showToast('Network error: ' + e.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Start Visualization Analysis';
+      btn.style.opacity = _selectedXvgFiles ? '1' : '0.5';
+    }
+  });
+
+  // XVG result modal close
+  document.getElementById('xvg-result-close').addEventListener('click', () => {
+    document.getElementById('xvg-result-modal').style.display = 'none';
+  });
+  document.getElementById('xvg-result-modal').addEventListener('click', e => {
+    if (e.target === document.getElementById('xvg-result-modal'))
+      document.getElementById('xvg-result-modal').style.display = 'none';
   });
   await loadRuns();
   if (runsData.length > 0) {

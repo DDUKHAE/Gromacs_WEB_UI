@@ -7,6 +7,7 @@ from typing import Any
 TITLE_RE = re.compile(r'@\s*title\s+"([^"]*)"')
 XLAB_RE = re.compile(r'@\s*xaxis\s+label\s+"([^"]*)"')
 YLAB_RE = re.compile(r'@\s*yaxis\s+label\s+"([^"]*)"')
+LEGEND_RE = re.compile(r'@\s*s(\d+)\s+legend\s+"([^"]*)"')
 
 
 def _read_metadata(lines: list[str]) -> dict[str, str]:
@@ -23,6 +24,17 @@ def _read_metadata(lines: list[str]) -> dict[str, str]:
     return meta
 
 
+def _read_legends(lines: list[str]) -> list[str]:
+    """Return per-series legend labels ordered by series index."""
+    legends: dict[int, str] = {}
+    for line in lines:
+        if m := LEGEND_RE.search(line):
+            legends[int(m.group(1))] = m.group(2)
+    if not legends:
+        return []
+    return [legends.get(i, f"col {i + 1}") for i in range(max(legends) + 1)]
+
+
 def _read_data(lines: list[str]) -> list[list[float]]:
     rows = []
     for line in lines:
@@ -30,11 +42,14 @@ def _read_data(lines: list[str]) -> list[list[float]]:
         if not s or s.startswith(("#", "@")):
             continue
         parts = s.split()
-        rows.append([float(x) for x in parts])
+        try:
+            rows.append([float(x) for x in parts])
+        except ValueError:
+            continue
     if not rows:
         return []
     ncols = len(rows[0])
-    return [[r[c] for r in rows] for c in range(ncols)]
+    return [[r[c] for r in rows if len(r) > c] for c in range(ncols)]
 
 
 def _downsample(columns: list[list[float]], max_points: int) -> list[list[float]]:
@@ -44,19 +59,9 @@ def _downsample(columns: list[list[float]], max_points: int) -> list[list[float]
     return [c[::stride][:max_points] for c in columns]
 
 
-def parse(path: Path, max_points: int = 1000) -> dict[str, Any]:
-    lines = Path(path).read_text().splitlines()
-    meta = _read_metadata(lines)
-    cols = _read_data(lines)
-    cols = _downsample(cols, max_points)
-    return {**meta, "columns": cols}
-
-
-def summary(path: Path, column: int = 1) -> dict[str, float]:
-    cols = _read_data(Path(path).read_text().splitlines())
-    if len(cols) <= column:
+def _col_summary(y: list[float]) -> dict[str, float]:
+    if not y:
         return {"count": 0}
-    y = cols[column]
     return {
         "count": len(y),
         "min": min(y),
@@ -66,3 +71,31 @@ def summary(path: Path, column: int = 1) -> dict[str, float]:
         "first": y[0],
         "last": y[-1],
     }
+
+
+def parse_text(text: str, max_points: int = 1000) -> dict[str, Any]:
+    """Parse XVG content from a string. Returns metadata, column labels, and downsampled columns."""
+    lines = text.splitlines()
+    meta = _read_metadata(lines)
+    legends = _read_legends(lines)
+    cols = _read_data(lines)
+    cols = _downsample(cols, max_points)
+    return {**meta, "column_labels": legends, "columns": cols}
+
+
+def summary_all(text: str) -> list[dict[str, float]]:
+    """Return summary statistics for each Y column (index 1..) in the XVG text."""
+    lines = text.splitlines()
+    cols = _read_data(lines)
+    return [_col_summary(c) for c in cols[1:]]
+
+
+def parse(path: Path, max_points: int = 1000) -> dict[str, Any]:
+    return parse_text(Path(path).read_text(), max_points)
+
+
+def summary(path: Path, column: int = 1) -> dict[str, float]:
+    cols = _read_data(Path(path).read_text().splitlines())
+    if len(cols) <= column:
+        return {"count": 0}
+    return _col_summary(cols[column])

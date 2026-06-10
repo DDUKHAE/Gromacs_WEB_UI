@@ -393,6 +393,36 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
                 raw = raw[nl + 1:]
         return _filter_chat_log(raw)
 
+    # ── XVG visualization (stateless, in-memory) ─────────────────────────────
+    _MAX_XVG_FILES = 20
+    _MAX_XVG_BYTES = 50 * 1024 * 1024  # 50 MB total
+
+    @app.post("/api/xvg/parse")
+    async def api_parse_xvg(files: list[UploadFile] = File(...)) -> list[dict]:
+        if len(files) > _MAX_XVG_FILES:
+            raise HTTPException(status_code=400,
+                detail=f"Too many files: max {_MAX_XVG_FILES}")
+        total_bytes = 0
+        results = []
+        for f in files:
+            content = await f.read()
+            total_bytes += len(content)
+            if total_bytes > _MAX_XVG_BYTES:
+                raise HTTPException(status_code=413, detail="Total upload size exceeds 50 MB")
+            try:
+                text = content.decode("utf-8", errors="replace")
+            except Exception:
+                raise HTTPException(status_code=400,
+                    detail=f"Cannot decode file: {f.filename}")
+            try:
+                parsed = xvg_parser.parse_text(text, max_points=1000)
+                stats = xvg_parser.summary_all(text)
+            except Exception as exc:
+                raise HTTPException(status_code=422,
+                    detail=f"Failed to parse {f.filename}: {exc}")
+            results.append({"filename": f.filename, **parsed, "stats": stats})
+        return results
+
     if STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
