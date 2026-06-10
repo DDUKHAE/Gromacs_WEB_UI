@@ -66,7 +66,7 @@ Claude Code, OpenAI Codex CLI, and Gemini CLI are supported. Each is spawned as 
 | Dependency         | Purpose                                                                                                          |
 | ------------------ | ---------------------------------------------------------------------------------------------------------------- |
 | Python 3.13        | Web server runtime (FastAPI + uvicorn)                                                                           |
-| GROMACS 2026.0      | All pipeline stages — topology, solvation, equilibration, production run, analysis                               |
+| GROMACS 2026.0     | All pipeline stages — topology, solvation, equilibration, production run, analysis                               |
 | `requirements.txt` | REST API · WebSocket server + trajectory analysis plots (`fastapi`, `uvicorn`, `python-multipart`, `matplotlib`) |
 
 ### Optional
