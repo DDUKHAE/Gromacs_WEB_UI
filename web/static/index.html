@@ -1504,11 +1504,11 @@ body.resizing * {
                 <span class="tooltip-wrap">
                   <button type="button" class="tooltip-btn">?</button>
                   <div class="tooltip-content">
-                    <strong>포스필드 (Force Field)</strong>
-                    원자 간 상호작용을 기술하는 파라미터 세트입니다.<br>
-                    · CHARMM36: 단백질·막 시스템에 적합<br>
-                    · AMBER99SB-ILDN: 단백질 폴딩 연구에 검증<br>
-                    · OPLS-AA: 유기 분자 시뮬레이션에 강점
+                    <strong>Force Field</strong>
+                    A set of empirical potential energy functions and parameters describing bonded (bond stretching, angle bending, dihedral torsions) and non-bonded (Lennard-Jones, Coulombic) interactions.<br>
+                    · <strong>CHARMM36</strong>: Optimized for proteins, lipids, and membrane systems<br>
+                    · <strong>AMBER99SB-ILDN</strong>: Validated for protein folding and backbone dynamics<br>
+                    · <strong>OPLS-AA</strong>: All-atom parameters suited for organic molecules and small ligands
                   </div>
                 </span>
               </label>
@@ -1523,10 +1523,11 @@ body.resizing * {
                 <span class="tooltip-wrap">
                   <button type="button" class="tooltip-btn">?</button>
                   <div class="tooltip-content">
-                    <strong>수모델 (Water Model)</strong>
-                    솔벤트 물 분자의 전하·형태 파라미터입니다.<br>
-                    · TIP3P: 계산 비용 낮고 널리 사용<br>
-                    · SPC: 간단하고 빠름, 유전율 낮음
+                    <strong>Solvent Water Model</strong>
+                    An explicit point-charge representation of water defining molecular geometry and partial charge distribution. Governs dielectric screening, solvation shell structure, and diffusion properties.<br>
+                    · <strong>TIP3P</strong>: 3-site model; widely used with CHARMM and AMBER force fields<br>
+                    · <strong>SPC/E</strong>: Extended simple point-charge model; improved bulk density and diffusion<br>
+                    · <strong>TIP4P</strong>: 4-site model; better reproduction of the water density maximum near 4 °C
                   </div>
                 </span>
               </label>
@@ -1541,9 +1542,11 @@ body.resizing * {
                 <span class="tooltip-wrap">
                   <button type="button" class="tooltip-btn">?</button>
                   <div class="tooltip-content">
-                    <strong>시뮬레이션 박스</strong>
-                    주기적 경계 조건(PBC)의 단위 셀 형태입니다.<br>
-                    · Dodecahedron: 구형 단백질에 최적, 물 분자 절약
+                    <strong>Periodic Unit Cell Geometry</strong>
+                    Defines the shape of the simulation box used to impose periodic boundary conditions (PBC), eliminating surface artifacts and enabling bulk-phase sampling.<br>
+                    · <strong>Dodecahedron</strong>: Rhombic dodecahedron; minimizes solvent volume for a given minimum image distance — recommended for globular proteins<br>
+                    · <strong>Cubic</strong>: Geometrically simple; larger solvent shell required relative to dodecahedron<br>
+                    · <strong>Triclinic</strong>: General parallelepiped; used for non-orthogonal crystal unit cells
                   </div>
                 </span>
               </label>
