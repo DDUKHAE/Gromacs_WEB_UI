@@ -21,9 +21,7 @@ from web.llm_adapters import ADAPTERS
 from web import llm_runner
 from web.run_reader import RunInfo, list_runs, read_run
 
-import re as _re
-
-_CHAT_STRIP = _re.compile(
+_CHAT_STRIP = re.compile(
     r'^\s*[\$>]\s'
     r'|^:-\)'
     r'|^GROMACS'
@@ -34,7 +32,7 @@ _CHAT_STRIP = _re.compile(
     r'|Allow\?\s*\[y/n\]'
     r'|\[y/n\]|\[Y/n\]|\(y/n\)'
     r'|^\s*$',
-    _re.IGNORECASE,
+    re.IGNORECASE,
 )
 
 
@@ -358,6 +356,9 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         raw = log_file.read_text(encoding="utf-8", errors="replace")
         if len(raw) > 200_000:
             raw = raw[-200_000:]
+            nl = raw.find('\n')
+            if nl != -1:
+                raw = raw[nl + 1:]
         return _filter_chat_log(raw)
 
     if STATIC_DIR.exists():

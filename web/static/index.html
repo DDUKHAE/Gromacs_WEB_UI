@@ -1645,7 +1645,7 @@ async function startRun() {
 function stopWs() {
   if (wsConn) { wsConn.close(); wsConn = null; }
   if (term) { term.dispose(); term = null; fitAddon = null; }
-  clearInterval(chatPollTimer);
+  clearTimeout(chatPollTimer);
   chatPollTimer = null;
 }
 
@@ -2288,13 +2288,15 @@ function toggleTerminalMode() {
     btn.style.color = 'var(--accent-green)';
     termPanel.style.display = 'none';
     chatPanel.style.display = 'block';
+    clearTimeout(chatPollTimer);
+    chatPollTimer = null;
     if (currentRunId) pollChatLog();
   } else {
     btn.textContent = 'CHAT';
     btn.style.color = 'var(--accent-cyan)';
     termPanel.style.display = '';
     chatPanel.style.display = 'none';
-    clearInterval(chatPollTimer);
+    clearTimeout(chatPollTimer);
     chatPollTimer = null;
   }
 }
@@ -2303,7 +2305,7 @@ async function pollChatLog() {
   if (!currentRunId || terminalMode !== 'chat') return;
   try {
     const resp = await fetch(`/api/runs/${currentRunId}/chat_log`);
-    if (resp.ok) {
+    if (resp.ok && terminalMode === 'chat') {
       const text = await resp.text();
       const el = document.getElementById('chat-content');
       if (el) {
@@ -2313,8 +2315,10 @@ async function pollChatLog() {
       }
     }
   } catch (_) {}
-  clearInterval(chatPollTimer);
-  chatPollTimer = setInterval(pollChatLog, 3000);
+  // Only re-schedule if still in chat mode
+  if (terminalMode === 'chat') {
+    chatPollTimer = setTimeout(pollChatLog, 3000);
+  }
 }
 
 window.addEventListener('beforeunload', () => {
