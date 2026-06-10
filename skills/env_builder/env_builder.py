@@ -1,4 +1,5 @@
 """env-builder skill — Step 0–5 of the GROMACS pipeline."""
+import json
 import os
 import shutil
 import subprocess
@@ -253,9 +254,18 @@ def build_environment(pdb_path: Path, prompt: str, workspace_dir: Path,
                                prerequisites or {})
     manifest = TR.load_manifest(decision.tutorial_id) or {}
     defaults = manifest.get("defaults", {})
-    ff = _resolve_forcefield(defaults.get("forcefield", "charmm36"))
-    water = defaults.get("water_model", "tip3p")
-    box_type = defaults.get("box_type", "cubic")
+    user_prefs: dict = {}
+    meta_file = Path(workspace_dir) / "meta.json"
+    if meta_file.exists():
+        try:
+            user_prefs = json.loads(meta_file.read_text()).get("user_preferences", {})
+        except Exception:
+            pass
+    ff = _resolve_forcefield(
+        user_prefs.get("forcefield") or defaults.get("forcefield", "charmm36")
+    )
+    water = user_prefs.get("water") or defaults.get("water_model", "tip3p")
+    box_type = user_prefs.get("box_type") or defaults.get("box_type", "cubic")
     box_d = defaults.get("box_distance_nm", 1.0)
     run_step1_topology(workspace_dir, ff, water)
     run_step2_box(workspace_dir, box_type, box_d)

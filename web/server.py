@@ -160,6 +160,14 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
             raise HTTPException(status_code=413, detail="PDB file too large (max 50 MB)")
         pdb_path.write_bytes(content)
 
+        (ws / "meta.json").write_text(json.dumps({
+            "user_preferences": {
+                "forcefield": forcefield,
+                "water": water,
+                "box_type": box_type,
+            }
+        }, indent=2))
+
         if llm and llm in ADAPTERS:
             if not llm_runner.check_cli(ADAPTERS[llm]):
                 raise HTTPException(status_code=400, detail=f"'{ADAPTERS[llm].cli}' CLI not found. Install and log in first.")
