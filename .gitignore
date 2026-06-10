@@ -48,3 +48,7 @@ simulation_state.json
 
 # Exclude CI directories from public repo
 .github/
+
+# Local development artifacts
+docs/superpowers/
+tests/
