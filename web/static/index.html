@@ -1448,7 +1448,13 @@ body.resizing * {
         <!-- External Terminal Header (GROMACS TERMINAL) -->
         <div class="terminal-header-outer" style="display: flex; align-items: center; justify-content: space-between; margin: 16px 0 8px 4px; flex-shrink: 0;">
           <span style="font-size: 11px; color: var(--text-primary); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;">GROMACS TERMINAL</span>
-          <span id="term-status" class="run-item-badge badge-running" style="margin-top:0;">running</span>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <button id="btn-terminal-mode" onclick="toggleTerminalMode()"
+              style="background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.25); color: var(--accent-cyan); font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 8px; border-radius: 6px; cursor: pointer; transition: all 0.2s;">
+              CHAT
+            </button>
+            <span id="term-status" class="run-item-badge badge-running" style="margin-top:0;">running</span>
+          </div>
         </div>
 
         <!-- Terminal panel -->
@@ -1456,6 +1462,11 @@ body.resizing * {
           <div id="terminal-container">
             <pre id="fallback-terminal-text" style="color: #a7f3d0; font-size:11px; line-height: 1.4; padding: 6px; overflow-y: auto; height: 100%; white-space: pre-wrap; word-break: break-all; margin: 0;"></pre>
           </div>
+        </div>
+
+        <!-- Chat log panel (shown when terminal mode = chat) -->
+        <div id="chat-panel" style="display: none; height: 450px; flex: none; background: #04060f; border-radius: var(--radius-md); overflow-y: auto; padding: 14px 16px;">
+          <pre id="chat-content" style="color: #a7f3d0; font-size: 11px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; margin: 0; font-family: 'Fira Code', monospace;"></pre>
         </div>
 
         <!-- Results Gallery -->
@@ -1582,6 +1593,8 @@ const CHART_COLORS = ['#06b6d4', '#6366f1', '#10b981', '#f59e0b', '#ef4444'];
 let term = null;
 let fitAddon = null;
 let selectedPdb = null;
+let terminalMode = 'raw'; // 'raw' | 'chat'
+let chatPollTimer = null;
 
 function handleFileSelect(file) {
   if (!file) return;
@@ -1632,6 +1645,8 @@ async function startRun() {
 function stopWs() {
   if (wsConn) { wsConn.close(); wsConn = null; }
   if (term) { term.dispose(); term = null; fitAddon = null; }
+  clearInterval(chatPollTimer);
+  chatPollTimer = null;
 }
 
 function showNewRunForm() {
@@ -1856,6 +1871,10 @@ async function selectRun(runId, reconnectWs = true) {
     updateStepper(info);
     updateButtons(info.status);
 
+    // Reset to raw terminal mode when switching runs
+    if (terminalMode === 'chat') {
+      toggleTerminalMode();
+    }
     if (reconnectWs) connectWs(runId);
 
     if (info.status === 'completed') {
@@ -2256,6 +2275,46 @@ async function doAction(action) {
   } catch (e) {
     showToast('서버 연결 오류', 'error');
   }
+}
+
+function toggleTerminalMode() {
+  terminalMode = terminalMode === 'raw' ? 'chat' : 'raw';
+  const btn = document.getElementById('btn-terminal-mode');
+  const termPanel = document.getElementById('terminal-panel');
+  const chatPanel = document.getElementById('chat-panel');
+
+  if (terminalMode === 'chat') {
+    btn.textContent = 'TERMINAL';
+    btn.style.color = 'var(--accent-green)';
+    termPanel.style.display = 'none';
+    chatPanel.style.display = 'block';
+    if (currentRunId) pollChatLog();
+  } else {
+    btn.textContent = 'CHAT';
+    btn.style.color = 'var(--accent-cyan)';
+    termPanel.style.display = '';
+    chatPanel.style.display = 'none';
+    clearInterval(chatPollTimer);
+    chatPollTimer = null;
+  }
+}
+
+async function pollChatLog() {
+  if (!currentRunId || terminalMode !== 'chat') return;
+  try {
+    const resp = await fetch(`/api/runs/${currentRunId}/chat_log`);
+    if (resp.ok) {
+      const text = await resp.text();
+      const el = document.getElementById('chat-content');
+      if (el) {
+        el.textContent = text;
+        const panel = document.getElementById('chat-panel');
+        if (panel) panel.scrollTop = panel.scrollHeight;
+      }
+    }
+  } catch (_) {}
+  clearInterval(chatPollTimer);
+  chatPollTimer = setInterval(pollChatLog, 3000);
 }
 
 window.addEventListener('beforeunload', () => {

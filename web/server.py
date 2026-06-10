@@ -13,13 +13,36 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from lib import xvg_parser
 from web.llm_adapters import ADAPTERS
 from web import llm_runner
 from web.run_reader import RunInfo, list_runs, read_run
+
+import re as _re
+
+_CHAT_STRIP = _re.compile(
+    r'^\s*[\$>]\s'
+    r'|^:-\)'
+    r'|^GROMACS'
+    r'|^\s*NOTE:'
+    r'|^\s*WARNING:'
+    r'|^\s*Error\s*in\s*user\s*input'
+    r'|^[-=]{4,}'
+    r'|Allow\?\s*\[y/n\]'
+    r'|\[y/n\]|\[Y/n\]|\(y/n\)'
+    r'|^\s*$',
+    _re.IGNORECASE,
+)
+
+
+def _filter_chat_log(raw: str) -> str:
+    lines = raw.splitlines()
+    kept = [line for line in lines if not _CHAT_STRIP.search(line)]
+    return "\n".join(kept)
+
 
 HARNESS_DIR: Path = Path(__file__).parent.parent
 RUNNER_PY: Path = Path(__file__).parent / "runner.py"
@@ -67,7 +90,7 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:8000", "http://127.0.0.1:8000"],
-        allow_methods=["GET", "POST", "DELETE"],
+        allow_methods=["GET", "POST", "DELETE", "PATCH"],
         allow_headers=["Content-Type"],
     )
 
@@ -325,6 +348,17 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
                 await websocket.close()
             except Exception:
                 pass
+
+    @app.get("/api/runs/{run_id}/chat_log", response_class=PlainTextResponse)
+    def api_chat_log(run_id: str, hd: HarnessDir) -> str:
+        workspace = _check_run_id(run_id, hd / "runs")
+        log_file = workspace / "runner.log"
+        if not log_file.exists():
+            return ""
+        raw = log_file.read_text(encoding="utf-8", errors="replace")
+        if len(raw) > 200_000:
+            raw = raw[-200_000:]
+        return _filter_chat_log(raw)
 
     if STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
