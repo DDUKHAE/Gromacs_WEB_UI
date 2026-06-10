@@ -122,6 +122,114 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
     def api_list_llms() -> list[dict]:
         return [{"key": k, "name": a.name, "cli": a.cli} for k, a in ADAPTERS.items()]
 
+    # ── Force field endpoints ─────────────────────────────────────────────────
+    @app.get("/api/forcefields")
+    def api_list_forcefields() -> list[str]:
+        from lib.gmx_wrapper import get_gmxlib
+        gmxlib = get_gmxlib()
+        if not gmxlib or not Path(gmxlib).is_dir():
+            return []
+        return sorted(
+            p.name[:-3] for p in Path(gmxlib).iterdir() if p.name.endswith(".ff")
+        )
+
+    _FF_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_\-\.]*$")
+    _MAX_FF_BYTES = 200 * 1024 * 1024  # 200 MB
+
+    def _install_ff_dir(src: Path, gmxlib: str) -> str:
+        if not src.name.endswith(".ff"):
+            raise ValueError(f"Expected a directory ending in .ff, got: {src.name}")
+        if not (src / "forcefield.itp").exists():
+            raise ValueError(f"Not a valid force field directory (missing forcefield.itp)")
+        dest = Path(gmxlib) / src.name
+        if dest.exists():
+            shutil.rmtree(dest)
+        shutil.copytree(src, dest)
+        return src.name[:-3]
+
+    @app.post("/api/forcefields/upload", status_code=201)
+    async def api_upload_forcefield(ff_archive: UploadFile = File(...)) -> dict:
+        from lib.gmx_wrapper import get_gmxlib
+        gmxlib = get_gmxlib()
+        if not gmxlib or not Path(gmxlib).is_dir():
+            raise HTTPException(status_code=503, detail="GMXLIB not found or not writable")
+        fname = ff_archive.filename or ""
+        if not (fname.endswith(".tar.gz") or fname.endswith(".tgz") or fname.endswith(".zip")):
+            raise HTTPException(status_code=400, detail="Only .tar.gz, .tgz, or .zip files are accepted")
+        content = await ff_archive.read(_MAX_FF_BYTES + 1)
+        if len(content) > _MAX_FF_BYTES:
+            raise HTTPException(status_code=413, detail="Archive too large (max 200 MB)")
+        import tarfile, zipfile, tempfile as _tmp
+        with _tmp.TemporaryDirectory() as td:
+            extract_dir = Path(td) / "extracted"
+            extract_dir.mkdir()
+            archive_path = Path(td) / fname
+            archive_path.write_bytes(content)
+            try:
+                if fname.endswith(".zip"):
+                    with zipfile.ZipFile(archive_path) as zf:
+                        for member in zf.namelist():
+                            if ".." in member or member.startswith("/"):
+                                raise HTTPException(status_code=400, detail="Archive contains unsafe paths")
+                        zf.extractall(extract_dir)
+                else:
+                    with tarfile.open(archive_path) as tf:
+                        for member in tf.getmembers():
+                            if ".." in member.name or member.name.startswith("/"):
+                                raise HTTPException(status_code=400, detail="Archive contains unsafe paths")
+                        tf.extractall(extract_dir)
+            except (tarfile.TarError, zipfile.BadZipFile) as e:
+                raise HTTPException(status_code=400, detail=f"Failed to extract archive: {e}")
+            ff_dirs = [p for p in extract_dir.rglob("*.ff") if p.is_dir() and (p / "forcefield.itp").exists()]
+            if not ff_dirs:
+                raise HTTPException(status_code=400, detail="No valid .ff directory found in archive (missing forcefield.itp)")
+            try:
+                installed = _install_ff_dir(ff_dirs[0], gmxlib)
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+        return {"installed": installed}
+
+    @app.post("/api/forcefields/install", status_code=201)
+    def api_install_forcefield_path(body: dict) -> dict:
+        from lib.gmx_wrapper import get_gmxlib
+        gmxlib = get_gmxlib()
+        if not gmxlib or not Path(gmxlib).is_dir():
+            raise HTTPException(status_code=503, detail="GMXLIB not found or not writable")
+        raw_path = (body.get("path") or "").strip()
+        if not raw_path:
+            raise HTTPException(status_code=400, detail="path is required")
+        src = Path(raw_path).expanduser().resolve()
+        if not src.exists():
+            raise HTTPException(status_code=404, detail=f"Path not found: {src}")
+        if not src.is_dir():
+            raise HTTPException(status_code=400, detail="Path must be a directory")
+        try:
+            installed = _install_ff_dir(src, gmxlib)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        return {"installed": installed}
+
+    @app.get("/api/forcefields/{ff_name}/watermodels")
+    def api_list_watermodels(ff_name: str) -> list[dict]:
+        if not _FF_NAME_RE.match(ff_name):
+            raise HTTPException(status_code=400, detail="invalid force field name")
+        from lib.gmx_wrapper import get_gmxlib
+        gmxlib = get_gmxlib()
+        if not gmxlib:
+            raise HTTPException(status_code=404, detail="GMXLIB not found")
+        wm_file = Path(gmxlib) / f"{ff_name}.ff" / "watermodels.dat"
+        if not wm_file.exists():
+            return []
+        models = []
+        for line in wm_file.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith(";"):
+                continue
+            parts = line.split(None, 2)
+            if len(parts) >= 2:
+                models.append({"value": parts[0], "label": parts[1]})
+        return models
+
     @app.get("/api/runs/{run_id}/artifacts")
     def api_get_artifacts(run_id: str, hd: HarnessDir) -> list[dict]:
         workspace = _check_run_id(run_id, hd / "runs")
