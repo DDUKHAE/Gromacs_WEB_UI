@@ -1512,10 +1512,8 @@ body.resizing * {
                   </div>
                 </span>
               </label>
-              <select name="forcefield">
-                <option value="charmm36">CHARMM36</option>
-                <option value="amber99sb-ildn">AMBER99SB-ILDN</option>
-                <option value="oplsaa">OPLS-AA</option>
+              <select name="forcefield" id="forcefield-select">
+                <option value="">Loading...</option>
               </select>
             </div>
             <div class="param-field">
@@ -1530,10 +1528,8 @@ body.resizing * {
                   </div>
                 </span>
               </label>
-              <select name="water">
-                <option value="tip3p">TIP3P</option>
-                <option value="spc">SPC</option>
-                <option value="tip4p">TIP4P</option>
+              <select name="water" id="water-select">
+                <option value="">Select forcefield first</option>
               </select>
             </div>
             <div class="param-field">
@@ -2188,10 +2184,70 @@ async function loadLlms() {
   }
 }
 
+async function loadWaterModels(ffName) {
+  const select = document.getElementById('water-select');
+  if (!ffName) {
+    select.innerHTML = '<option value="">Select forcefield first</option>';
+    return;
+  }
+  try {
+    const resp = await fetch(`/api/forcefields/${encodeURIComponent(ffName)}/watermodels`);
+    if (!resp.ok) return;
+    const models = await resp.json();
+    const prev = select.value;
+    select.innerHTML = '';
+    if (models.length === 0) {
+      select.innerHTML = '<option value="">No water models found</option>';
+      return;
+    }
+    models.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m.value;
+      opt.textContent = m.label;
+      select.appendChild(opt);
+    });
+    // Restore previous selection if still available
+    if (prev && select.querySelector(`option[value="${CSS.escape(prev)}"]`)) {
+      select.value = prev;
+    }
+  } catch (e) {
+    console.error('loadWaterModels failed:', e);
+  }
+}
+
+async function loadForcefields() {
+  const select = document.getElementById('forcefield-select');
+  try {
+    const resp = await fetch('/api/forcefields');
+    if (!resp.ok) return;
+    const ffs = await resp.json();
+    select.innerHTML = '';
+    if (ffs.length === 0) {
+      select.innerHTML = '<option value="">No force fields found</option>';
+      return;
+    }
+    ffs.forEach(ff => {
+      const opt = document.createElement('option');
+      opt.value = ff;
+      opt.textContent = ff;
+      select.appendChild(opt);
+    });
+    // Load water models for the initially selected forcefield
+    await loadWaterModels(select.value);
+  } catch (e) {
+    console.error('loadForcefields failed:', e);
+    select.innerHTML = '<option value="">Error loading force fields</option>';
+  }
+}
+
 // Initialize on page load
 window.addEventListener('load', async () => {
   // 앱 초기화
   loadLlms();
+  loadForcefields();
+  document.getElementById('forcefield-select').addEventListener('change', e => {
+    loadWaterModels(e.target.value);
+  });
   await loadRuns();
   if (runsData.length > 0) {
     selectRun(runsData[0].run_id);

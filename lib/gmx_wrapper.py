@@ -34,6 +34,14 @@ _COMMON_GMX_PATHS = [
     "/opt/local/bin/gmx",
 ]
 
+# Glob patterns for conda-style installs where the bin dir may vary by arch
+_CONDA_GMX_GLOBS = [
+    "~/anaconda3/envs/*/bin*/gmx",
+    "~/miniconda3/envs/*/bin*/gmx",
+    "~/mambaforge/envs/*/bin*/gmx",
+    "/opt/conda/envs/*/bin*/gmx",
+]
+
 
 def _resolve_gmx_bin(default: str = "gmx") -> str:
     if env_bin := os.environ.get("GMX_BIN"):
@@ -43,6 +51,11 @@ def _resolve_gmx_bin(default: str = "gmx") -> str:
     for p in _COMMON_GMX_PATHS:
         if Path(p).exists():
             return p
+    import glob
+    for pattern in _CONDA_GMX_GLOBS:
+        matches = sorted(glob.glob(os.path.expanduser(pattern)))
+        if matches:
+            return matches[0]
     return default
 
 

@@ -122,6 +122,39 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
     def api_list_llms() -> list[dict]:
         return [{"key": k, "name": a.name, "cli": a.cli} for k, a in ADAPTERS.items()]
 
+    @app.get("/api/forcefields")
+    def api_list_forcefields() -> list[str]:
+        from lib.gmx_wrapper import get_gmxlib
+        gmxlib = get_gmxlib()
+        if not gmxlib or not Path(gmxlib).is_dir():
+            return []
+        return sorted(
+            p.name[:-3] for p in Path(gmxlib).iterdir() if p.name.endswith(".ff")
+        )
+
+    _FF_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_\-\.]*$")
+
+    @app.get("/api/forcefields/{ff_name}/watermodels")
+    def api_list_watermodels(ff_name: str) -> list[dict]:
+        if not _FF_NAME_RE.match(ff_name):
+            raise HTTPException(status_code=400, detail="invalid force field name")
+        from lib.gmx_wrapper import get_gmxlib
+        gmxlib = get_gmxlib()
+        if not gmxlib:
+            raise HTTPException(status_code=404, detail="GMXLIB not found")
+        wm_file = Path(gmxlib) / f"{ff_name}.ff" / "watermodels.dat"
+        if not wm_file.exists():
+            return []
+        models = []
+        for line in wm_file.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith(";"):
+                continue
+            parts = line.split(None, 2)
+            if len(parts) >= 2:
+                models.append({"value": parts[0], "label": parts[1]})
+        return models
+
     @app.get("/api/runs/{run_id}/artifacts")
     def api_get_artifacts(run_id: str, hd: HarnessDir) -> list[dict]:
         workspace = _check_run_id(run_id, hd / "runs")
