@@ -150,3 +150,92 @@ def test_api_create_run_uses_skill_all():
         assert "--skill" in call_args
         skill_idx = call_args.index("--skill")
         assert call_args[skill_idx + 1] == "all"
+
+
+# ── Task 3 ──────────────────────────────────────────────────────────────────
+
+def test_trjconv_nopbc_creates_corrected_trajectory(tmp_path):
+    """_trjconv_nopbc must call gmx trjconv with -pbc mol -center."""
+    from skills.illustrator.illustrator import _trjconv_nopbc
+    from lib import gmx_wrapper as GW
+
+    ws = tmp_path
+    (ws / "stage2_md").mkdir()
+
+    fake_result = MagicMock()
+    fake_result.ok = True
+
+    with patch.object(GW, "run", return_value=fake_result) as mock_run:
+        result = _trjconv_nopbc(ws, "production")
+
+    assert result == "production_noPBC"
+    call_cmd = mock_run.call_args[0][0]
+    assert "trjconv" in call_cmd
+    assert "-pbc" in call_cmd
+    assert "mol" in call_cmd
+    assert "-center" in call_cmd
+    assert "-f" in call_cmd
+    f_idx = call_cmd.index("-f")
+    assert call_cmd[f_idx + 1] == "production.xtc"
+    assert "-o" in call_cmd
+    o_idx = call_cmd.index("-o")
+    assert "production_noPBC.xtc" in call_cmd[o_idx + 1]
+
+
+def test_trjconv_nopbc_skips_if_file_exists(tmp_path):
+    """_trjconv_nopbc must not re-run trjconv if the noPBC file already exists."""
+    from skills.illustrator.illustrator import _trjconv_nopbc
+    from lib import gmx_wrapper as GW
+
+    ws = tmp_path
+    md = ws / "stage2_md"
+    md.mkdir()
+    (md / "production_noPBC.xtc").touch()
+
+    with patch.object(GW, "run") as mock_run:
+        result = _trjconv_nopbc(ws, "production")
+
+    assert result == "production_noPBC"
+    mock_run.assert_not_called()
+
+
+def test_run_core_analyses_uses_nopbc_trajectory(tmp_path):
+    """run_core_analyses must pass the noPBC trajectory to rmsd/rmsf/gyrate/sasa."""
+    from skills.illustrator.illustrator import run_core_analyses
+
+    ws = tmp_path
+    (ws / "stage2_md").mkdir()
+    (ws / "stage3_viz").mkdir()
+
+    with patch("skills.illustrator.illustrator.assert_ready", return_value={
+            "step_outputs": {"step_7": {"production_gro": "stage2_md/production.gro"}}}), \
+         patch("skills.illustrator.illustrator._trjconv_nopbc",
+               return_value="production_noPBC") as mock_trjconv, \
+         patch("skills.illustrator.illustrator._rmsd",
+               return_value=tmp_path / "stage3_viz" / "rmsd.xvg") as mock_rmsd, \
+         patch("skills.illustrator.illustrator._rmsf",
+               return_value=tmp_path / "stage3_viz" / "rmsf.xvg") as mock_rmsf, \
+         patch("skills.illustrator.illustrator._gyrate",
+               return_value=tmp_path / "stage3_viz" / "gyrate.xvg") as mock_gyrate, \
+         patch("skills.illustrator.illustrator._sasa",
+               return_value=tmp_path / "stage3_viz" / "sasa.xvg") as mock_sasa, \
+         patch("skills.illustrator.illustrator._energy_term",
+               return_value=tmp_path / "stage3_viz" / "energy.xvg"), \
+         patch("lib.xvg_parser.summary", return_value={"mean": 0.1, "std": 0.01, "count": 10}), \
+         patch("lib.state.read", return_value={"step_outputs": {}}), \
+         patch("lib.state.write"):
+        run_core_analyses(workspace_dir=ws)
+
+    mock_trjconv.assert_called_once_with(ws, "production")
+
+    _, rmsd_kwargs = mock_rmsd.call_args
+    assert rmsd_kwargs.get("xtc") == "production_noPBC"
+
+    _, rmsf_kwargs = mock_rmsf.call_args
+    assert rmsf_kwargs.get("xtc") == "production_noPBC"
+
+    _, gyrate_kwargs = mock_gyrate.call_args
+    assert gyrate_kwargs.get("xtc") == "production_noPBC"
+
+    _, sasa_kwargs = mock_sasa.call_args
+    assert sasa_kwargs.get("xtc") == "production_noPBC"

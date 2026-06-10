@@ -36,40 +36,53 @@ def _md_dir(ws: Path) -> Path:
     return Path(ws) / "stage2_md"
 
 
-def _rmsd(ws: Path, prefix: str) -> Path:
+def _trjconv_nopbc(ws: Path, prefix: str) -> str:
+    """Create PBC-corrected trajectory; skip if already present. Returns new prefix."""
+    nopbc = _md_dir(ws) / f"{prefix}_noPBC.xtc"
+    if nopbc.exists():
+        return f"{prefix}_noPBC"
+    GW.run(
+        ["trjconv", "-s", f"{prefix}.tpr", "-f", f"{prefix}.xtc",
+         "-o", str(nopbc), "-pbc", "mol", "-center"],
+        cwd=_md_dir(ws), interactive_inputs=["Protein", "System"],
+    )
+    return f"{prefix}_noPBC"
+
+
+def _rmsd(ws: Path, prefix: str, xtc: str | None = None) -> Path:
     out = _viz_dir(ws) / "rmsd.xvg"
     GW.run(
-        ["rms", "-s", f"{prefix}.tpr", "-f", f"{prefix}.xtc",
+        ["rms", "-s", f"{prefix}.tpr", "-f", f"{xtc or prefix}.xtc",
          "-o", str(out), "-tu", "ns"],
         cwd=_md_dir(ws), interactive_inputs=["Backbone", "Backbone"],
     )
     return out
 
 
-def _rmsf(ws: Path, prefix: str) -> Path:
+def _rmsf(ws: Path, prefix: str, xtc: str | None = None) -> Path:
     out = _viz_dir(ws) / "rmsf.xvg"
     GW.run(
-        ["rmsf", "-s", f"{prefix}.tpr", "-f", f"{prefix}.xtc",
+        ["rmsf", "-s", f"{prefix}.tpr", "-f", f"{xtc or prefix}.xtc",
          "-o", str(out), "-res"],
         cwd=_md_dir(ws), interactive_inputs=["Protein"],
     )
     return out
 
 
-def _gyrate(ws: Path, prefix: str) -> Path:
+def _gyrate(ws: Path, prefix: str, xtc: str | None = None) -> Path:
     out = _viz_dir(ws) / "gyrate.xvg"
     GW.run(
-        ["gyrate", "-s", f"{prefix}.tpr", "-f", f"{prefix}.xtc",
+        ["gyrate", "-s", f"{prefix}.tpr", "-f", f"{xtc or prefix}.xtc",
          "-o", str(out)],
         cwd=_md_dir(ws), interactive_inputs=["Protein"],
     )
     return out
 
 
-def _sasa(ws: Path, prefix: str) -> Path:
+def _sasa(ws: Path, prefix: str, xtc: str | None = None) -> Path:
     out = _viz_dir(ws) / "sasa.xvg"
     GW.run(
-        ["sasa", "-s", f"{prefix}.tpr", "-f", f"{prefix}.xtc",
+        ["sasa", "-s", f"{prefix}.tpr", "-f", f"{xtc or prefix}.xtc",
          "-o", str(out)],
         cwd=_md_dir(ws), interactive_inputs=["Protein"],
     )
@@ -88,12 +101,13 @@ def _energy_term(ws: Path, prefix: str, term: str, name: str) -> Path:
 def run_core_analyses(workspace_dir: Path) -> dict[str, dict]:
     s = assert_ready(workspace_dir)
     prefix = _trajectory_prefix(s)
+    nopbc = _trjconv_nopbc(workspace_dir, prefix)
     out: dict[str, dict] = {}
-    out["rmsd"] = xvg_parser.summary(_rmsd(workspace_dir, prefix))
-    out["rmsf"] = xvg_parser.summary(_rmsf(workspace_dir, prefix))
-    out["gyrate"] = xvg_parser.summary(_gyrate(workspace_dir, prefix))
+    out["rmsd"] = xvg_parser.summary(_rmsd(workspace_dir, prefix, xtc=nopbc))
+    out["rmsf"] = xvg_parser.summary(_rmsf(workspace_dir, prefix, xtc=nopbc))
+    out["gyrate"] = xvg_parser.summary(_gyrate(workspace_dir, prefix, xtc=nopbc))
     try:
-        out["sasa"] = xvg_parser.summary(_sasa(workspace_dir, prefix))
+        out["sasa"] = xvg_parser.summary(_sasa(workspace_dir, prefix, xtc=nopbc))
     except Exception:
         out["sasa"] = {"count": 0}
     for term, key in (("Potential", "potential"),
