@@ -54,7 +54,7 @@ def test_chat_log_filter_removes_gromacs_noise():
             "NOTE: 3 improper dihedrals found\n"
             "\n"
             "The topology has been created successfully.\n"
-            "Allow? [y/n] y\n"
+            "Allow? [y/n]\n"
         )
 
         app = create_app(harness_dir=hd)
@@ -94,6 +94,22 @@ def test_patch_run_display_name():
 
         meta = json.loads((ws / "meta.json").read_text())
         assert meta["display_name"] == "My Favourite Run"
+
+
+def test_chat_log_returns_404_for_missing_run():
+    """GET /api/runs/{id}/chat_log must return 404 if workspace doesn't exist."""
+    from fastapi.testclient import TestClient
+    from web.server import create_app
+    import tempfile
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as tmp:
+        hd = Path(tmp)
+        (hd / "runs").mkdir()
+        app = create_app(harness_dir=hd)
+        client = TestClient(app)
+        r = client.get("/api/runs/prot_20260610_120000/chat_log")
+        assert r.status_code == 404
 
 
 def test_list_runs_includes_display_name():

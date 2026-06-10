@@ -29,8 +29,8 @@ _CHAT_STRIP = re.compile(
     r'|^\s*WARNING:'
     r'|^\s*Error\s*in\s*user\s*input'
     r'|^[-=]{4,}'
-    r'|Allow\?\s*\[y/n\]'
-    r'|\[y/n\]|\[Y/n\]|\(y/n\)'
+    r'|Allow\?\s*\[y/n\]\s*$'
+    r'|\[y/n\]\s*$|\[Y/n\]\s*$|\(y/n\)\s*$'
     r'|^\s*$',
     re.IGNORECASE,
 )
@@ -372,6 +372,8 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
     @app.get("/api/runs/{run_id}/chat_log", response_class=PlainTextResponse)
     def api_chat_log(run_id: str, hd: HarnessDir) -> str:
         workspace = _check_run_id(run_id, hd / "runs")
+        if not workspace.is_dir():
+            raise HTTPException(status_code=404, detail="run not found")
         log_file = workspace / "runner.log"
         if not log_file.exists():
             return ""

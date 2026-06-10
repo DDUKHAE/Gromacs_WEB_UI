@@ -1943,7 +1943,10 @@ function startRename(runId, evt) {
 
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); commitRename(); }
-    if (e.key === 'Escape') { input.replaceWith(span); }
+    if (e.key === 'Escape') {
+      input.removeEventListener('blur', commitRename);
+      if (input.isConnected) input.replaceWith(span);
+    }
   });
   input.addEventListener('blur', commitRename);
 }
