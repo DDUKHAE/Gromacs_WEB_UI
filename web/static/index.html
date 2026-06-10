@@ -1867,7 +1867,7 @@ async function selectRun(runId, reconnectWs = true) {
     const info = await resp.json();
 
     document.getElementById('view-title').textContent =
-      'Simulation: ' + info.protein.toUpperCase();
+      'Simulation: ' + (info.display_name || info.protein.toUpperCase());
     updateStepper(info);
     updateButtons(info.status);
 
@@ -1885,6 +1885,66 @@ async function selectRun(runId, reconnectWs = true) {
   } catch (e) {
     showToast('서버 연결 오류', 'error');
   }
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function startRename(runId, evt) {
+  evt.stopPropagation();
+  const span = document.getElementById('run-name-' + runId);
+  if (!span) return;
+  const current = span.textContent.trim();
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = current;
+  input.style.cssText = 'width:100%; font-size:12px; font-weight:600; background:rgba(6,8,20,0.8); border:1px solid var(--accent-cyan); border-radius:4px; color:var(--text-primary); padding:2px 6px; outline:none;';
+  span.replaceWith(input);
+  input.focus();
+  input.select();
+
+  async function commitRename() {
+    const newName = input.value.trim();
+    if (!newName || newName === current) {
+      input.replaceWith(span);
+      return;
+    }
+    try {
+      const resp = await fetch(`/api/runs/${runId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ display_name: newName }),
+      });
+      if (resp.ok) {
+        const run = runsData.find(r => r.run_id === runId);
+        if (run) run.display_name = newName;
+        span.textContent = newName;
+        input.replaceWith(span);
+        if (currentRunId === runId) {
+          document.getElementById('view-title').textContent = 'Simulation: ' + newName;
+        }
+        showToast('이름이 변경되었습니다.', 'success');
+      } else {
+        const err = await resp.json().catch(() => ({}));
+        showToast(err.detail || '이름 변경 실패', 'error');
+        input.replaceWith(span);
+      }
+    } catch (_) {
+      showToast('서버 연결 오류', 'error');
+      input.replaceWith(span);
+    }
+  }
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); commitRename(); }
+    if (e.key === 'Escape') { input.replaceWith(span); }
+  });
+  input.addEventListener('blur', commitRename);
 }
 
 function renderRunList(runs) {
@@ -1912,7 +1972,11 @@ function renderRunList(runs) {
 
     el.innerHTML = `
       <div class="run-item-header">
-        <span class="run-item-name">${run.protein.toUpperCase()}</span>
+        <span class="run-item-name" id="run-name-${run.run_id}"
+          title="더블클릭하여 이름 변경"
+          ondblclick="startRename('${run.run_id}', event)">
+          ${escapeHtml(run.display_name || run.protein.toUpperCase())}
+        </span>
         <button class="delete-btn" title="삭제">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
             stroke-linecap="round" stroke-linejoin="round">

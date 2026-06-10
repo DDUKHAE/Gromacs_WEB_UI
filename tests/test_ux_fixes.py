@@ -68,3 +68,51 @@ def test_chat_log_filter_removes_gromacs_noise():
         assert "GROMACS - gmx" not in body
         assert "NOTE: 3 improper" not in body
         assert "Allow?" not in body
+
+
+def test_patch_run_display_name():
+    """PATCH /api/runs/{id} stores display_name in meta.json."""
+    from fastapi.testclient import TestClient
+    from web.server import create_app
+    import tempfile, json
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as tmp:
+        hd = Path(tmp)
+        ws = hd / "runs" / "prot_20260610_120000"
+        ws.mkdir(parents=True)
+
+        app = create_app(harness_dir=hd)
+        client = TestClient(app)
+
+        r = client.patch(
+            "/api/runs/prot_20260610_120000",
+            json={"display_name": "My Favourite Run"},
+        )
+        assert r.status_code == 200
+        assert r.json()["display_name"] == "My Favourite Run"
+
+        meta = json.loads((ws / "meta.json").read_text())
+        assert meta["display_name"] == "My Favourite Run"
+
+
+def test_list_runs_includes_display_name():
+    """GET /api/runs returns display_name when set."""
+    from fastapi.testclient import TestClient
+    from web.server import create_app
+    import tempfile, json
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as tmp:
+        hd = Path(tmp)
+        ws = hd / "runs" / "prot_20260610_120000"
+        ws.mkdir(parents=True)
+        (ws / "meta.json").write_text(json.dumps({"display_name": "Custom Name"}))
+
+        app = create_app(harness_dir=hd)
+        client = TestClient(app)
+        r = client.get("/api/runs")
+        assert r.status_code == 200
+        runs = r.json()
+        assert len(runs) == 1
+        assert runs[0]["display_name"] == "Custom Name"

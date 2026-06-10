@@ -15,6 +15,7 @@ class RunInfo:
     last_completed_stage: str | None
     current_step: int
     pending_warnings: list = field(default_factory=list)
+    display_name: str | None = None
 
 
 def _process_alive(pid: int) -> bool:
@@ -88,6 +89,15 @@ def read_run(run_id: str, runs_dir: Path) -> RunInfo | None:
         except Exception:
             pass
 
+    display_name: str | None = None
+    meta_file = workspace / "meta.json"
+    if meta_file.exists():
+        try:
+            m = json.loads(meta_file.read_text())
+            display_name = m.get("display_name") or None
+        except Exception:
+            pass
+
     return RunInfo(
         run_id=run_id,
         workspace=workspace,
@@ -97,6 +107,7 @@ def read_run(run_id: str, runs_dir: Path) -> RunInfo | None:
         last_completed_stage=last_stage,
         current_step=current_step,
         pending_warnings=pending_warnings,
+        display_name=display_name,
     )
 
 

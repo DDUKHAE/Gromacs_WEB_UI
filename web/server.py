@@ -79,6 +79,7 @@ def _run_summary(info: RunInfo) -> dict:
         "created_at": info.created_at,
         "last_completed_stage": info.last_completed_stage,
         "current_step": info.current_step,
+        "display_name": info.display_name,
     }
 
 
@@ -245,6 +246,27 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
                 pass
         shutil.rmtree(workspace, ignore_errors=True)
         return {"status": "deleted"}
+
+    @app.patch("/api/runs/{run_id}", status_code=200)
+    def api_rename_run(run_id: str, body: dict, hd: HarnessDir) -> dict:
+        workspace = _check_run_id(run_id, hd / "runs")
+        if not workspace.is_dir():
+            raise HTTPException(status_code=404, detail="run not found")
+        raw = (body.get("display_name") or "").strip()
+        if not raw:
+            raise HTTPException(status_code=400, detail="display_name must not be empty")
+        if len(raw) > 80:
+            raise HTTPException(status_code=400, detail="display_name too long (max 80 chars)")
+        meta_file = workspace / "meta.json"
+        meta: dict = {}
+        if meta_file.exists():
+            try:
+                meta = json.loads(meta_file.read_text())
+            except Exception:
+                pass
+        meta["display_name"] = raw
+        meta_file.write_text(json.dumps(meta, indent=2))
+        return {"display_name": raw}
 
     @app.websocket("/ws/runs/{run_id}")
     async def ws_terminal(websocket: WebSocket, run_id: str, hd: HarnessDir):
