@@ -90,3 +90,63 @@ def test_build_environment_respects_meta_forcefield(tmp_path):
     # user's amber99sb-ildn must override manifest charmm36
     mock_s1.assert_called_once_with(ws, "amber99sb-ildn", "tip4p")
     mock_s2.assert_called_once_with(ws, "cubic", 1.0)
+
+
+# ── Task 2 ──────────────────────────────────────────────────────────────────
+
+def test_run_viz_sets_last_completed_stage(tmp_path):
+    """_run_viz must write last_completed_stage='viz' to state.json."""
+    import json as _json
+    from lib import state as _state
+
+    ws = tmp_path
+    (ws / "stage2_md").mkdir()
+    (ws / "stage3_viz").mkdir()
+    _state.write(ws, {
+        "step_outputs": {"step_7": {"production_gro": "stage2_md/production.gro"}},
+        "last_completed_stage": "md",
+        "current_step": 7,
+        "tutorial": {},
+        "hardware": {},
+        "topology_backups": [],
+    })
+
+    with patch("skills.illustrator.illustrator.run_core_analyses", return_value={}), \
+         patch("skills.illustrator.illustrator.assert_ready", return_value={
+             "step_outputs": {"step_7": {"production_gro": "stage2_md/production.gro"}}
+         }):
+        from web.runner import _run_viz
+        _run_viz(ws)
+
+    s = _json.loads((ws / "state.json").read_text())
+    assert s["last_completed_stage"] == "viz"
+
+
+def test_api_create_run_uses_skill_all():
+    """api_create_run must launch runner.py with --skill all, not --skill env."""
+    from fastapi.testclient import TestClient
+    from web.server import create_app
+
+    with tempfile.TemporaryDirectory() as tmp:
+        hd = Path(tmp)
+        (hd / "runs").mkdir()
+        app = create_app(harness_dir=hd)
+        client = TestClient(app)
+
+        fake_pdb = (
+            b"ATOM      1  N   ALA A   1       1.000   1.000   1.000"
+            b"  1.00  0.00\nEND\n"
+        )
+        with patch("web.server.subprocess.Popen") as mock_popen:
+            mock_popen.return_value = MagicMock(pid=99999)
+            r = client.post(
+                "/api/runs",
+                data={"forcefield": "charmm36", "water": "tip3p", "box_type": "dodecahedron"},
+                files={"pdb_file": ("protein.pdb", fake_pdb, "chemical/x-pdb")},
+            )
+
+        assert r.status_code == 201
+        call_args = mock_popen.call_args[0][0]  # first positional arg = cmd list
+        assert "--skill" in call_args
+        skill_idx = call_args.index("--skill")
+        assert call_args[skill_idx + 1] == "all"

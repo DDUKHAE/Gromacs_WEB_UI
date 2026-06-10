@@ -4,6 +4,7 @@ Usage:
     python web/runner.py --skill env --workspace runs/aki_20260608_120000 --pdb inputs/input.pdb
     python web/runner.py --skill md  --workspace runs/aki_20260608_120000
     python web/runner.py --skill viz --workspace runs/aki_20260608_120000
+    python web/runner.py --skill all --workspace runs/aki_20260608_120000 --pdb inputs/input.pdb
 """
 import argparse
 import json
@@ -26,14 +27,19 @@ def _run_md(workspace: Path) -> dict:
 
 def _run_viz(workspace: Path) -> dict:
     from skills.illustrator.illustrator import run_core_analyses
-    return run_core_analyses(workspace_dir=workspace)
+    from lib import state
+    result = run_core_analyses(workspace_dir=workspace)
+    s = state.read(workspace)
+    s["last_completed_stage"] = "viz"
+    state.write(workspace, s)
+    return result
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run a single GROMACS skill")
-    parser.add_argument("--skill", choices=["env", "md", "viz"], required=True)
+    parser = argparse.ArgumentParser(description="Run a GROMACS skill or full pipeline")
+    parser.add_argument("--skill", choices=["env", "md", "viz", "all"], required=True)
     parser.add_argument("--workspace", required=True, type=Path)
-    parser.add_argument("--pdb", type=Path, help="PDB path (env only)")
+    parser.add_argument("--pdb", type=Path, help="PDB path (env and all only)")
     args = parser.parse_args()
 
     ws = args.workspace.resolve()
@@ -49,7 +55,15 @@ def main() -> int:
             result = _run_env(ws, args.pdb.resolve())
         elif args.skill == "md":
             result = _run_md(ws)
-        else:
+        elif args.skill == "viz":
+            result = _run_viz(ws)
+        else:  # "all"
+            if not args.pdb:
+                print("ERROR: --pdb required for all skill", flush=True)
+                exit_file.write_text("1")
+                return 1
+            result = _run_env(ws, args.pdb.resolve())
+            result = _run_md(ws)
             result = _run_viz(ws)
 
         print(json.dumps(result, indent=2, default=str), flush=True)

@@ -184,7 +184,7 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
             log_file = ws / "runner.log"
             log_fd = open(log_file, "w")
             proc = subprocess.Popen(
-                [sys.executable, str(RUNNER_PY), "--skill", "env",
+                [sys.executable, str(RUNNER_PY), "--skill", "all",
                  "--workspace", str(ws), "--pdb", str(pdb_path)],
                 cwd=str(hd),
                 stdout=log_fd,
