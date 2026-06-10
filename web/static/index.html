@@ -1707,8 +1707,8 @@ function updateStepper(info) {
     activeStep = 8; // MD done, analysis is next
   } else if (stage === 'env') {
     activeStep = 6; // env done, MD is next
-  } else if (currentStep >= 1 && currentStep <= 5) {
-    activeStep = currentStep; // inside env stage: use granular step
+  } else if (currentStep >= 1) {
+    activeStep = Math.min(currentStep, 5); // inside env stage: clamp to 1-5
   } else {
     activeStep = 1; // brand new run
   }
@@ -1923,21 +1923,19 @@ async function loadRuns() {
     renderRunList(runsData);
 
     // Refresh stepper/buttons for the currently displayed run
-    if (currentRunId) {
-      const activeRun = runsData.find(r => r.run_id === currentRunId);
-      if (activeRun && (activeRun.status === 'running' || activeRun.status === 'paused')) {
-        try {
-          const detailResp = await fetch(`/api/runs/${currentRunId}`);
-          if (detailResp.ok) {
-            const detail = await detailResp.json();
-            updateStepper(detail);
-            updateButtons(detail.status);
-          }
-        } catch (_) {}
-      }
+    const activeRun = runsData.find(r => r.run_id === currentRunId);
+    if (activeRun && (activeRun.status === 'running' || activeRun.status === 'paused')) {
+      const runIdSnapshot = currentRunId;
+      try {
+        const detailResp = await fetch(`/api/runs/${runIdSnapshot}`);
+        if (detailResp.ok && currentRunId === runIdSnapshot) {
+          const detail = await detailResp.json();
+          updateStepper(detail);
+          updateButtons(detail.status);
+        }
+      } catch (_) {}
     }
 
-    const activeRun = runsData.find(r => r.run_id === currentRunId);
     const interval = activeRun && activeRun.status === 'running' ? 2000 : 5000;
     clearInterval(pollTimer);
     pollTimer = setInterval(loadRuns, interval);
