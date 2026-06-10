@@ -1696,22 +1696,21 @@ if (savedTheme === 'light') {
 }
 
 function updateStepper(info) {
-  // 스테퍼 8단계 → 백엔드 3 stage 매핑
-  // env: steps 1-5, md: steps 6-7, viz: step 8
   const stage = info.last_completed_stage;
   const status = info.status;
+  const currentStep = info.current_step || 0;
 
   let activeStep;
-  if (!stage) {
-    activeStep = (status === 'completed') ? 9 : 1;
-  } else if (stage === 'env') {
-    activeStep = 6;
+  if (stage === 'viz' || status === 'completed') {
+    activeStep = 9; // all steps done
   } else if (stage === 'md') {
-    activeStep = 8;
-  } else if (stage === 'viz') {
-    activeStep = 9; // 전체 완료
+    activeStep = 8; // MD done, analysis is next
+  } else if (stage === 'env') {
+    activeStep = 6; // env done, MD is next
+  } else if (currentStep >= 1 && currentStep <= 5) {
+    activeStep = currentStep; // inside env stage: use granular step
   } else {
-    activeStep = 1;
+    activeStep = 1; // brand new run
   }
 
   const steps = document.querySelectorAll('#stepper .step-node');
@@ -1923,7 +1922,21 @@ async function loadRuns() {
     runsData = await resp.json();
     renderRunList(runsData);
 
-    // 폴링 속도 조정: 현재 런이 running 상태면 2초, 아니면 5초
+    // Refresh stepper/buttons for the currently displayed run
+    if (currentRunId) {
+      const activeRun = runsData.find(r => r.run_id === currentRunId);
+      if (activeRun && (activeRun.status === 'running' || activeRun.status === 'paused')) {
+        try {
+          const detailResp = await fetch(`/api/runs/${currentRunId}`);
+          if (detailResp.ok) {
+            const detail = await detailResp.json();
+            updateStepper(detail);
+            updateButtons(detail.status);
+          }
+        } catch (_) {}
+      }
+    }
+
     const activeRun = runsData.find(r => r.run_id === currentRunId);
     const interval = activeRun && activeRun.status === 'running' ? 2000 : 5000;
     clearInterval(pollTimer);
