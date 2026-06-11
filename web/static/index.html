@@ -1858,11 +1858,91 @@ let runsData = [];
 let pollTimer = null;
 let wsConn = null;
 let _nglStage = null;
-function initNglStage() { /* implemented in task 5 */ }
-function handleMolStructFile(file) { /* implemented in task 5 */ }
-function handleMolTrajFile(file) { /* implemented in task 5 */ }
-function toggleTrajPlay() { /* implemented in task 5 */ }
-function onTrajFrameChange(val) { /* implemented in task 5 */ }
+let _nglComp     = null;
+let _trajPlaying = false;
+
+function initNglStage() {
+  const viewport = document.getElementById('ngl-viewport');
+  if (!viewport) return;
+  const isDark = !document.body.classList.contains('light-theme');
+  _nglStage = new NGL.Stage(viewport, {
+    backgroundColor: isDark ? '#0b0f24' : '#f0f2f5',
+  });
+  window.addEventListener('resize', () => { if (_nglStage) _nglStage.handleResize(); });
+}
+
+async function handleMolStructFile(file) {
+  if (!file) return;
+  if (!_nglStage) initNglStage();
+  document.getElementById('mol-struct-drop').textContent = file.name;
+  document.getElementById('ngl-placeholder').style.display = 'none';
+  if (_nglComp) { _nglStage.removeComponent(_nglComp); _nglComp = null; }
+  document.getElementById('traj-controls').style.display = 'none';
+  const ext = file.name.split('.').pop().toLowerCase();
+  const buf = await file.arrayBuffer();
+  const blob = new Blob([buf]);
+  const url = URL.createObjectURL(blob);
+  try {
+    _nglComp = await _nglStage.loadFile(url, { ext });
+    _nglComp.addRepresentation('cartoon', { colorScheme: 'residueindex' });
+    _nglStage.autoView();
+  } catch (e) {
+    alert('구조 파일 로드 실패: ' + e.message);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+async function handleMolTrajFile(file) {
+  if (!file) return;
+  if (!_nglComp) { alert('먼저 구조 파일(.gro/.pdb)을 로드하세요.'); return; }
+  document.getElementById('mol-traj-drop').textContent = file.name;
+  const buf = await file.arrayBuffer();
+  const blob = new Blob([buf]);
+  const url = URL.createObjectURL(blob);
+  try {
+    await _nglComp.addTrajectory(url, { ext: 'xtc' });
+    const traj = _nglComp.trajList[0];
+    const frameCount = (traj && traj.trajectory && traj.trajectory.frameCount) || 0;
+    const slider = document.getElementById('traj-frame-slider');
+    slider.max = Math.max(0, frameCount - 1);
+    slider.value = 0;
+    document.getElementById('traj-frame-label').textContent = 'Frame 0 / ' + frameCount;
+    document.getElementById('traj-controls').style.display = 'flex';
+  } catch (e) {
+    alert('궤적 파일 로드 실패: ' + e.message);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function toggleTrajPlay() {
+  if (!_nglComp || !_nglComp.trajList.length) return;
+  const traj = _nglComp.trajList[0];
+  const btn = document.getElementById('traj-play-btn');
+  if (_trajPlaying) {
+    traj.trajectory.player && traj.trajectory.player.pause();
+    btn.textContent = '▶ Play';
+    _trajPlaying = false;
+  } else {
+    const frameCount = (traj.trajectory.frameCount) || 1;
+    traj.trajectory.player = new NGL.TrajectoryPlayer(traj.trajectory, {
+      step: 1, timeout: 50, start: 0, end: frameCount - 1, interpolateType: '',
+    });
+    traj.trajectory.player.play();
+    btn.textContent = '⏸ Pause';
+    _trajPlaying = true;
+  }
+}
+
+function onTrajFrameChange(val) {
+  if (!_nglComp || !_nglComp.trajList.length) return;
+  const frame = parseInt(val, 10);
+  const traj = _nglComp.trajList[0];
+  const max = document.getElementById('traj-frame-slider').max;
+  document.getElementById('traj-frame-label').textContent = 'Frame ' + frame + ' / ' + max;
+  traj.trajectory.setFrame(frame);
+}
 
 const CHART_COLORS = ['#06b6d4', '#6366f1', '#10b981', '#f59e0b', '#ef4444'];
 let term = null;
