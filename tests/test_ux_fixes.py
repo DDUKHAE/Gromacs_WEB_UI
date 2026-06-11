@@ -161,3 +161,42 @@ def test_list_runs_includes_display_name():
         runs = r.json()
         assert len(runs) == 1
         assert runs[0]["display_name"] == "Custom Name"
+
+
+def test_audit_endpoint_returns_report():
+    """GET /api/runs/{run_id}/audit returns audit report."""
+    from fastapi.testclient import TestClient
+    from web.server import create_app
+    import tempfile, json
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as tmp:
+        runs_dir = Path(tmp) / "runs"
+        run_id = "protein_20260101_120000"
+        ws = runs_dir / run_id
+        ws.mkdir(parents=True)
+        state = {
+            "schema_version": "1.0",
+            "workspace_dir": str(ws),
+            "current_step": 9,
+            "last_completed_stage": "viz",
+            "tutorial": {"id": "Lysozyme_in_water", "variant": "protein_aqueous_standard"},
+            "hardware": {"ntomp": 4},
+            "step_outputs": {
+                "step_1": {"forcefield": "charmm36", "water_model": "tip3p"},
+                "step_2": {"box_type": "dodecahedron"},
+                "step_7": {"phase_sequence": ["em", "nvt", "npt", "production"]},
+            },
+            "retry_history": [], "pending_warnings": [], "topology_backups": [],
+        }
+        (ws / "state.json").write_text(json.dumps(state))
+        (ws / "meta.json").write_text(json.dumps({"tutorial_id": "Lysozyme_in_water"}))
+
+        app = create_app(harness_dir=Path(tmp))
+        client = TestClient(app)
+        resp = client.get(f"/api/runs/{run_id}/audit")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["tutorial_id"] == "Lysozyme_in_water"
+        assert data["passed"] == 4
+        assert data["failed"] == 0

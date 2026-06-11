@@ -266,6 +266,15 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
                 pass
         return results
 
+    @app.get("/api/runs/{run_id}/audit")
+    def api_audit_run(run_id: str, hd: HarnessDir) -> dict:
+        workspace = _check_run_id(run_id, hd / "runs")
+        if not workspace.is_dir():
+            raise HTTPException(status_code=404, detail="run not found")
+        from lib.tutorial_auditor import audit_run
+        report = audit_run(workspace)
+        return report.to_dict()
+
     _MOL_EXTENSIONS = {'.gro', '.pdb', '.xtc', '.tpr'}
 
     @app.get("/api/runs/{run_id}/mol_files")
