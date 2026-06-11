@@ -35,6 +35,8 @@ _CHAT_STRIP = re.compile(
     re.IGNORECASE,
 )
 
+_PRESETS_DIR = "presets"
+
 
 def _filter_chat_log(raw: str) -> str:
     lines = raw.splitlines()
@@ -250,6 +252,43 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
             if len(parts) >= 2:
                 models.append({"value": parts[0], "label": parts[1]})
         return models
+
+    # ── Preset endpoints ──────────────────────────────────────────────────────
+    @app.get("/api/presets")
+    def api_list_presets(hd: HarnessDir) -> list[dict]:
+        presets_dir = hd / _PRESETS_DIR
+        if not presets_dir.exists():
+            return []
+        result = []
+        for p in sorted(presets_dir.glob("*.json")):
+            try:
+                result.append({"name": p.stem, "config": json.loads(p.read_text())})
+            except Exception:
+                pass
+        return result
+
+    @app.post("/api/presets", status_code=201)
+    def api_save_preset(body: dict, hd: HarnessDir) -> dict:
+        name = (body.get("name") or "").strip()
+        config = body.get("config")
+        if not name or not config:
+            raise HTTPException(status_code=400, detail="name and config are required")
+        safe_name = re.sub(r"[^a-zA-Z0-9_\-]", "_", name)[:64]
+        if not safe_name:
+            raise HTTPException(status_code=400, detail="invalid preset name")
+        presets_dir = hd / _PRESETS_DIR
+        presets_dir.mkdir(exist_ok=True)
+        (presets_dir / f"{safe_name}.json").write_text(json.dumps(config, indent=2))
+        return {"name": safe_name}
+
+    @app.delete("/api/presets/{preset_name}", status_code=200)
+    def api_delete_preset(preset_name: str, hd: HarnessDir) -> dict:
+        safe_name = re.sub(r"[^a-zA-Z0-9_\-]", "_", preset_name)[:64]
+        preset_path = hd / _PRESETS_DIR / f"{safe_name}.json"
+        if not preset_path.exists():
+            raise HTTPException(status_code=404, detail="preset not found")
+        preset_path.unlink()
+        return {"deleted": safe_name}
 
     @app.get("/api/runs/{run_id}/artifacts")
     def api_get_artifacts(run_id: str, hd: HarnessDir) -> list[dict]:
