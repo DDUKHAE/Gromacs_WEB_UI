@@ -2,6 +2,7 @@ import os
 import re
 import shutil
 import subprocess
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
@@ -77,7 +78,8 @@ def _classify(returncode: int, stderr: str) -> str:
 def run(args: Sequence[str], cwd: Path,
         interactive_inputs: Sequence[str] | None = None,
         env: dict[str, str] | None = None,
-        timeout: int | None = None) -> GmxResult:
+        timeout: int | None = None,
+        progress_log: Path | None = None) -> GmxResult:
     gmx_bin = _resolve_gmx_bin()
     auto_gmxlib = _resolve_gmxlib(gmx_bin)
     merged_env = {**os.environ}
@@ -87,17 +89,61 @@ def run(args: Sequence[str], cwd: Path,
         merged_env.update(env)
     cmd = [gmx_bin] + list(args)
     proc_input = "\n".join(interactive_inputs) + "\n" if interactive_inputs else None
-    completed = subprocess.run(
-        cmd, cwd=str(cwd), input=proc_input, text=True,
-        capture_output=True, env=merged_env,
-        timeout=timeout,
+
+    if progress_log is None:
+        completed = subprocess.run(
+            cmd, cwd=str(cwd), input=proc_input, text=True,
+            capture_output=True, env=merged_env,
+            timeout=timeout,
+        )
+        return GmxResult(
+            command=cmd,
+            returncode=completed.returncode,
+            stdout=completed.stdout,
+            stderr=completed.stderr,
+            classification=_classify(completed.returncode, completed.stderr or ""),
+        )
+
+    # Streaming mode: write combined stdout+stderr to progress_log in real-time
+    stdout_buf: list[str] = []
+    stderr_buf: list[str] = []
+
+    proc = subprocess.Popen(
+        cmd, cwd=str(cwd),
+        stdin=subprocess.PIPE if proc_input else None,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=merged_env,
     )
+
+    def _reader(stream, buf: list[str], log_fh) -> None:
+        for line in stream:
+            buf.append(line)
+            log_fh.write(line)
+            log_fh.flush()
+
+    with open(progress_log, "a", encoding="utf-8", errors="replace") as log_fh:
+        t_out = threading.Thread(target=_reader, args=(proc.stdout, stdout_buf, log_fh), daemon=True)
+        t_err = threading.Thread(target=_reader, args=(proc.stderr, stderr_buf, log_fh), daemon=True)
+        t_out.start(); t_err.start()
+        if proc_input:
+            try:
+                proc.stdin.write(proc_input)
+                proc.stdin.close()
+            except OSError:
+                pass
+        proc.wait(timeout=timeout)
+        t_out.join(); t_err.join()
+
+    stdout = "".join(stdout_buf)
+    stderr = "".join(stderr_buf)
     return GmxResult(
         command=cmd,
-        returncode=completed.returncode,
-        stdout=completed.stdout,
-        stderr=completed.stderr,
-        classification=_classify(completed.returncode, completed.stderr or ""),
+        returncode=proc.returncode,
+        stdout=stdout,
+        stderr=stderr,
+        classification=_classify(proc.returncode, stderr),
     )
 
 

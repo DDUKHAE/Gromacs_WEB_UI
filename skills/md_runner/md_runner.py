@@ -80,10 +80,12 @@ def run_phase(workspace_dir: Path, phase: str,
             f"grompp ({phase}) failed [{grompp_result.classification}]: "
             f"{grompp_result.stderr[-500:]}"
         )
+    progress_log = out_dir / f"{phase}_progress.log"
     mdrun_result = GW.run(
         ["mdrun", "-deffnm", phase, "-ntomp",
          str(state.read(ws)["hardware"]["ntomp"])],
         cwd=out_dir,
+        progress_log=progress_log,
     )
     if not mdrun_result.ok:
         raise RuntimeError(
