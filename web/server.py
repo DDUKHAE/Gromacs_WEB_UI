@@ -275,7 +275,7 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         found = set()
         for ext in _MOL_EXTENSIONS:
             for f in workspace.rglob(f"*{ext}"):
-                if str(f.resolve()).startswith(str(ws_resolved)):
+                if str(f.resolve()).startswith(str(ws_resolved) + os.sep):
                     found.add(f.name)
         return sorted(found)
 
@@ -286,13 +286,17 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         ext = Path(filename).suffix.lower()
         if ext not in _MOL_EXTENSIONS:
             raise HTTPException(status_code=400, detail="file type not allowed")
+        if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.\-]*', filename):
+            raise HTTPException(status_code=400, detail="invalid filename")
         workspace = _check_run_id(run_id, hd / "runs")
         ws_resolved = workspace.resolve()
-        for candidate in workspace.rglob(filename):
-            resolved = candidate.resolve()
-            if str(resolved).startswith(str(ws_resolved)):
-                return FileResponse(str(resolved), filename=filename)
-        raise HTTPException(status_code=404, detail="file not found")
+        candidate = workspace / filename
+        if not candidate.exists():
+            raise HTTPException(status_code=404, detail="file not found")
+        resolved = candidate.resolve()
+        if not str(resolved).startswith(str(ws_resolved) + os.sep):
+            raise HTTPException(status_code=400, detail="invalid filename")
+        return FileResponse(str(resolved), filename=filename)
 
     @app.post("/api/runs", status_code=201)
     async def api_create_run(
