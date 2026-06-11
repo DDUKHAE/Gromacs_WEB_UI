@@ -681,7 +681,6 @@ body.light-theme #terminal-panel {
 body.light-theme #terminal-container {
   background: #f9fafb;
 }
-}
 
 
 
@@ -885,15 +884,18 @@ body.light-theme .chart-card-title {
   gap: 12px;
   overflow-y: auto;
 }
-#new-run-form {
+#new-run-form,
+#new-visualization-container {
   width: 100%;
   max-width: 480px;
+  min-height: 580px;
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
 
-#new-run-form h2 {
+#new-run-form h2,
+#new-visualization-container h2 {
   font-size: 20px;
   font-weight: 700;
   color: var(--text-primary);
@@ -905,16 +907,20 @@ body.light-theme .chart-card-title {
   margin-bottom: 4px;
 }
 
-body.light-theme #new-run-form h2 {
+body.light-theme #new-run-form h2,
+body.light-theme #new-visualization-container h2 {
   background: linear-gradient(135deg, #1f2937, #4f46e5);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
-#drop-zone {
+#drop-zone,
+#xvg-drop-zone,
+#mol-struct-drop,
+#mol-traj-drop {
   border: 2px dashed rgba(99, 102, 241, 0.35);
   border-radius: var(--radius-md);
-  padding: 24px 16px;
+  padding: 16px 12px;
   text-align: center;
   cursor: pointer;
   background: rgba(99, 102, 241, 0.02);
@@ -922,15 +928,34 @@ body.light-theme #new-run-form h2 {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 8px;
 }
 
-body.light-theme #drop-zone {
+#xvg-drop-zone,
+#mol-upload-container {
+  aspect-ratio: 1 / 1;
+}
+
+#mol-upload-container {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+body.light-theme #drop-zone,
+body.light-theme #xvg-drop-zone,
+body.light-theme #mol-struct-drop,
+body.light-theme #mol-traj-drop {
   background: rgba(79, 70, 229, 0.01);
   border-color: rgba(79, 70, 229, 0.25);
 }
 
-#drop-zone:hover {
+#drop-zone:hover,
+#xvg-drop-zone:hover,
+#mol-struct-drop:hover,
+#mol-traj-drop:hover {
   background: rgba(99, 102, 241, 0.05);
   border-color: var(--accent-primary);
   box-shadow: 0 0 16px rgba(99, 102, 241, 0.12);
@@ -949,7 +974,10 @@ body.light-theme #drop-zone {
   transition: all 0.25s;
 }
 
-#drop-zone:hover .upload-icon {
+#drop-zone:hover .upload-icon,
+#xvg-drop-zone:hover .upload-icon,
+#mol-struct-drop:hover .upload-icon,
+#mol-traj-drop:hover .upload-icon {
   transform: translateY(-2px);
   background: var(--accent-primary);
   color: #fff;
@@ -1148,7 +1176,6 @@ body.light-theme .tooltip-content {
     margin-top: 11px;
     display: block !important;
   }
-}
 
 /* Cyber Theme Toggle Switch CSS */
 .cyber-toggle-wrapper {
@@ -1541,7 +1568,7 @@ body.resizing * {
       <!-- New Run Form -->
       <div id="new-run-view">
         <form id="new-run-form" onsubmit="event.preventDefault(); startRun();" aria-label="새 시뮬레이션 실행 설정">
-          <h2>New Simulation Run</h2>
+          <h2>Simulation Run</h2>
           
           <div id="drop-zone"
             onclick="document.getElementById('pdb-input').click()"
@@ -1682,101 +1709,82 @@ body.resizing * {
         <button type="button" class="nav-arrow-btn" onclick="selectRunType('simulation')" style="left: 24px;" title="Go to Simulation">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
         </button>
-        <!-- Visualization tabs -->
-        <div id="viz-tab-header" style="display:flex;gap:0;border-bottom:1px solid var(--border-color);margin-bottom:16px;flex-shrink:0;">
-          <button class="viz-tab active" id="viz-tab-xvg" onclick="switchVizTab('xvg')"
-                  style="padding:8px 20px;font-size:13px;font-weight:500;background:none;border:none;border-bottom:2px solid var(--accent-cyan);color:var(--accent-cyan);cursor:pointer;transition:all 0.2s;">
-            XVG Plots
-          </button>
-          <button class="viz-tab" id="viz-tab-3d" onclick="switchVizTab('3d')"
-                  style="padding:8px 20px;font-size:13px;font-weight:500;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-secondary);cursor:pointer;transition:all 0.2s;">
-            3D Viewer
-          </button>
-        </div>
 
-        <div id="viz-panel-xvg" style="display:flex;flex-direction:column;gap:12px;flex:1;overflow-y:auto;min-height:0;">
-          <div id="xvg-drop-zone"
-            onclick="document.getElementById('xvg-input').click()"
-            ondragover="event.preventDefault(); this.style.borderColor='var(--accent-cyan)'"
-            ondragleave="this.style.borderColor=''"
-            ondrop="event.preventDefault(); this.style.borderColor=''; handleXvgFileSelect(event.dataTransfer.files)"
-            style="border: 2px dashed var(--border-color); border-radius: var(--radius-md); padding: 32px 20px; text-align: center; cursor: pointer; background: rgba(255,255,255,0.01); transition: all 0.2s ease;"
-            onmouseover="this.style.background='rgba(255,255,255,0.03)'"
-            onmouseout="this.style.background='rgba(255,255,255,0.01)'">
-            <div style="color: var(--accent-cyan); margin-bottom: 12px; display: flex; justify-content: center;">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-            </div>
-            <p style="font-size: 13px; font-weight: 600; color: var(--text-primary);">Drop XVG files here</p>
-            <small style="color: var(--text-secondary); font-size: 11px;">or click to browse — multiple files supported</small>
-            <div id="selected-xvg-file" style="margin-top: 8px; font-size: 12px; font-weight: 500; color: var(--accent-cyan);"></div>
-          </div>
-          <input type="file" id="xvg-input" accept=".xvg" multiple style="display: none;" onchange="handleXvgFileSelect(this.files)">
+        <div id="new-visualization-container">
+          <h2>Visualization</h2>
 
-          <!-- Preview Chart Area Placeholder -->
-          <div id="xvg-preview-card" class="card" style="display: none; padding: 16px;">
-            <div class="card-header" style="margin-bottom: 12px;">
-              <span style="font-size: 11px; color: var(--text-primary); font-weight: 700; text-transform: uppercase;">DATA PREVIEW</span>
-            </div>
-            <div id="xvg-chart-placeholder" style="height: 200px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-secondary); font-size: 12px; background: rgba(0,0,0,0.2);">
-              Chart preview will be rendered here
-            </div>
-          </div>
-
-          <button type="button" id="btn-start-vis" disabled style="width: 100%; padding: 12px; border-radius: var(--radius-md); border: none; background: var(--accent-cyan); color: #fff; font-weight: 600; cursor: pointer; transition: opacity 0.2s; opacity: 0.5;">
-            Start Visualization Analysis
-          </button>
-        </div>
-
-        <div id="viz-panel-3d" style="display:none;flex-direction:column;gap:12px;flex:1;overflow-y:auto;min-height:0;">
-          <!-- File upload section -->
-          <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px;flex-shrink:0;">
-            <div style="font-size:13px;font-weight:600;color:var(--text-primary);">Structure File</div>
-            <div id="mol-struct-drop"
-                 onclick="document.getElementById('mol-struct-input').click()"
-                 style="border:1px dashed var(--border-color);border-radius:var(--radius-sm);padding:14px;text-align:center;cursor:pointer;font-size:12px;color:var(--text-secondary);transition:border-color 0.2s;"
-                 onmouseover="this.style.borderColor='var(--accent-cyan)'" onmouseout="this.style.borderColor='var(--border-color)'">
-              Click to upload .gro or .pdb
-            </div>
-            <input type="file" id="mol-struct-input" accept=".gro,.pdb" style="display:none;"
-                   onchange="handleMolStructFile(this.files[0])">
-
-            <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-top:4px;">
-              Trajectory File <span style="color:var(--text-muted);font-weight:400;">(optional)</span>
-            </div>
-            <div id="mol-traj-drop"
-                 onclick="document.getElementById('mol-traj-input').click()"
-                 style="border:1px dashed var(--border-color);border-radius:var(--radius-sm);padding:14px;text-align:center;cursor:pointer;font-size:12px;color:var(--text-secondary);transition:border-color 0.2s;"
-                 onmouseover="this.style.borderColor='var(--accent-cyan)'" onmouseout="this.style.borderColor='var(--border-color)'">
-              Click to upload .xtc
-            </div>
-            <input type="file" id="mol-traj-input" accept=".xtc" style="display:none;"
-                   onchange="handleMolTrajFile(this.files[0])">
-          </div>
-
-          <!-- NGL viewport -->
-          <div class="card" style="padding:0;overflow:hidden;flex:1;min-height:350px;position:relative;">
-            <div id="ngl-viewport" style="width:100%;height:100%;min-height:350px;"></div>
-            <div id="ngl-placeholder" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--text-muted);pointer-events:none;">
-              구조 파일을 업로드하면 3D 모델이 표시됩니다
-            </div>
-          </div>
-
-          <!-- Trajectory playback controls (hidden until trajectory loaded) -->
-          <div id="traj-controls" class="card" style="display:none;padding:12px 16px;flex-direction:row;align-items:center;gap:12px;flex-shrink:0;">
-            <button id="traj-play-btn" onclick="toggleTrajPlay()"
-                    style="padding:6px 16px;border-radius:var(--radius-sm);background:var(--accent-cyan);border:none;color:#000;font-size:12px;font-weight:600;cursor:pointer;">
-              ▶ Play
+          <!-- Visualization tabs -->
+          <div id="viz-tab-header" style="display:flex;gap:0;border-bottom:1px solid var(--border-color);margin-bottom:16px;flex-shrink:0;">
+            <button class="viz-tab active" id="viz-tab-xvg" onclick="switchVizTab('xvg')"
+                    style="padding:8px 20px;font-size:13px;font-weight:500;background:none;border:none;border-bottom:2px solid var(--accent-cyan);color:var(--accent-cyan);cursor:pointer;transition:all 0.2s;">
+              XVG Plots
             </button>
-            <input type="range" id="traj-frame-slider" min="0" max="100" value="0" step="1"
-                   style="flex:1;accent-color:var(--accent-cyan);"
-                   oninput="onTrajFrameChange(this.value)">
-            <span id="traj-frame-label" style="font-size:12px;color:var(--text-muted);min-width:80px;text-align:right;">Frame 0</span>
+            <button class="viz-tab" id="viz-tab-3d" onclick="switchVizTab('3d')"
+                    style="padding:8px 20px;font-size:13px;font-weight:500;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-secondary);cursor:pointer;transition:all 0.2s;">
+              3D Viewer
+            </button>
+          </div>
+
+          <div id="viz-panel-xvg" style="display:flex;flex-direction:column;gap:12px;flex:1;overflow-y:auto;min-height:0;">
+            <div id="xvg-drop-zone"
+              onclick="document.getElementById('xvg-input').click()"
+              ondragover="event.preventDefault(); this.style.borderColor='var(--accent-primary)'"
+              ondragleave="this.style.borderColor=''"
+              ondrop="event.preventDefault(); this.style.borderColor=''; handleXvgFileSelect(event.dataTransfer.files)">
+              <div class="upload-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+              </div>
+              <p style="font-size: 13px; font-weight: 600; color: var(--text-primary);">Drop XVG files here</p>
+              <small style="color: var(--text-secondary); font-size: 11px;">or click to browse — multiple files supported</small>
+              <div id="selected-xvg-file" style="margin-top: 8px; font-size: 12px; font-weight: 500; color: var(--accent-primary);"></div>
+            </div>
+            <input type="file" id="xvg-input" accept=".xvg" multiple style="display: none;" onchange="handleXvgFileSelect(this.files)">
+          </div>
+
+          <div id="viz-panel-3d" style="display:none;flex-direction:column;gap:12px;flex:1;overflow-y:auto;min-height:0;">
+            <!-- File upload section -->
+            <!-- File upload section -->
+            <div id="mol-upload-container">
+              <div style="flex: 1; display: flex; flex-direction: column; gap: 6px; min-height: 0;">
+                <div id="mol-struct-drop"
+                     onclick="document.getElementById('mol-struct-input').click()"
+                     ondragover="event.preventDefault(); this.style.borderColor='var(--accent-primary)'"
+                     ondragleave="this.style.borderColor=''"
+                     ondrop="event.preventDefault(); this.style.borderColor=''; handleMolStructFile(event.dataTransfer.files[0])"
+                     style="flex: 1; min-height: 0;">
+                  <div class="upload-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                  </div>
+                  <p style="font-size: 13px; font-weight: 600; color: var(--text-primary);">Drop Structure File</p>
+                  <small style="color: var(--text-secondary); font-size: 11px;">or Click to upload .gro or .pdb</small>
+                </div>
+                <input type="file" id="mol-struct-input" accept=".gro,.pdb" style="display:none;"
+                       onchange="handleMolStructFile(this.files[0])">
+              </div>
+
+              <div style="flex: 1; display: flex; flex-direction: column; gap: 6px; min-height: 0;">
+                <div id="mol-traj-drop"
+                     onclick="document.getElementById('mol-traj-input').click()"
+                     ondragover="event.preventDefault(); this.style.borderColor='var(--accent-primary)'"
+                     ondragleave="this.style.borderColor=''"
+                     ondrop="event.preventDefault(); this.style.borderColor=''; handleMolTrajFile(event.dataTransfer.files[0])"
+                     style="flex: 1; min-height: 0;">
+                  <div class="upload-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                  </div>
+                  <p style="font-size: 13px; font-weight: 600; color: var(--text-primary);">Drop Trajectory File</p>
+                  <small style="color: var(--text-secondary); font-size: 11px;">or Click to upload .xtc</small>
+                </div>
+                <input type="file" id="mol-traj-input" accept=".xtc" style="display:none;"
+                       onchange="handleMolTrajFile(this.files[0])">
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
       <!-- XVG Visualization Result Modal -->
-      <div id="xvg-result-modal" style="display:none;position:fixed;inset:0;background:transparent;z-index:1050;align-items:flex-start;justify-content:center;overflow-y:auto;padding:40px 16px;">
+      <div id="xvg-result-modal" style="display:none;position:fixed;inset:0;background:rgba(6, 8, 19, 0.8);backdrop-filter:blur(8px);z-index:1050;align-items:center;justify-content:center;overflow-y:auto;padding:40px 16px;">
         <div style="background:var(--bg-surface,#0b0f24);border:1px solid var(--border-color);border-radius:14px;width:100%;max-width:860px;overflow:hidden;box-shadow:var(--shadow-lg);pointer-events:auto;margin:auto;">
           <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--border-color);">
             <span style="font-weight:700;font-size:16px;color:var(--text-primary);">XVG Analysis Results</span>
@@ -1791,6 +1799,34 @@ body.resizing * {
             <span id="xvg-smooth-label" style="font-size:12px;color:var(--accent-cyan);min-width:60px;text-align:right;">OFF (1)</span>
           </div>
           <div id="xvg-result-cards" style="padding:20px;display:flex;flex-direction:column;gap:20px;"></div>
+        </div>
+      </div>
+
+      <!-- NGL 3D Viewer Modal -->
+      <div id="ngl-viewer-modal" style="display:none;position:fixed;inset:0;background:rgba(6, 8, 19, 0.8);backdrop-filter:blur(8px);z-index:1060;align-items:center;justify-content:center;padding:16px;">
+        <div style="background:var(--bg-surface,#0b0f24);border:1px solid var(--border-color);border-radius:14px;width:100%;max-width:860px;height:80vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:var(--shadow-lg);pointer-events:auto;margin:auto;">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--border-color);flex-shrink:0;">
+            <span style="font-weight:700;font-size:16px;color:var(--text-primary);">3D Structure & Trajectory Viewer</span>
+            <button id="ngl-viewer-close" type="button" style="background:none;border:none;cursor:pointer;font-size:18px;color:var(--text-secondary);">✕</button>
+          </div>
+          <!-- NGL viewport in Modal -->
+          <div style="position:relative;flex:1;background:#04060f;min-height:0;">
+            <div id="ngl-viewport" style="width:100%;height:100%;"></div>
+            <div id="ngl-placeholder" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--text-muted);pointer-events:none;">
+              구조 파일을 업로드하면 3D 모델이 표시됩니다
+            </div>
+          </div>
+          <!-- Trajectory playback controls -->
+          <div id="traj-controls" style="display:none;padding:12px 16px;flex-direction:row;align-items:center;gap:12px;flex-shrink:0;border-top:1px solid var(--border-color);background:rgba(0,0,0,0.15);">
+            <button id="traj-play-btn" onclick="toggleTrajPlay()"
+                    style="padding:6px 16px;border-radius:var(--radius-sm);background:var(--accent-cyan);border:none;color:#000;font-size:12px;font-weight:600;cursor:pointer;">
+              ▶ Play
+            </button>
+            <input type="range" id="traj-frame-slider" min="0" max="100" value="0" step="1"
+                   style="flex:1;accent-color:var(--accent-cyan);"
+                   oninput="onTrajFrameChange(this.value)">
+            <span id="traj-frame-label" style="font-size:12px;color:var(--text-muted);min-width:80px;text-align:right;">Frame 0</span>
+          </div>
         </div>
       </div>
 
@@ -1881,6 +1917,7 @@ function initNglStage() {
 
 async function handleMolStructFile(file) {
   if (!file) return;
+  document.getElementById('ngl-viewer-modal').style.display = 'flex';
   if (!_nglStage) initNglStage();
   document.getElementById('mol-struct-drop').textContent = file.name;
   document.getElementById('ngl-placeholder').style.display = 'none';
@@ -1894,6 +1931,7 @@ async function handleMolStructFile(file) {
     _nglComp = await _nglStage.loadFile(url, { ext });
     _nglComp.addRepresentation('cartoon', { colorScheme: 'residueindex' });
     _nglStage.autoView();
+    setTimeout(() => { if (_nglStage) _nglStage.handleResize(); }, 150);
   } catch (e) {
     alert('구조 파일 로드 실패: ' + e.message);
   } finally {
@@ -1904,6 +1942,7 @@ async function handleMolStructFile(file) {
 async function handleMolTrajFile(file) {
   if (!file) return;
   if (!_nglComp) { alert('먼저 구조 파일(.gro/.pdb)을 로드하세요.'); return; }
+  document.getElementById('ngl-viewer-modal').style.display = 'flex';
   document.getElementById('mol-traj-drop').textContent = file.name;
   const buf = await file.arrayBuffer();
   const blob = new Blob([buf]);
@@ -1923,6 +1962,7 @@ async function handleMolTrajFile(file) {
     slider.value = 0;
     document.getElementById('traj-frame-label').textContent = 'Frame 0 / ' + frameCount;
     document.getElementById('traj-controls').style.display = 'flex';
+    setTimeout(() => { if (_nglStage) _nglStage.handleResize(); }, 150);
   } catch (e) {
     alert('궤적 파일 로드 실패: ' + e.message);
   }
@@ -1961,6 +2001,26 @@ function onTrajFrameChange(val) {
 const CHART_COLORS = ['#06b6d4', '#6366f1', '#10b981', '#f59e0b', '#ef4444'];
 let term = null;
 let fitAddon = null;
+let _fitTimer = null;
+let _sidebarDragging = false;
+
+function _fitTerminal() {
+  // Skip fit while sidebar is actively being dragged — layout is mid-flight
+  if (_sidebarDragging) return;
+  if (_fitTimer) clearTimeout(_fitTimer);
+  _fitTimer = setTimeout(() => {
+    _fitTimer = null;
+    requestAnimationFrame(() => {
+      if (!fitAddon || !term) return;
+      try {
+        fitAddon.fit();
+        if (wsConn && wsConn.readyState === WebSocket.OPEN) {
+          wsConn.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+        }
+      } catch (_) {}
+    });
+  }, 80);
+}
 let selectedPdb = null;
 let terminalMode = 'raw'; // 'raw' | 'chat'
 let chatPollTimer = null;
@@ -2062,24 +2122,20 @@ function selectRunType(type) {
   if (type === 'simulation') {
     document.getElementById('new-visualization-view').style.display = 'none';
     document.getElementById('new-run-view').style.display = 'flex';
-    document.getElementById('view-title').textContent = 'Configure New Simulation';
+    document.getElementById('view-title').textContent = 'Configure Simulation';
   } else if (type === 'visualization') {
     document.getElementById('new-run-view').style.display = 'none';
     document.getElementById('new-visualization-view').style.display = 'flex';
     switchVizTab('xvg');
-    document.getElementById('view-title').textContent = 'New Visualization';
+    document.getElementById('view-title').textContent = 'Visualization';
     // Clear drop zone state
     document.getElementById('selected-xvg-file').textContent = '';
-    document.getElementById('xvg-preview-card').style.display = 'none';
-    const btn = document.getElementById('btn-start-vis');
-    btn.disabled = true;
-    btn.style.opacity = '0.5';
   }
 }
 
 let _selectedXvgFiles = null;
 
-function handleXvgFileSelect(fileList) {
+async function handleXvgFileSelect(fileList) {
   if (!fileList || fileList.length === 0) return;
   _selectedXvgFiles = fileList;
 
@@ -2091,13 +2147,21 @@ function handleXvgFileSelect(fileList) {
     selectedFileDiv.textContent = `Selected: ${fileList.length} files (${(total / 1024).toFixed(1)} KB total)`;
   }
 
-  document.getElementById('xvg-preview-card').style.display = 'block';
-  document.getElementById('xvg-chart-placeholder').innerHTML =
-    `<span style="font-size:12px;color:var(--text-secondary);">${fileList.length} file(s) ready — click Start to analyze</span>`;
-
-  const btn = document.getElementById('btn-start-vis');
-  btn.disabled = false;
-  btn.style.opacity = '1';
+  showToast('Analyzing XVG files...', 'info');
+  const fd = new FormData();
+  Array.from(fileList).forEach(f => fd.append('files', f));
+  try {
+    const resp = await fetch('/api/xvg/parse', { method: 'POST', body: fd });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      showToast(err.detail || `Parse error (${resp.status})`, 'error');
+      return;
+    }
+    const dataList = await resp.json();
+    renderXvgResultModal(dataList);
+  } catch (e) {
+    showToast('Network error: ' + e.message, 'error');
+  }
 }
 
 function showToast(message, type = 'info') {
@@ -2242,7 +2306,7 @@ function initTerminal() {
   term.loadAddon(fitAddon);
   container.innerHTML = '';
   term.open(container);
-  fitAddon.fit();
+  _fitTerminal();
 }
 
 function connectWs(runId) {
@@ -2253,10 +2317,7 @@ function connectWs(runId) {
   wsConn.binaryType = 'arraybuffer';
 
   wsConn.onopen = () => {
-    if (term && fitAddon) {
-      fitAddon.fit();
-      wsConn.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
-    }
+    _fitTerminal();
   };
 
   wsConn.onmessage = (e) => {
@@ -2937,31 +2998,6 @@ window.addEventListener('load', async () => {
   document.getElementById('forcefield-select').addEventListener('change', e => {
     loadWaterModels(e.target.value);
   });
-  document.getElementById('btn-start-vis').addEventListener('click', async () => {
-    if (!_selectedXvgFiles || _selectedXvgFiles.length === 0) return;
-    const btn = document.getElementById('btn-start-vis');
-    btn.disabled = true;
-    btn.textContent = 'Analyzing…';
-    const fd = new FormData();
-    Array.from(_selectedXvgFiles).forEach(f => fd.append('files', f));
-    try {
-      const resp = await fetch('/api/xvg/parse', { method: 'POST', body: fd });
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
-        showToast(err.detail || `Parse error (${resp.status})`, 'error');
-        return;
-      }
-      const dataList = await resp.json();
-      renderXvgResultModal(dataList);
-    } catch (e) {
-      showToast('Network error: ' + e.message, 'error');
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Start Visualization Analysis';
-      btn.style.opacity = _selectedXvgFiles ? '1' : '0.5';
-    }
-  });
-
   // XVG result modal close
   document.getElementById('xvg-result-close').addEventListener('click', () => {
     document.getElementById('xvg-result-modal').style.display = 'none';
@@ -2969,6 +3005,15 @@ window.addEventListener('load', async () => {
   document.getElementById('xvg-result-modal').addEventListener('click', e => {
     if (e.target === document.getElementById('xvg-result-modal'))
       document.getElementById('xvg-result-modal').style.display = 'none';
+  });
+
+  // NGL viewer modal close
+  document.getElementById('ngl-viewer-close').addEventListener('click', () => {
+    document.getElementById('ngl-viewer-modal').style.display = 'none';
+  });
+  document.getElementById('ngl-viewer-modal').addEventListener('click', e => {
+    if (e.target === document.getElementById('ngl-viewer-modal'))
+      document.getElementById('ngl-viewer-modal').style.display = 'none';
   });
   await loadRuns();
   if (runsData.length > 0) {
@@ -2984,6 +3029,7 @@ window.addEventListener('load', async () => {
     let isResizing = false;
     resizer.addEventListener('mousedown', function (e) {
       isResizing = true;
+      _sidebarDragging = true;
       resizer.classList.add('resizing');
       document.body.classList.add('resizing');
       e.preventDefault();
@@ -3010,6 +3056,7 @@ window.addEventListener('load', async () => {
     window.addEventListener('mouseup', function () {
       if (!isResizing) return;
       isResizing = false;
+      _sidebarDragging = false;
       resizer.classList.remove('resizing');
       resizer.classList.remove('will-collapse');
       document.body.classList.remove('resizing');
@@ -3032,14 +3079,10 @@ window.addEventListener('load', async () => {
         sidebar.style.width = '180px';
         setTimeout(() => {
           sidebar.classList.remove('sidebar-animating');
-          if (typeof fitAddon !== 'undefined' && fitAddon) {
-            try { fitAddon.fit(); } catch (err) {}
-          }
+          _fitTerminal();
         }, DURATION);
       } else {
-        if (typeof fitAddon !== 'undefined' && fitAddon) {
-          try { fitAddon.fit(); } catch (err) {}
-        }
+        _fitTerminal();
       }
     });
   }
@@ -3059,9 +3102,7 @@ window.addEventListener('load', async () => {
       sidebar.classList.remove('sidebar-collapsing');
       setTimeout(() => {
         sidebar.classList.remove('sidebar-animating');
-        if (typeof fitAddon !== 'undefined' && fitAddon) {
-          try { fitAddon.fit(); } catch (err) {}
-        }
+        _fitTerminal();
       }, DURATION);
     } else {
       // ── Collapse ────────────────────────────────────
@@ -3090,16 +3131,7 @@ window.addEventListener('load', async () => {
   }
   alignToggleBtn();
   window.addEventListener('resize', alignToggleBtn);
-  window.addEventListener('resize', () => {
-    if (fitAddon && term) {
-      try {
-        fitAddon.fit();
-        if (wsConn && wsConn.readyState === WebSocket.OPEN) {
-          wsConn.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
-        }
-      } catch {}
-    }
-  });
+  window.addEventListener('resize', _fitTerminal);
 });
 
 
