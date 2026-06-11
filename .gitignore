@@ -50,5 +50,8 @@ simulation_state.json
 .github/
 
 # Local development artifacts
-docs/superpowers/
+docs/superpowers/plans/
 tests/
+
+# Brainstorm session content (visual companion)
+.superpowers/
