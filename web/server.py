@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from lib import xvg_parser
+from lib.system_config import validate_solution_config
 from web.llm_adapters import ADAPTERS
 from web import llm_runner
 from web.run_reader import RunInfo, list_runs, read_run
@@ -356,6 +357,7 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         tutorial_id: str = Form(""),
         llm: str = Form(""),
         auto_approve: str = Form("false"),
+        system_config: str = Form(""),
     ) -> dict:
         raw_stem = Path(pdb_file.filename or "protein").stem
         protein = re.sub(r"[^a-z0-9\-]", "", re.sub(r"^\d+", "", raw_stem).lower())[:40] or "protein"
@@ -380,6 +382,16 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         if tutorial_id:
             meta["tutorial_id"] = tutorial_id
         (ws / "meta.json").write_text(json.dumps(meta, indent=2))
+
+        if system_config.strip():
+            try:
+                config_data = json.loads(system_config)
+            except json.JSONDecodeError:
+                raise HTTPException(status_code=400, detail="system_config is not valid JSON")
+            errors = validate_solution_config(config_data)
+            if errors:
+                raise HTTPException(status_code=400, detail="; ".join(errors))
+            (ws / "system_config.json").write_text(json.dumps(config_data, indent=2))
 
         if llm and llm in ADAPTERS:
             if not llm_runner.check_cli(ADAPTERS[llm]):

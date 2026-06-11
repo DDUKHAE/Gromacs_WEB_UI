@@ -85,3 +85,44 @@ def test_preset_name_sanitized(client):
     # Special chars replaced with underscores
     names = [p["name"] for p in resp.json()]
     assert any("My_Preset" in n for n in names)
+
+
+# ── POST /api/runs with system_config ────────────────────────────────────────
+
+def test_create_run_with_system_config_saves_file(tmp_harness, client):
+    pdb_content = b"ATOM      1  CA  ALA A   1       1.000   1.000   1.000\nEND\n"
+    config_json = json.dumps(_SAMPLE_CONFIG)
+    resp = client.post(
+        "/api/runs",
+        data={"system_config": config_json},
+        files={"pdb_file": ("test.pdb", pdb_content, "chemical/x-pdb")},
+    )
+    assert resp.status_code == 201
+    run_id = resp.json()["run_id"]
+    config_path = tmp_harness / "runs" / run_id / "system_config.json"
+    assert config_path.exists()
+    saved = json.loads(config_path.read_text())
+    assert saved["builder_type"] == "solution"
+
+
+def test_create_run_with_invalid_system_config_returns_400(client):
+    pdb_content = b"ATOM      1  CA  ALA A   1       1.000   1.000   1.000\nEND\n"
+    resp = client.post(
+        "/api/runs",
+        data={"system_config": '{"box": {"type": "hexagonal"}}'},
+        files={"pdb_file": ("test.pdb", pdb_content, "chemical/x-pdb")},
+    )
+    assert resp.status_code == 400
+
+
+def test_create_run_without_system_config_succeeds(tmp_harness, client):
+    pdb_content = b"ATOM      1  CA  ALA A   1       1.000   1.000   1.000\nEND\n"
+    resp = client.post(
+        "/api/runs",
+        files={"pdb_file": ("test.pdb", pdb_content, "chemical/x-pdb")},
+    )
+    assert resp.status_code == 201
+    run_id = resp.json()["run_id"]
+    # No system_config.json created when field is absent
+    config_path = tmp_harness / "runs" / run_id / "system_config.json"
+    assert not config_path.exists()
