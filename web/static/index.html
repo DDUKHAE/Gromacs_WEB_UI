@@ -1453,6 +1453,10 @@ body.resizing * {
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
             Stop
           </button>
+          <button id="open-3d-btn" onclick="openRunIn3dViewer()"
+                  style="display:none;padding:7px 16px;border-radius:var(--radius-sm);border:1px solid var(--accent-cyan);background:transparent;color:var(--accent-cyan);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;">
+            3D Viewer
+          </button>
         </div>
       </header>
 
@@ -2023,6 +2027,8 @@ function showNewRunForm() {
   document.getElementById('view-title').textContent = 'New Run Type';
   document.getElementById('btn-continue').style.display = 'none';
   document.getElementById('btn-abort').style.display = 'none';
+  const _o3d = document.getElementById('open-3d-btn');
+  if (_o3d) _o3d.style.display = 'none';
   document.querySelectorAll('.run-item').forEach(el => el.classList.remove('active'));
   currentRunId = null;
   stopWs();
@@ -2202,6 +2208,11 @@ function updateButtons(status) {
                   aborted: 'badge-aborted' }[status] || 'badge-aborted';
     termStatus.className = 'run-item-badge ' + cls;
     termStatus.textContent = status;
+  }
+
+  const open3dBtn = document.getElementById('open-3d-btn');
+  if (open3dBtn) {
+    open3dBtn.style.display = (status === 'done' || status === 'completed') ? 'inline-block' : 'none';
   }
 }
 
@@ -3290,6 +3301,53 @@ window.addEventListener('beforeunload', () => {
   clearInterval(pollTimer);
   stopWs();
 });
+
+async function openRunIn3dViewer() {
+  const runId = currentRunId;
+  if (!runId) return;
+
+  const resp = await fetch('/api/runs/' + runId + '/mol_files');
+  if (!resp.ok) { alert('파일 목록 조회 실패'); return; }
+  const files = await resp.json();
+
+  const structs = files.filter(f => f.endsWith('.gro') || f.endsWith('.pdb'));
+  const trajs   = files.filter(f => f.endsWith('.xtc'));
+
+  if (structs.length === 0) {
+    alert('로드 가능한 구조 파일(.gro/.pdb)이 없습니다.');
+    return;
+  }
+
+  // Prefer npt.gro > em.gro > last in list
+  const structName = structs.includes('npt.gro') ? 'npt.gro'
+                   : structs.includes('em.gro')  ? 'em.gro'
+                   : structs[structs.length - 1];
+
+  // Switch to visualization view, 3D tab
+  selectRunType('visualization');
+  switchVizTab('3d');
+
+  // Load structure
+  await _loadRunFileIntoNgl(runId, structName, 'struct');
+
+  // Load trajectory if available (prefer md_0_10.xtc > last xtc)
+  if (trajs.length > 0) {
+    const trajName = trajs.includes('md_0_10.xtc') ? 'md_0_10.xtc' : trajs[trajs.length - 1];
+    await _loadRunFileIntoNgl(runId, trajName, 'traj');
+  }
+}
+
+async function _loadRunFileIntoNgl(runId, filename, role) {
+  const resp = await fetch('/api/runs/' + runId + '/file/' + encodeURIComponent(filename));
+  if (!resp.ok) { console.warn('파일 서빙 실패: ' + filename); return; }
+  const buf  = await resp.arrayBuffer();
+  const file = new File([buf], filename);
+  if (role === 'struct') {
+    await handleMolStructFile(file);
+  } else {
+    await handleMolTrajFile(file);
+  }
+}
 
 </script>
 <script src="/static/xterm.js"></script>
