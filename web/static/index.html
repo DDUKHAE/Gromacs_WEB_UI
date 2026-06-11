@@ -1572,6 +1572,20 @@ body.resizing * {
           </div>
           <div id="gallery-grid"></div>
         </div>
+
+        <!-- Tutorial Audit Panel -->
+        <div id="audit-panel" class="card" style="display:none; margin-top:12px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 16px 0; cursor:pointer;" onclick="toggleAuditPanel()">
+            <span style="font-size:13px; font-weight:700; color:var(--text-primary);">
+              <span id="audit-badge" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--accent-green); margin-right:8px; vertical-align:middle;"></span>
+              Tutorial Audit
+            </span>
+            <span id="audit-chevron" style="font-size:11px; color:var(--text-muted);">▼</span>
+          </div>
+          <div id="audit-body" style="padding:12px 16px 16px; display:none;">
+            <div id="audit-content" style="font-size:12px;"></div>
+          </div>
+        </div>
       </div>
 
       <!-- New Run Form -->
@@ -2401,6 +2415,11 @@ async function selectRun(runId, reconnectWs = true) {
   _mdProgressStart = null;
   const _badge = document.getElementById('md-progress-badge');
   if (_badge) _badge.style.display = 'none';
+  _auditOpen = false;
+  const _auditBody = document.getElementById('audit-body');
+  if (_auditBody) _auditBody.style.display = 'none';
+  const _auditChevron = document.getElementById('audit-chevron');
+  if (_auditChevron) _auditChevron.textContent = '▼';
 
   // 사이드바 active 상태 갱신
   document.querySelectorAll('.run-item').forEach(el => {
@@ -2430,8 +2449,10 @@ async function selectRun(runId, reconnectWs = true) {
 
     if (info.status === 'completed') {
       loadArtifacts(runId);
+      loadAudit(runId);
     } else {
       document.getElementById('gallery-panel').style.display = 'none';
+      document.getElementById('audit-panel').style.display = 'none';
     }
   } catch (e) {
     showToast('서버 연결 오류', 'error');
@@ -2577,6 +2598,7 @@ async function loadRuns() {
             updateButtons(detail.status);
             if (detail.status === 'completed') {
               loadArtifacts(runIdSnapshot);
+              loadAudit(runIdSnapshot);
             }
             // Refresh progress badge every 2s while MD is running
             if (detail.status === 'running' && (detail.current_step || 0) >= 6) {
@@ -2922,6 +2944,59 @@ async function loadArtifacts(runId) {
     });
   } catch (e) {
     console.error('loadArtifacts:', e);
+    panel.style.display = 'none';
+  }
+}
+
+let _auditOpen = false;
+
+function toggleAuditPanel() {
+  _auditOpen = !_auditOpen;
+  const body = document.getElementById('audit-body');
+  const chevron = document.getElementById('audit-chevron');
+  if (body) body.style.display = _auditOpen ? 'block' : 'none';
+  if (chevron) chevron.textContent = _auditOpen ? '▲' : '▼';
+}
+
+async function loadAudit(runId) {
+  const panel = document.getElementById('audit-panel');
+  const content = document.getElementById('audit-content');
+  const badge = document.getElementById('audit-badge');
+  if (!panel || !content) return;
+  try {
+    const resp = await fetch(`/api/runs/${runId}/audit`);
+    if (!resp.ok) { panel.style.display = 'none'; return; }
+    const report = await resp.json();
+
+    panel.style.display = '';
+
+    // Badge color: green if all pass or n/a, red if any fail
+    const hasFail = report.failed > 0;
+    if (badge) badge.style.background = hasFail ? 'var(--accent-red)' : 'var(--accent-green)';
+
+    if (!report.tutorial_id) {
+      content.innerHTML = '<span style="color:var(--text-muted);">튜토리얼이 선택되지 않았습니다.</span>';
+      return;
+    }
+
+    const rows = report.items.map(item => {
+      const color = item.status === 'pass' ? 'var(--accent-green)'
+                  : item.status === 'fail' ? 'var(--accent-red)'
+                  : 'var(--text-muted)';
+      const icon = item.status === 'pass' ? '✓' : item.status === 'fail' ? '✗' : '—';
+      return `
+        <div style="display:flex; align-items:baseline; gap:8px; padding:5px 0; border-bottom:1px solid var(--border-color);">
+          <span style="color:${color}; font-weight:700; width:14px; flex-shrink:0;">${icon}</span>
+          <span style="color:var(--text-secondary); width:110px; flex-shrink:0;">${escapeHtml(item.key)}</span>
+          <span style="color:var(--text-muted); flex:1;">expected: <code style="color:var(--accent-cyan)">${escapeHtml(item.expected)}</code></span>
+          <span style="color:${color}; flex:1;">actual: <code>${escapeHtml(item.actual)}</code></span>
+        </div>`;
+    }).join('');
+
+    const summary = `<div style="margin-bottom:10px; font-size:11px; color:var(--text-muted);">Tutorial: <strong style="color:var(--text-primary)">${escapeHtml(report.tutorial_id)}</strong> — ${report.passed} passed, ${report.failed} failed</div>`;
+    content.innerHTML = summary + rows;
+  } catch (e) {
+    console.error('loadAudit:', e);
     panel.style.display = 'none';
   }
 }
