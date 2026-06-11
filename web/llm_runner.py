@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from web.llm_adapters import ADAPTERS, LLMAdapter
+from lib.system_config import load_config, build_constraint_prompt
 
 _ANSI_RE = re.compile(r"\x1b(?:\[[0-9;]*[mGKHFABCDJsr]|\[\?[0-9;]*[hlr]|[=>])")
 
@@ -38,6 +39,14 @@ _PERM_RE = re.compile(
 
 def strip_ansi(text: str) -> str:
     return _ANSI_RE.sub("", text)
+
+
+def _apply_system_config_constraint(workspace: Path) -> str:
+    """Return constraint block if system_config.json exists, else empty string."""
+    config = load_config(workspace)
+    if config is None:
+        return ""
+    return build_constraint_prompt(config)
 
 
 @dataclass
@@ -85,6 +94,7 @@ async def run_llm_agent(
 
     cmd    = adapter.build_command(auto_approve)
     prompt = adapter.build_prompt(harness_dir, workspace, pdb_path)
+    prompt += _apply_system_config_constraint(workspace)
 
     master_fd, slave_fd = pty.openpty()
     set_winsize(master_fd, rows=50, cols=220)
