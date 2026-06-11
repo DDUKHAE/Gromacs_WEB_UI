@@ -1860,6 +1860,7 @@ let wsConn = null;
 let _nglStage = null;
 let _nglComp     = null;
 let _trajPlaying = false;
+let _trajBlobUrl = null;
 
 function initNglStage() {
   const viewport = document.getElementById('ngl-viewport');
@@ -1868,7 +1869,10 @@ function initNglStage() {
   _nglStage = new NGL.Stage(viewport, {
     backgroundColor: isDark ? '#0b0f24' : '#f0f2f5',
   });
-  window.addEventListener('resize', () => { if (_nglStage) _nglStage.handleResize(); });
+  if (!initNglStage._resizeAttached) {
+    window.addEventListener('resize', () => { if (_nglStage) _nglStage.handleResize(); });
+    initNglStage._resizeAttached = true;
+  }
 }
 
 async function handleMolStructFile(file) {
@@ -1899,9 +1903,15 @@ async function handleMolTrajFile(file) {
   document.getElementById('mol-traj-drop').textContent = file.name;
   const buf = await file.arrayBuffer();
   const blob = new Blob([buf]);
-  const url = URL.createObjectURL(blob);
+  // Remove existing trajectories to avoid accumulation
+  _nglComp.trajList.slice().forEach(t => _nglComp.removeTrajectory(t));
+  _trajPlaying = false;
+  document.getElementById('traj-play-btn').textContent = '▶ Play';
+  // Revoke previous blob URL before creating a new one
+  if (_trajBlobUrl) { URL.revokeObjectURL(_trajBlobUrl); _trajBlobUrl = null; }
+  _trajBlobUrl = URL.createObjectURL(blob);
   try {
-    await _nglComp.addTrajectory(url, { ext: 'xtc' });
+    await _nglComp.addTrajectory(_trajBlobUrl, { ext: 'xtc' });
     const traj = _nglComp.trajList[0];
     const frameCount = (traj && traj.trajectory && traj.trajectory.frameCount) || 0;
     const slider = document.getElementById('traj-frame-slider');
@@ -1911,8 +1921,6 @@ async function handleMolTrajFile(file) {
     document.getElementById('traj-controls').style.display = 'flex';
   } catch (e) {
     alert('궤적 파일 로드 실패: ' + e.message);
-  } finally {
-    URL.revokeObjectURL(url);
   }
 }
 
@@ -1925,10 +1933,12 @@ function toggleTrajPlay() {
     btn.textContent = '▶ Play';
     _trajPlaying = false;
   } else {
-    const frameCount = (traj.trajectory.frameCount) || 1;
-    traj.trajectory.player = new NGL.TrajectoryPlayer(traj.trajectory, {
-      step: 1, timeout: 50, start: 0, end: frameCount - 1, interpolateType: '',
-    });
+    if (!traj.trajectory.player) {
+      const frameCount = traj.trajectory.frameCount || 1;
+      traj.trajectory.player = new NGL.TrajectoryPlayer(traj.trajectory, {
+        step: 1, timeout: 50, start: 0, end: frameCount - 1,
+      });
+    }
     traj.trajectory.player.play();
     btn.textContent = '⏸ Pause';
     _trajPlaying = true;
