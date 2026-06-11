@@ -99,3 +99,18 @@ def summary(path: Path, column: int = 1) -> dict[str, float]:
     if len(cols) <= column:
         return {"count": 0}
     return _col_summary(cols[column])
+
+
+def running_average(data: list[float], window: int) -> list[float]:
+    """Return centered running average of data with the given window size."""
+    if not data:
+        return []
+    half = window // 2
+    result = []
+    n = len(data)
+    for i in range(n):
+        start = max(0, i - half)
+        end = min(n, i + half + 1)
+        chunk = data[start:end]
+        result.append(sum(chunk) / len(chunk))
+    return result
