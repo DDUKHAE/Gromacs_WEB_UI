@@ -1896,6 +1896,7 @@ body.resizing * {
 let currentRunId = null;
 let runsData = [];
 let pollTimer = null;
+let _lastKnownStatus = null;
 let wsConn = null;
 let _nglStage = null;
 let _nglComp     = null;
@@ -2360,6 +2361,7 @@ function connectWs(runId) {
 
 async function selectRun(runId, reconnectWs = true) {
   currentRunId = runId;
+  _lastKnownStatus = null;
 
   // 사이드바 active 상태 갱신
   document.querySelectorAll('.run-item').forEach(el => {
@@ -2521,16 +2523,26 @@ async function loadRuns() {
 
     // Refresh stepper/buttons for the currently displayed run
     const activeRun = runsData.find(r => r.run_id === currentRunId);
-    if (activeRun && (activeRun.status === 'running' || activeRun.status === 'paused')) {
-      const runIdSnapshot = currentRunId;
-      try {
-        const detailResp = await fetch(`/api/runs/${runIdSnapshot}`);
-        if (detailResp.ok && currentRunId === runIdSnapshot) {
-          const detail = await detailResp.json();
-          updateStepper(detail);
-          updateButtons(detail.status);
-        }
-      } catch (_) {}
+    if (activeRun) {
+      const wasRunning = _lastKnownStatus === 'running' || _lastKnownStatus === 'paused';
+      const nowCompleted = activeRun.status === 'completed';
+      const nowRunningOrPaused = activeRun.status === 'running' || activeRun.status === 'paused';
+
+      if (nowRunningOrPaused || (wasRunning && nowCompleted)) {
+        const runIdSnapshot = currentRunId;
+        try {
+          const detailResp = await fetch(`/api/runs/${runIdSnapshot}`);
+          if (detailResp.ok && currentRunId === runIdSnapshot) {
+            const detail = await detailResp.json();
+            updateStepper(detail);
+            updateButtons(detail.status);
+            if (detail.status === 'completed') {
+              loadArtifacts(runIdSnapshot);
+            }
+          }
+        } catch (_) {}
+      }
+      _lastKnownStatus = activeRun.status;
     }
 
     const interval = activeRun && activeRun.status === 'running' ? 2000 : 5000;
