@@ -266,6 +266,34 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
                 pass
         return results
 
+    _MOL_EXTENSIONS = {'.gro', '.pdb', '.xtc', '.tpr'}
+
+    @app.get("/api/runs/{run_id}/mol_files")
+    def api_list_mol_files(run_id: str, hd: HarnessDir) -> list[str]:
+        workspace = _check_run_id(run_id, hd / "runs")
+        ws_resolved = workspace.resolve()
+        found = set()
+        for ext in _MOL_EXTENSIONS:
+            for f in workspace.rglob(f"*{ext}"):
+                if str(f.resolve()).startswith(str(ws_resolved)):
+                    found.add(f.name)
+        return sorted(found)
+
+    @app.get("/api/runs/{run_id}/file/{filename}")
+    def api_get_run_file(run_id: str, filename: str, hd: HarnessDir):
+        if "/" in filename or "\\" in filename or ".." in filename:
+            raise HTTPException(status_code=400, detail="invalid filename")
+        ext = Path(filename).suffix.lower()
+        if ext not in _MOL_EXTENSIONS:
+            raise HTTPException(status_code=400, detail="file type not allowed")
+        workspace = _check_run_id(run_id, hd / "runs")
+        ws_resolved = workspace.resolve()
+        for candidate in workspace.rglob(filename):
+            resolved = candidate.resolve()
+            if str(resolved).startswith(str(ws_resolved)):
+                return FileResponse(str(resolved), filename=filename)
+        raise HTTPException(status_code=404, detail="file not found")
+
     @app.post("/api/runs", status_code=201)
     async def api_create_run(
         hd: HarnessDir,
