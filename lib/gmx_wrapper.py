@@ -117,11 +117,14 @@ def run(args: Sequence[str], cwd: Path,
         env=merged_env,
     )
 
+    log_lock = threading.Lock()
+
     def _reader(stream, buf: list[str], log_fh) -> None:
         for line in stream:
             buf.append(line)
-            log_fh.write(line)
-            log_fh.flush()
+            with log_lock:
+                log_fh.write(line)
+                log_fh.flush()
 
     with open(progress_log, "a", encoding="utf-8", errors="replace") as log_fh:
         t_out = threading.Thread(target=_reader, args=(proc.stdout, stdout_buf, log_fh), daemon=True)
@@ -133,8 +136,14 @@ def run(args: Sequence[str], cwd: Path,
                 proc.stdin.close()
             except OSError:
                 pass
-        proc.wait(timeout=timeout)
-        t_out.join(); t_err.join()
+        try:
+            proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+        finally:
+            t_out.join()
+            t_err.join()
 
     stdout = "".join(stdout_buf)
     stderr = "".join(stderr_buf)
