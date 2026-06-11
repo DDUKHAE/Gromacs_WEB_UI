@@ -312,8 +312,12 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         if not workspace.is_dir():
             raise HTTPException(status_code=404, detail="run not found")
         from lib.tutorial_auditor import audit_run
+        from lib.system_config_validator import validate_run_against_config
         report = audit_run(workspace)
-        return report.to_dict()
+        config_report = validate_run_against_config(workspace)
+        result = report.to_dict()
+        result["config_audit"] = config_report.to_dict()
+        return result
 
     _MOL_EXTENSIONS = {'.gro', '.pdb', '.xtc', '.tpr'}
 
