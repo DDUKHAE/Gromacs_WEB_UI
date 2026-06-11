@@ -98,6 +98,14 @@ def run_phase(workspace_dir: Path, phase: str,
     s["current_step"] = 7
     state.write(ws, s)
 
+    # Record completed phase in sequence for audit
+    s = state.read(ws)
+    step7 = s["step_outputs"].setdefault("step_7", {})
+    phase_seq = step7.setdefault("phase_sequence", [])
+    if phase not in phase_seq:
+        phase_seq.append(phase)
+    state.write(ws, s)
+
 
 class PhaseFatal(Exception):
     pass

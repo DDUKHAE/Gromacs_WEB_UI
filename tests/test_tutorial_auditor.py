@@ -76,3 +76,33 @@ def test_audit_no_tutorial_returns_na(tmp_path):
     report = audit_run(tmp_path)
     assert report.tutorial_id is None
     assert all(i.status == "n/a" for i in report.items)
+
+
+from unittest.mock import patch, MagicMock
+from lib import state as state_lib
+from skills.md_runner import md_runner as MD
+
+
+def test_run_phase_records_phase_to_state(tmp_path):
+    """run_phase() must append the phase name to step_7.phase_sequence in state.json."""
+    ws = tmp_path
+    s = state_lib.initial(ws)
+    s["hardware"] = {"ntomp": 1}
+    state_lib.write(ws, s)
+
+    stage2 = ws / "stage2_md"
+    stage2.mkdir()
+    (ws / "stage1_env").mkdir()
+    (ws / "stage1_env" / "ions.gro").write_text("fake")
+    (ws / "stage1_env" / "topol.top").write_text("fake")
+
+    fake_result = MagicMock()
+    fake_result.ok = True
+
+    with patch("skills.md_runner.md_runner.MDP.render", return_value=stage2 / "em.mdp") as _m, \
+         patch("skills.md_runner.md_runner.GW.run", return_value=fake_result) as _g:
+        MD.run_phase(ws, "em")
+
+    updated = state_lib.read(ws)
+    seq = updated.get("step_outputs", {}).get("step_7", {}).get("phase_sequence", [])
+    assert "em" in seq
