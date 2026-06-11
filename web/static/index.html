@@ -2074,6 +2074,7 @@ async function startRun() {
 
 function stopWs() {
   if (wsConn) { wsConn.close(); wsConn = null; }
+  if (_fitTimer) { clearTimeout(_fitTimer); _fitTimer = null; }
   if (term) { term.dispose(); term = null; fitAddon = null; }
   clearTimeout(chatPollTimer);
   chatPollTimer = null;
@@ -2286,6 +2287,7 @@ function initTerminal() {
   const fallback = document.getElementById('fallback-terminal-text');
   if (fallback) fallback.style.display = 'none';
 
+  if (_fitTimer) { clearTimeout(_fitTimer); _fitTimer = null; }
   if (term) { term.dispose(); term = null; fitAddon = null; }
 
   if (typeof Terminal === 'undefined') {
