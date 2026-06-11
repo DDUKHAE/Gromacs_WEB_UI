@@ -2398,6 +2398,9 @@ function connectWs(runId) {
 async function selectRun(runId, reconnectWs = true) {
   currentRunId = runId;
   _lastKnownStatus = null;
+  _mdProgressStart = null;
+  const _badge = document.getElementById('md-progress-badge');
+  if (_badge) _badge.style.display = 'none';
 
   // 사이드바 active 상태 갱신
   document.querySelectorAll('.run-item').forEach(el => {
