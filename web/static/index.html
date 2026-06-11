@@ -836,6 +836,45 @@ body.light-theme .chart-card-title {
   font-weight: 600;
 }
 
+/* System Builder Wizard */
+#wizard-nav {
+  display: flex;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 18px;
+  gap: 0;
+}
+.wiz-tab {
+  padding: 7px 13px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  cursor: default;
+  transition: color 0.15s;
+}
+.wiz-tab.active { color: var(--accent-primary); border-bottom-color: var(--accent-primary); }
+.wiz-tab.done   { color: var(--accent-green);   border-bottom-color: var(--accent-green); }
+.wiz-section    { display: none; }
+.wiz-section.active { display: block; }
+#wiz-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+.expert-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  border-top: 1px solid var(--border-color);
+  margin-top: 8px;
+}
+
 /* New Run */
 #new-run-view,
 #new-run-select-view,
@@ -1591,108 +1630,190 @@ body.resizing * {
       <!-- New Run Form -->
       <div id="new-run-view">
         <form id="new-run-form" onsubmit="event.preventDefault(); startRun();" aria-label="새 시뮬레이션 실행 설정">
-          <h2>Simulation Run</h2>
-          
-          <div id="drop-zone"
-            onclick="document.getElementById('pdb-input').click()"
-            ondragover="event.preventDefault(); this.style.borderColor='var(--accent-primary)'"
-            ondragleave="this.style.borderColor=''"
-            ondrop="event.preventDefault(); this.style.borderColor=''; handleFileSelect(event.dataTransfer.files[0])">
-            <div class="upload-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-            </div>
-            <p>Drop PDB file here</p>
-            <small>or click to browse from files</small>
-            <div id="selected-file"></div>
+          <h2>System Builder</h2>
+
+          <!-- Wizard nav tabs -->
+          <div id="wizard-nav">
+            <div class="wiz-tab active" id="wiz-tab-1">1. Structure</div>
+            <div class="wiz-tab" id="wiz-tab-2">2. Force Field</div>
+            <div class="wiz-tab" id="wiz-tab-3">3. Box</div>
+            <div class="wiz-tab" id="wiz-tab-4">4. Ions</div>
+            <div class="wiz-tab" id="wiz-tab-5" style="display:none">5. Simulation</div>
+            <div class="wiz-tab" id="wiz-tab-6">6. Start</div>
           </div>
-          
-          <input type="file" id="pdb-input" accept=".pdb" onchange="handleFileSelect(this.files[0])">
-          
-          <div class="param-grid">
-            <div class="param-field">
-              <label>Forcefield
-                <span class="tooltip-wrap">
-                  <button type="button" class="tooltip-btn">?</button>
-                  <div class="tooltip-content">
-                    <strong>Force Field</strong>
-                    A set of empirical potential energy functions and parameters describing bonded (bond stretching, angle bending, dihedral torsions) and non-bonded (Lennard-Jones, Coulombic) interactions.<br>
-                  </div>
-                </span>
-                <button type="button" id="ff-manager-btn" title="Force Field 추가"
-                  style="margin-left:6px;padding:2px;font-size:16px;line-height:1;border:none;background:transparent;color:var(--text-secondary);cursor:pointer;vertical-align:middle;">+</button>
-              </label>
-              <select name="forcefield" id="forcefield-select">
-                <option value="">Loading...</option>
-              </select>
+
+          <!-- Step 1: PDB Upload -->
+          <div class="wiz-section active" id="wiz-section-1">
+            <div id="drop-zone"
+              onclick="document.getElementById('pdb-input').click()"
+              ondragover="event.preventDefault(); this.style.borderColor='var(--accent-primary)'"
+              ondragleave="this.style.borderColor=''"
+              ondrop="event.preventDefault(); this.style.borderColor=''; handleFileSelect(event.dataTransfer.files[0])">
+              <div class="upload-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+              </div>
+              <p>Drop PDB file here</p>
+              <small>or click to browse from files</small>
+              <div id="selected-file"></div>
             </div>
-            <div class="param-field">
-              <label>Water Model
-                <span class="tooltip-wrap">
-                  <button type="button" class="tooltip-btn">?</button>
-                  <div class="tooltip-content">
-                    <strong>Solvent Water Model</strong>
-                    An explicit point-charge representation of water defining molecular geometry and partial charge distribution. Governs dielectric screening, solvation shell structure, and diffusion properties.<br>
-                  </div>
-                </span>
-              </label>
-              <select name="water" id="water-select">
-                <option value="">Select forcefield first</option>
-              </select>
-            </div>
-            <div class="param-field">
-              <label>Tutorial
-                <span class="tooltip-wrap">
-                  <button type="button" class="tooltip-btn">?</button>
-                  <div class="tooltip-content">
-                    <strong>Simulation Protocol</strong>
-                    Selects the GROMACS tutorial workflow that governs the pipeline. Each tutorial defines system-specific MD parameters, equilibration strategy, and analysis steps.
-                  </div>
-                </span>
-              </label>
-              <select name="tutorial_id" id="tutorial-select">
-                <option value="">Auto-detect</option>
-              </select>
-            </div>
-            <div class="param-field">
-              <label>Box Type
-                <span class="tooltip-wrap">
-                  <button type="button" class="tooltip-btn">?</button>
-                  <div class="tooltip-content">
-                    <strong>Periodic Unit Cell Geometry</strong>
-                    Defines the shape of the simulation box used to impose periodic boundary conditions (PBC), eliminating surface artifacts and enabling bulk-phase sampling.<br>
-                  </div>
-                </span>
-              </label>
-              <select name="box_type">
-                <option value="dodecahedron">Dodecahedron</option>
-                <option value="cubic">Cubic</option>
-                <option value="triclinic">Triclinic</option>
-              </select>
+            <input type="file" id="pdb-input" accept=".pdb" onchange="handleFileSelect(this.files[0])">
+            <div class="expert-row">
+              <input type="checkbox" id="expert-toggle" onchange="wizardToggleExpert(this.checked)">
+              <label for="expert-toggle">Expert Mode — configure simulation parameters (Step 5)</label>
             </div>
           </div>
 
-          <div class="llm-section">
-            <div class="llm-section-title">LLM AI Copilot Agent</div>
+          <!-- Step 2: Force Field & Water Model -->
+          <div class="wiz-section" id="wiz-section-2">
             <div class="param-grid">
               <div class="param-field">
-                <label>Select Agent Model</label>
-                <select name="llm" id="llm-select">
-                  <option value="">None (direct pipeline)</option>
-                  <option value="gemini">Gemini 3.5 Flash</option>
-                  <option value="claude">Claude 3.5 Sonnet</option>
+                <label>Force Field
+                  <button type="button" id="ff-manager-btn" title="Force Field 추가"
+                    style="margin-left:6px;padding:2px;font-size:16px;line-height:1;border:none;background:transparent;color:var(--text-secondary);cursor:pointer;vertical-align:middle;">+</button>
+                </label>
+                <select name="forcefield" id="forcefield-select">
+                  <option value="">Loading...</option>
                 </select>
               </div>
               <div class="param-field">
-                <label>Permission Mode</label>
-                <select name="auto_approve">
-                  <option value="false">Interactive approvals</option>
-                  <option value="true">Auto-approve actions</option>
+                <label>Water Model</label>
+                <select name="water" id="water-select">
+                  <option value="">Select forcefield first</option>
+                </select>
+              </div>
+              <div class="param-field">
+                <label>Tutorial</label>
+                <select name="tutorial_id" id="tutorial-select">
+                  <option value="">Auto-detect</option>
                 </select>
               </div>
             </div>
           </div>
-          
-          <button type="submit" id="btn-start" disabled>Start Simulation Run</button>
+
+          <!-- Step 3: Box Settings -->
+          <div class="wiz-section" id="wiz-section-3">
+            <div class="param-grid">
+              <div class="param-field">
+                <label>Box Type</label>
+                <select name="box_type" id="box-type-select">
+                  <option value="dodecahedron">Dodecahedron (recommended)</option>
+                  <option value="cubic">Cubic</option>
+                  <option value="octahedron">Octahedron</option>
+                </select>
+              </div>
+              <div class="param-field">
+                <label>Edge Distance (nm)
+                  <span style="font-size:11px;color:var(--text-secondary);font-weight:400;"> — min gap from molecule to box wall</span>
+                </label>
+                <input type="number" id="edge-distance" name="edge_distance_nm" value="1.0" min="0.5" max="5.0" step="0.1" style="background:var(--bg-input);border:1px solid var(--border-color);color:var(--text-primary);padding:6px 8px;border-radius:4px;width:100%;box-sizing:border-box;">
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 4: Ion Settings -->
+          <div class="wiz-section" id="wiz-section-4">
+            <div class="param-grid">
+              <div class="param-field">
+                <label>Salt Type</label>
+                <select id="ion-salt-type" name="salt_type">
+                  <option value="NaCl">NaCl (physiological)</option>
+                  <option value="KCl">KCl</option>
+                  <option value="MgCl2">MgCl₂</option>
+                  <option value="CaCl2">CaCl₂</option>
+                </select>
+              </div>
+              <div class="param-field">
+                <label>Concentration (M)</label>
+                <input type="number" id="ion-concentration" name="concentration_M" value="0.15" min="0" max="2" step="0.01" style="background:var(--bg-input);border:1px solid var(--border-color);color:var(--text-primary);padding:6px 8px;border-radius:4px;width:100%;box-sizing:border-box;">
+              </div>
+            </div>
+            <div class="expert-row" style="border-top:none;padding-top:0;">
+              <input type="checkbox" id="ion-neutralize" checked>
+              <label for="ion-neutralize">Neutralize system charge (add/remove ions to reach net charge 0)</label>
+            </div>
+          </div>
+
+          <!-- Step 5: Simulation Parameters (Expert only) -->
+          <div class="wiz-section" id="wiz-section-5">
+            <div class="param-grid">
+              <div class="param-field">
+                <label>Temperature (K)</label>
+                <input type="number" id="sim-temperature" name="temperature_K" value="300" min="200" max="500" style="background:var(--bg-input);border:1px solid var(--border-color);color:var(--text-primary);padding:6px 8px;border-radius:4px;width:100%;box-sizing:border-box;">
+              </div>
+              <div class="param-field">
+                <label>Pressure (bar)</label>
+                <input type="number" id="sim-pressure" name="pressure_bar" value="1.0" min="0.1" max="10" step="0.1" style="background:var(--bg-input);border:1px solid var(--border-color);color:var(--text-primary);padding:6px 8px;border-radius:4px;width:100%;box-sizing:border-box;">
+              </div>
+              <div class="param-field">
+                <label>Simulation Time (ns)</label>
+                <input type="number" id="sim-time" name="sim_time_ns" value="1.0" min="0.001" max="1000" step="0.1" style="background:var(--bg-input);border:1px solid var(--border-color);color:var(--text-primary);padding:6px 8px;border-radius:4px;width:100%;box-sizing:border-box;">
+              </div>
+              <div class="param-field">
+                <label>Thermostat</label>
+                <select id="sim-thermostat" name="thermostat">
+                  <option value="V-rescale">V-rescale (recommended)</option>
+                  <option value="Nosé-Hoover">Nosé-Hoover</option>
+                </select>
+              </div>
+              <div class="param-field">
+                <label>Barostat</label>
+                <select id="sim-barostat" name="barostat">
+                  <option value="Parrinello-Rahman">Parrinello-Rahman (recommended)</option>
+                  <option value="Berendsen">Berendsen</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 6: Summary + Preset + LLM + Start -->
+          <div class="wiz-section" id="wiz-section-6">
+            <div id="wiz-summary" style="background:var(--bg-secondary);border-radius:6px;padding:12px 14px;font-size:12px;margin-bottom:14px;line-height:1.8;"></div>
+
+            <div class="param-grid" style="margin-bottom:10px;">
+              <div class="param-field">
+                <label>Save as Preset (optional)</label>
+                <div style="display:flex;gap:6px;">
+                  <input type="text" id="preset-name-input" placeholder="e.g. Lysozyme Standard" style="flex:1;background:var(--bg-input);border:1px solid var(--border-color);color:var(--text-primary);padding:6px 8px;border-radius:4px;">
+                  <button type="button" onclick="wizardSavePreset()" style="padding:6px 12px;background:var(--accent-secondary);color:var(--text-primary);border:none;border-radius:4px;cursor:pointer;font-size:12px;">Save</button>
+                </div>
+              </div>
+              <div class="param-field">
+                <label>Load Preset</label>
+                <select id="preset-load-select" onchange="wizardLoadPreset(this.value)">
+                  <option value="">— select preset —</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="llm-section">
+              <div class="llm-section-title">LLM AI Copilot Agent</div>
+              <div class="param-grid">
+                <div class="param-field">
+                  <label>Select Agent Model</label>
+                  <select name="llm" id="llm-select">
+                    <option value="">None (direct pipeline)</option>
+                    <option value="gemini">Gemini 3.5 Flash</option>
+                    <option value="claude">Claude 3.5 Sonnet</option>
+                  </select>
+                </div>
+                <div class="param-field">
+                  <label>Permission Mode</label>
+                  <select name="auto_approve">
+                    <option value="false">Interactive approvals</option>
+                    <option value="true">Auto-approve actions</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <button type="submit" id="btn-start" disabled>Start Simulation Run</button>
+          </div>
+
+          <!-- Wizard footer navigation -->
+          <div id="wiz-footer">
+            <button type="button" id="wiz-back-btn" onclick="wizardBack()" style="display:none;padding:7px 16px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border-color);border-radius:4px;cursor:pointer;font-size:13px;">← Back</button>
+            <button type="button" id="wiz-next-btn" onclick="wizardNext()" style="padding:7px 16px;background:var(--accent-primary);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:13px;">Next →</button>
+          </div>
         </form>
         <!-- Right Arrow Navigation Button to Visualization -->
         <button type="button" class="nav-arrow-btn" onclick="selectRunType('visualization')" style="right: 24px;" title="Go to Visualization">
@@ -2058,18 +2179,196 @@ function handleFileSelect(file) {
   document.getElementById('btn-start').disabled = false;
 }
 
+// ── System Builder Wizard ─────────────────────────────────────────────────────
+
+let _wizardStep = 1;
+let _wizardExpert = false;
+
+function _wizardVisibleSteps() {
+  return _wizardExpert ? [1,2,3,4,5,6] : [1,2,3,4,6];
+}
+
+function _wizardNextStep(current) {
+  const steps = _wizardVisibleSteps();
+  const idx = steps.indexOf(current);
+  return idx < steps.length - 1 ? steps[idx + 1] : current;
+}
+
+function _wizardPrevStep(current) {
+  const steps = _wizardVisibleSteps();
+  const idx = steps.indexOf(current);
+  return idx > 0 ? steps[idx - 1] : current;
+}
+
+function wizardToggleExpert(on) {
+  _wizardExpert = on;
+  document.getElementById('wiz-tab-5').style.display = on ? '' : 'none';
+}
+
+function _wizardShowStep(step) {
+  _wizardStep = step;
+  for (let i = 1; i <= 6; i++) {
+    const sec = document.getElementById(`wiz-section-${i}`);
+    if (sec) sec.classList.toggle('active', i === step);
+  }
+  const visible = _wizardVisibleSteps();
+  for (let i = 1; i <= 6; i++) {
+    const tab = document.getElementById(`wiz-tab-${i}`);
+    if (!tab) continue;
+    tab.classList.remove('active', 'done');
+    if (i === step) tab.classList.add('active');
+    else if (visible.indexOf(i) !== -1 && visible.indexOf(i) < visible.indexOf(step)) tab.classList.add('done');
+  }
+  const backBtn = document.getElementById('wiz-back-btn');
+  const nextBtn = document.getElementById('wiz-next-btn');
+  const isFirst = visible.indexOf(step) === 0;
+  const isLast  = step === 6;
+  backBtn.style.display = isFirst ? 'none' : '';
+  nextBtn.style.display = isLast ? 'none' : '';
+  if (step === 6) { _wizardBuildSummary(); wizardLoadPresets(); }
+}
+
+function wizardNext() {
+  if (_wizardStep === 1 && !selectedPdb) {
+    showToast('Please upload a PDB file first', 'error');
+    return;
+  }
+  const next = _wizardNextStep(_wizardStep);
+  if (next !== _wizardStep) _wizardShowStep(next);
+}
+
+function wizardBack() {
+  const prev = _wizardPrevStep(_wizardStep);
+  if (prev !== _wizardStep) _wizardShowStep(prev);
+}
+
+function _wizardCollectConfig() {
+  const ff    = document.getElementById('forcefield-select')?.value || '';
+  const water = document.getElementById('water-select')?.value || '';
+  const boxType = document.getElementById('box-type-select')?.value || 'dodecahedron';
+  const edgeDist = parseFloat(document.getElementById('edge-distance')?.value || '1.0');
+  const saltType = document.getElementById('ion-salt-type')?.value || 'NaCl';
+  const conc = parseFloat(document.getElementById('ion-concentration')?.value || '0.15');
+  const neutralize = document.getElementById('ion-neutralize')?.checked ?? true;
+
+  const config = {
+    version: '1.0',
+    builder_type: 'solution',
+    structure: { pdb_filename: selectedPdb?.name || '' },
+    forcefield: { name: ff, water_model: water, terminal_patches: 'auto' },
+    box: { type: boxType, edge_distance_nm: edgeDist },
+    ions: { salt_type: saltType, concentration_M: conc, neutralize },
+    simulation: { _expert_mode: _wizardExpert },
+    meta: { created_at: new Date().toISOString(), builder_version: '1.0' },
+  };
+
+  if (_wizardExpert) {
+    config.simulation.temperature_K = parseFloat(document.getElementById('sim-temperature')?.value || '300');
+    config.simulation.pressure_bar  = parseFloat(document.getElementById('sim-pressure')?.value || '1.0');
+    config.simulation.sim_time_ns   = parseFloat(document.getElementById('sim-time')?.value || '1.0');
+    config.simulation.thermostat    = document.getElementById('sim-thermostat')?.value || 'V-rescale';
+    config.simulation.barostat      = document.getElementById('sim-barostat')?.value || 'Parrinello-Rahman';
+  }
+  return config;
+}
+
+function _wizardBuildSummary() {
+  const config = _wizardCollectConfig();
+  const ff = config.forcefield;
+  const box = config.box;
+  const ions = config.ions;
+  const sim = config.simulation;
+  let html = `
+    <strong>Force field:</strong> ${ff.name || '(not set)'} &nbsp;|&nbsp; <strong>Water:</strong> ${ff.water_model || '(not set)'}<br>
+    <strong>Box:</strong> ${box.type}, edge ${box.edge_distance_nm} nm<br>
+    <strong>Ions:</strong> ${ions.salt_type} ${ions.concentration_M} M, neutralize=${ions.neutralize}
+  `;
+  if (sim._expert_mode) {
+    html += `<br><strong>Temperature:</strong> ${sim.temperature_K} K &nbsp;|&nbsp; <strong>Pressure:</strong> ${sim.pressure_bar} bar &nbsp;|&nbsp; <strong>Time:</strong> ${sim.sim_time_ns} ns`;
+  }
+  document.getElementById('wiz-summary').innerHTML = html;
+}
+
+async function wizardLoadPresets() {
+  try {
+    const resp = await fetch('/api/presets');
+    if (!resp.ok) return;
+    const presets = await resp.json();
+    const sel = document.getElementById('preset-load-select');
+    sel.innerHTML = '<option value="">— select preset —</option>';
+    presets.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.name;
+      opt.textContent = p.name;
+      sel.appendChild(opt);
+    });
+  } catch (_) {}
+}
+
+function wizardLoadPreset(name) {
+  if (!name) return;
+  fetch('/api/presets')
+    .then(r => r.json())
+    .then(presets => {
+      const preset = presets.find(p => p.name === name);
+      if (!preset) return;
+      const c = preset.config;
+      if (c.forcefield?.name) document.getElementById('forcefield-select').value = c.forcefield.name;
+      if (c.forcefield?.water_model) document.getElementById('water-select').value = c.forcefield.water_model;
+      if (c.box?.type) document.getElementById('box-type-select').value = c.box.type;
+      if (c.box?.edge_distance_nm != null) document.getElementById('edge-distance').value = c.box.edge_distance_nm;
+      if (c.ions?.salt_type) document.getElementById('ion-salt-type').value = c.ions.salt_type;
+      if (c.ions?.concentration_M != null) document.getElementById('ion-concentration').value = c.ions.concentration_M;
+      if (c.ions?.neutralize != null) document.getElementById('ion-neutralize').checked = c.ions.neutralize;
+      if (c.simulation?._expert_mode) {
+        document.getElementById('expert-toggle').checked = true;
+        wizardToggleExpert(true);
+        if (c.simulation.temperature_K) document.getElementById('sim-temperature').value = c.simulation.temperature_K;
+        if (c.simulation.pressure_bar)  document.getElementById('sim-pressure').value  = c.simulation.pressure_bar;
+        if (c.simulation.sim_time_ns)   document.getElementById('sim-time').value       = c.simulation.sim_time_ns;
+        if (c.simulation.thermostat)    document.getElementById('sim-thermostat').value = c.simulation.thermostat;
+        if (c.simulation.barostat)      document.getElementById('sim-barostat').value   = c.simulation.barostat;
+      }
+      _wizardBuildSummary();
+      showToast(`Preset "${name}" loaded`, 'info');
+    })
+    .catch(() => showToast('Failed to load preset', 'error'));
+}
+
+async function wizardSavePreset() {
+  const name = document.getElementById('preset-name-input').value.trim();
+  if (!name) { showToast('Enter a preset name first', 'error'); return; }
+  const config = _wizardCollectConfig();
+  try {
+    const resp = await fetch('/api/presets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, config }),
+    });
+    if (resp.ok) {
+      showToast(`Preset "${name}" saved`, 'info');
+      wizardLoadPresets();
+    } else {
+      const err = await resp.json().catch(() => ({}));
+      showToast(err.detail || 'Failed to save preset', 'error');
+    }
+  } catch (_) { showToast('Server error', 'error'); }
+}
+
 async function startRun() {
   if (!selectedPdb) return;
 
   const form = document.getElementById('new-run-form');
+  const config = _wizardCollectConfig();
   const data = new FormData();
   data.append('pdb_file', selectedPdb);
   data.append('forcefield', form.querySelector('[name="forcefield"]').value);
   data.append('water', form.querySelector('[name="water"]').value);
-  data.append('box_type', form.querySelector('[name="box_type"]').value);
+  data.append('box_type', form.querySelector('[name="box_type"]')?.value || config.box.type);
   data.append('tutorial_id', form.querySelector('[name="tutorial_id"]').value);
   data.append('llm', form.querySelector('[name="llm"]').value);
   data.append('auto_approve', form.querySelector('[name="auto_approve"]').value);
+  data.append('system_config', JSON.stringify(config));
 
   const btnStart = document.getElementById('btn-start');
   btnStart.disabled = true;
@@ -2087,8 +2386,9 @@ async function startRun() {
     const { run_id } = await resp.json();
     selectedPdb = null;
     document.getElementById('selected-file').textContent = '';
-    btnStart.textContent = 'Start Simulation Run';
     btnStart.disabled = false;
+    btnStart.textContent = 'Start Simulation Run';
+    _wizardShowStep(1);
     await loadRuns();
     selectRun(run_id);
   } catch (e) {
