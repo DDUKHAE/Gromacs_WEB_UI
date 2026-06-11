@@ -6,6 +6,13 @@ from pathlib import Path
 from lib.system_config import load_config
 
 
+def _status(matched: bool, actual: str) -> str:
+    """Determine audit status: "n/a" if not recorded, "pass"/"fail" based on match."""
+    if not actual:
+        return "n/a"
+    return "pass" if matched else "fail"
+
+
 @dataclass
 class ConfigAuditItem:
     key: str
@@ -63,34 +70,34 @@ def validate_run_against_config(workspace: Path) -> ConfigAuditReport:
         # "charmm36-jul2022" → match against "charmm36" prefix in actual
         expected_prefix = ff["name"].lower().split("-")[0]
         actual_ff = str(step1.get("forcefield", "")).lower()
+        matched = actual_ff.startswith(expected_prefix)
         items.append(ConfigAuditItem(
             key="forcefield",
             expected=ff["name"],
             actual=actual_ff or "(not recorded)",
-            status=(
-                "pass" if (actual_ff and expected_prefix in actual_ff)
-                else ("n/a" if not actual_ff else "fail")
-            ),
+            status=_status(matched, actual_ff),
         ))
 
     if ff.get("water_model"):
         expected_wm = ff["water_model"].lower()
         actual_wm = str(step1.get("water_model", "")).lower()
+        matched = actual_wm == expected_wm
         items.append(ConfigAuditItem(
             key="water_model",
             expected=expected_wm,
             actual=actual_wm or "(not recorded)",
-            status="pass" if actual_wm == expected_wm else ("n/a" if not actual_wm else "fail"),
+            status=_status(matched, actual_wm),
         ))
 
     if box.get("type"):
         expected_box = box["type"].lower()
         actual_box = str(step2.get("box_type", "")).lower()
+        matched = actual_box == expected_box
         items.append(ConfigAuditItem(
             key="box_type",
             expected=expected_box,
             actual=actual_box or "(not recorded)",
-            status="pass" if actual_box == expected_box else ("n/a" if not actual_box else "fail"),
+            status=_status(matched, actual_box),
         ))
 
     return ConfigAuditReport(has_config=True, items=items)

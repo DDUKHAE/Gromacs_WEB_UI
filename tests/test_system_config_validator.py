@@ -84,3 +84,22 @@ def test_to_dict_has_expected_keys(workspace_with_state):
     assert "passed" in d
     assert "failed" in d
     assert "items" in d
+
+
+def test_na_when_state_has_no_step_outputs_key(workspace_with_config):
+    """state.json exists but has no step_outputs key at all."""
+    state = {"schema_version": "1.0"}  # no step_outputs
+    (workspace_with_config / "state.json").write_text(json.dumps(state))
+    report = validate_run_against_config(workspace_with_config)
+    assert all(i.status == "n/a" for i in report.items)
+
+
+def test_no_items_when_config_has_no_forcefield_or_box(tmp_path):
+    """Config with only version/builder_type — no checkable fields."""
+    config = {"version": "1.0", "builder_type": "solution"}
+    (tmp_path / "system_config.json").write_text(json.dumps(config))
+    state = {"step_outputs": {"step_1": {}, "step_2": {}}}
+    (tmp_path / "state.json").write_text(json.dumps(state))
+    report = validate_run_against_config(tmp_path)
+    assert report.has_config is True
+    assert report.items == []
