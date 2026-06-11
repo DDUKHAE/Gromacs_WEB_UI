@@ -585,6 +585,11 @@ body.light-theme .step-circle {
   100% { transform: scale(1.35); opacity: 0; }
 }
 
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
+}
+
 .step-label {
   font-size: 9px;
   font-weight: 600;
@@ -1540,6 +1545,10 @@ body.resizing * {
               style="background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.25); color: var(--accent-cyan); font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 8px; border-radius: 6px; cursor: pointer; transition: all 0.2s;">
               CHAT
             </button>
+            <div id="md-progress-badge" style="display:none; align-items:center; gap:6px; font-size:11px; font-weight:600; color:var(--accent-cyan); padding:4px 10px; border:1px solid rgba(6,182,212,0.3); border-radius:20px; background:rgba(6,182,212,0.08);">
+              <span style="width:7px;height:7px;border-radius:50%;background:var(--accent-cyan);animation:pulse-dot 1.2s ease-in-out infinite;display:inline-block;"></span>
+              <span id="md-progress-text">MD 실행 중...</span>
+            </div>
             <span id="term-status" class="run-item-badge badge-running" style="margin-top:0;">running</span>
           </div>
         </div>
@@ -1896,6 +1905,8 @@ body.resizing * {
 let currentRunId = null;
 let runsData = [];
 let pollTimer = null;
+let _mdProgressTimer = null;
+let _mdProgressStart = null;
 let _lastKnownStatus = null;
 let wsConn = null;
 let _nglStage = null;
@@ -2074,6 +2085,8 @@ async function startRun() {
 }
 
 function stopWs() {
+  if (_mdProgressTimer) { clearInterval(_mdProgressTimer); _mdProgressTimer = null; }
+  _mdProgressStart = null;
   if (wsConn) { wsConn.close(); wsConn = null; }
   if (_fitTimer) { clearTimeout(_fitTimer); _fitTimer = null; }
   if (term) { term.dispose(); term = null; fitAddon = null; }
@@ -2257,6 +2270,8 @@ function updateStepper(info) {
     if (idx + 1 < activeStep) conn.classList.add('done');
     else if (idx + 1 === activeStep) conn.classList.add('active');
   });
+
+  updateMdProgressBadge(status, info.current_step || 0);
 }
 
 function updateButtons(status) {
@@ -2279,6 +2294,27 @@ function updateButtons(status) {
   const open3dBtn = document.getElementById('open-3d-btn');
   if (open3dBtn) {
     open3dBtn.style.display = (status === 'done' || status === 'completed') ? 'inline-block' : 'none';
+  }
+}
+
+function updateMdProgressBadge(status, currentStep) {
+  const badge = document.getElementById('md-progress-badge');
+  const textEl = document.getElementById('md-progress-text');
+  if (!badge) return;
+
+  // Show badge only when running and in MD phase (step 6 or 7 = grompp/mdrun)
+  const inMdPhase = status === 'running' && currentStep >= 6;
+  badge.style.display = inMdPhase ? 'flex' : 'none';
+
+  if (inMdPhase) {
+    if (!_mdProgressStart) _mdProgressStart = Date.now();
+    const elapsed = Math.floor((Date.now() - _mdProgressStart) / 1000);
+    const mins = Math.floor(elapsed / 60);
+    const secs = elapsed % 60;
+    const timeStr = mins > 0 ? `${mins}분 ${secs}초` : `${secs}초`;
+    textEl.textContent = `MD 시뮬레이션 실행 중... (${timeStr})`;
+  } else {
+    _mdProgressStart = null;
   }
 }
 
@@ -2538,6 +2574,21 @@ async function loadRuns() {
             updateButtons(detail.status);
             if (detail.status === 'completed') {
               loadArtifacts(runIdSnapshot);
+            }
+            // Refresh progress badge every 2s while MD is running
+            if (detail.status === 'running' && (detail.current_step || 0) >= 6) {
+              if (!_mdProgressTimer) {
+                _mdProgressTimer = setInterval(() => {
+                  if (!currentRunId) { clearInterval(_mdProgressTimer); _mdProgressTimer = null; return; }
+                  fetch(`/api/runs/${currentRunId}`)
+                    .then(r => r.ok ? r.json() : null)
+                    .then(d => { if (d) updateMdProgressBadge(d.status, d.current_step || 0); })
+                    .catch(() => {});
+                }, 2000);
+              }
+            } else {
+              if (_mdProgressTimer) { clearInterval(_mdProgressTimer); _mdProgressTimer = null; }
+              updateMdProgressBadge(detail.status, detail.current_step || 0);
             }
           }
         } catch (_) {}
