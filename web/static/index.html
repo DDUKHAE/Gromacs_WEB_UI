@@ -1719,6 +1719,14 @@ body.resizing * {
             <span style="font-weight:700;font-size:16px;color:var(--text-primary);">XVG Analysis Results</span>
             <button id="xvg-result-close" type="button" style="background:none;border:none;cursor:pointer;font-size:18px;color:var(--text-secondary);">✕</button>
           </div>
+          <!-- Running Average control -->
+          <div style="display:flex;align-items:center;gap:12px;padding:10px 20px;border-bottom:1px solid var(--border-color);background:rgba(0,0,0,0.15);">
+            <label style="font-size:12px;color:var(--text-secondary);white-space:nowrap;">Running Avg</label>
+            <input type="range" id="xvg-smooth-slider" min="1" max="200" value="1" step="1"
+                   style="flex:1;accent-color:var(--accent-cyan);"
+                   oninput="onSmoothSliderChange(this.value)">
+            <span id="xvg-smooth-label" style="font-size:12px;color:var(--accent-cyan);min-width:60px;text-align:right;">OFF (1)</span>
+          </div>
           <div id="xvg-result-cards" style="padding:20px;display:flex;flex-direction:column;gap:20px;"></div>
         </div>
       </div>
@@ -2339,6 +2347,28 @@ function drawSparkline(canvas, yData, color) {
   ctx.stroke();
 }
 
+// ── Running Average ──────────────────────────────────────────────────────────
+let _xvgDatasets = [];
+let _smoothWindow = 1;
+
+function computeRunningAverage(data, window) {
+  if (!data || data.length === 0) return data;
+  const half = Math.floor(window / 2);
+  return data.map((_, i) => {
+    const start = Math.max(0, i - half);
+    const end   = Math.min(data.length, i + half + 1);
+    const chunk = data.slice(start, end);
+    return chunk.reduce((a, b) => a + b, 0) / chunk.length;
+  });
+}
+
+function onSmoothSliderChange(val) {
+  _smoothWindow = parseInt(val, 10);
+  const label = document.getElementById('xvg-smooth-label');
+  label.textContent = _smoothWindow === 1 ? 'OFF (1)' : `Window: ${_smoothWindow}`;
+  if (_xvgDatasets.length > 0) renderXvgResultModal(_xvgDatasets);
+}
+
 // ── XVG multi-series chart ───────────────────────────────────────────────────
 const XVG_COLORS = ['#06b6d4','#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899'];
 
@@ -2418,6 +2448,7 @@ function drawFullChart(canvas, xData, ySeriesArr, colors) {
 }
 
 function renderXvgResultModal(dataList) {
+  _xvgDatasets = dataList;
   const container = document.getElementById('xvg-result-cards');
   container.innerHTML = '';
 
@@ -2487,7 +2518,8 @@ function renderXvgResultModal(dataList) {
     function redraw() {
       const activeSeries = ySeries.filter((_, i) => active[i]);
       const activeColors = XVG_COLORS.filter((_, i) => i < ySeries.length && active[i]);
-      requestAnimationFrame(() => drawFullChart(canvas, xData, activeSeries, activeColors));
+      const smoothed = activeSeries.map(y => computeRunningAverage(y, _smoothWindow));
+      requestAnimationFrame(() => drawFullChart(canvas, xData, smoothed, activeColors));
     }
 
     // Stats row
@@ -2512,6 +2544,10 @@ function renderXvgResultModal(dataList) {
     redraw();
   });
 
+  const slider = document.getElementById('xvg-smooth-slider');
+  if (slider) { slider.value = 1; _smoothWindow = 1; }
+  const smoothLabel = document.getElementById('xvg-smooth-label');
+  if (smoothLabel) smoothLabel.textContent = 'OFF (1)';
   document.getElementById('xvg-result-modal').style.display = 'flex';
 }
 
