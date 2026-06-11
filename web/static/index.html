@@ -1584,6 +1584,20 @@ body.resizing * {
               </select>
             </div>
             <div class="param-field">
+              <label>Tutorial
+                <span class="tooltip-wrap">
+                  <button type="button" class="tooltip-btn">?</button>
+                  <div class="tooltip-content">
+                    <strong>Simulation Protocol</strong>
+                    Selects the GROMACS tutorial workflow that governs the pipeline. Each tutorial defines system-specific MD parameters, equilibration strategy, and analysis steps.
+                  </div>
+                </span>
+              </label>
+              <select name="tutorial_id" id="tutorial-select">
+                <option value="">Auto-detect</option>
+              </select>
+            </div>
+            <div class="param-field">
               <label>Box Type
                 <span class="tooltip-wrap">
                   <button type="button" class="tooltip-btn">?</button>
@@ -1800,6 +1814,7 @@ async function startRun() {
   data.append('forcefield', form.querySelector('[name="forcefield"]').value);
   data.append('water', form.querySelector('[name="water"]').value);
   data.append('box_type', form.querySelector('[name="box_type"]').value);
+  data.append('tutorial_id', form.querySelector('[name="tutorial_id"]').value);
   data.append('llm', form.querySelector('[name="llm"]').value);
   data.append('auto_approve', form.querySelector('[name="auto_approve"]').value);
 
@@ -2654,11 +2669,44 @@ async function loadForcefields() {
   }
 }
 
+const TUTORIAL_LABELS = {
+  'Lysozyme_in_water': 'Lysozyme in Water',
+  'KALP15_in_DPPC': 'KALP15 in DPPC (Membrane)',
+  'Protein_Ligand_Complex': 'Protein-Ligand Complex',
+  'Umbrella_Sampling': 'Umbrella Sampling',
+  'Building_Biphasic_Systems': 'Biphasic Systems',
+  'Free_Energy_Calculations_Methane_in_Water': 'Free Energy: Methane in Water',
+  'Free_Energy_calculations_Hydration_Free_Energy_of_Ethanol': 'Free Energy: Hydration of Ethanol',
+  'Virtual_Sites': 'Virtual Sites',
+};
+
+async function loadTutorials() {
+  const select = document.getElementById('tutorial-select');
+  try {
+    const resp = await fetch('/api/tutorials');
+    if (!resp.ok) return;
+    const tutorials = await resp.json();
+    select.innerHTML = '<option value="">Auto-detect</option>';
+    tutorials.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      const label = TUTORIAL_LABELS[t.id] || t.id.replace(/_/g, ' ');
+      const badge = t.difficulty === 'basic' ? '' : ` [${t.difficulty}]`;
+      opt.textContent = label + badge;
+      if (!t.supported) opt.style.color = 'var(--text-muted)';
+      select.appendChild(opt);
+    });
+  } catch (e) {
+    console.error('loadTutorials failed:', e);
+  }
+}
+
 // Initialize on page load
 window.addEventListener('load', async () => {
   // 앱 초기화
   initFFManager();
   loadLlms();
+  loadTutorials();
   loadForcefields();
   document.getElementById('forcefield-select').addEventListener('change', e => {
     loadWaterModels(e.target.value);

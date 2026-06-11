@@ -250,17 +250,26 @@ def build_environment(pdb_path: Path, prompt: str, workspace_dir: Path,
     if Path(pdb_path).resolve() != inputs_pdb.resolve():
         shutil.copy(pdb_path, inputs_pdb)
     _strip_hetatm_water(inputs_pdb)
-    decision = select_tutorial(workspace_dir, inputs_pdb, prompt,
-                               prerequisites or {})
-    manifest = TR.load_manifest(decision.tutorial_id) or {}
-    defaults = manifest.get("defaults", {})
     user_prefs: dict = {}
+    meta: dict = {}
     meta_file = Path(workspace_dir) / "meta.json"
     if meta_file.exists():
         try:
-            user_prefs = json.loads(meta_file.read_text()).get("user_preferences", {})
+            meta = json.loads(meta_file.read_text())
+            user_prefs = meta.get("user_preferences", {})
         except Exception:
             pass
+    # Use user-selected tutorial if provided; otherwise auto-route
+    user_tutorial_id = meta.get("tutorial_id", "")
+    if user_tutorial_id:
+        from dataclasses import replace as _dc_replace
+        _base = select_tutorial(workspace_dir, inputs_pdb, prompt, prerequisites or {})
+        decision = _dc_replace(_base, tutorial_id=user_tutorial_id)
+    else:
+        decision = select_tutorial(workspace_dir, inputs_pdb, prompt,
+                                   prerequisites or {})
+    manifest = TR.load_manifest(decision.tutorial_id) or {}
+    defaults = manifest.get("defaults", {})
     ff = _resolve_forcefield(
         user_prefs.get("forcefield") or defaults.get("forcefield", "charmm36")
     )

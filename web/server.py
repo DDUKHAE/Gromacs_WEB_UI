@@ -122,6 +122,27 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
     def api_list_llms() -> list[dict]:
         return [{"key": k, "name": a.name, "cli": a.cli} for k, a in ADAPTERS.items()]
 
+    # ── Tutorial list ────────────────────────────────────────────────────────
+    @app.get("/api/tutorials")
+    def api_list_tutorials() -> list[dict]:
+        index_path = Path("docs/tutorial/tutorial_index.json")
+        if not index_path.exists():
+            return []
+        try:
+            index = json.loads(index_path.read_text())
+        except Exception:
+            return []
+        result = []
+        for e in index.get("entries", []):
+            result.append({
+                "id": e["id"],
+                "domain": e.get("domain", ""),
+                "difficulty": e.get("difficulty", ""),
+                "system_type": e.get("system_type", []),
+                "supported": e.get("unsupported_autonomy_level", "none") in ("none", "partial"),
+            })
+        return result
+
     # ── Force field endpoints ─────────────────────────────────────────────────
     @app.get("/api/forcefields")
     def api_list_forcefields() -> list[str]:
@@ -252,6 +273,7 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         forcefield: str = Form("charmm36"),
         water: str = Form("tip3p"),
         box_type: str = Form("dodecahedron"),
+        tutorial_id: str = Form(""),
         llm: str = Form(""),
         auto_approve: str = Form("false"),
     ) -> dict:
@@ -268,13 +290,16 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
             raise HTTPException(status_code=413, detail="PDB file too large (max 50 MB)")
         pdb_path.write_bytes(content)
 
-        (ws / "meta.json").write_text(json.dumps({
+        meta: dict = {
             "user_preferences": {
                 "forcefield": forcefield,
                 "water": water,
                 "box_type": box_type,
             }
-        }, indent=2))
+        }
+        if tutorial_id:
+            meta["tutorial_id"] = tutorial_id
+        (ws / "meta.json").write_text(json.dumps(meta, indent=2))
 
         if llm and llm in ADAPTERS:
             if not llm_runner.check_cli(ADAPTERS[llm]):
