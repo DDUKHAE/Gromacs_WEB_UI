@@ -1958,7 +1958,7 @@ body.resizing * {
                   <button type="button" id="ff-manager-btn" title="Force Field 추가" class="ff-add-btn">+</button>
                 </div>
                 <div class="ff-select-col">
-                  <select name="forcefield" id="forcefield-select">
+                  <select name="forcefield" id="forcefield-select" onchange="checkFFWaterCompat()">
                     <option value="">Loading...</option>
                   </select>
                 </div>
@@ -1974,7 +1974,7 @@ body.resizing * {
                   </div>
                 </div>
                 <div class="ff-select-col">
-                  <select name="water" id="water-select">
+                  <select name="water" id="water-select" onchange="checkFFWaterCompat()">
                     <option value="">Select forcefield first</option>
                   </select>
                 </div>
@@ -1994,6 +1994,42 @@ body.resizing * {
                     <option value="">Auto-detect</option>
                   </select>
                 </div>
+              </div>
+              <!-- FF-Water Compatibility Warning -->
+              <div id="ff-water-warning" style="display:none;padding:8px;border-radius:4px;
+                background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.4);
+                color:var(--accent-yellow,#f59e0b);font-size:12px;margin-top:4px;">
+              </div>
+              <!-- Protonation State Section -->
+              <div class="ff-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">pH</span>
+                  <div class="tooltip-container">
+                    <span class="info-icon">?</span>
+                    <span class="tooltip-text">System pH for protonation state prediction via PROPKA. Affects Histidine tautomers and titratable residue states.</span>
+                  </div>
+                </div>
+                <div class="ff-select-col" style="display:flex;gap:6px;align-items:center;">
+                  <input type="number" id="prot-ph" value="7.0" min="0" max="14" step="0.1"
+                    style="width:70px;background:var(--bg-input);border:1px solid var(--border-color);
+                           color:var(--text-primary);padding:5px 8px;border-radius:4px;">
+                  <button type="button" onclick="runProtonation()"
+                    style="padding:5px 10px;background:var(--accent-secondary);color:var(--text-primary);
+                           border:none;border-radius:4px;cursor:pointer;font-size:12px;"
+                    id="protonate-btn">Analyze</button>
+                </div>
+              </div>
+              <!-- HIS Tautomer Panel -->
+              <div id="his-tautomer-panel" style="display:none;margin-top:6px;padding:8px;
+                border:1px solid var(--border-color);border-radius:4px;font-size:12px;">
+                <div style="font-weight:600;margin-bottom:6px;color:var(--text-secondary);">Histidine States</div>
+                <div id="his-tautomer-list"></div>
+              </div>
+              <!-- Disulfide Panel -->
+              <div id="disulfide-panel" style="display:none;margin-top:6px;padding:8px;
+                border:1px solid var(--border-color);border-radius:4px;font-size:12px;">
+                <div style="font-weight:600;margin-bottom:6px;color:var(--text-secondary);">Disulfide Bridges</div>
+                <div id="disulfide-list"></div>
               </div>
             </div>
           </div>
@@ -2646,6 +2682,125 @@ async function fetchPDBFromRCSB() {
   }
 }
 
+const _FF_WATER_RECOMMENDED = {
+  "charmm36-jul2022": "tip3p",
+  "charmm36": "tip3p",
+  "amber99sb-ildn": "tip3p",
+  "amber99sb": "tip3p",
+  "opls-aa": "tip4p",
+  "opls-aa/l": "tip4p",
+  "gromos54a7": "spce",
+  "gromos53a6": "spc",
+};
+const _FF_WATER_COMPATIBLE = {
+  "charmm36-jul2022": ["tip3p"],
+  "charmm36": ["tip3p", "tip4p"],
+  "amber99sb-ildn": ["tip3p", "spce"],
+  "amber99sb": ["tip3p", "spce"],
+  "opls-aa": ["tip4p", "tip3p"],
+  "opls-aa/l": ["tip4p", "tip3p"],
+  "gromos54a7": ["spce", "spc"],
+  "gromos53a6": ["spc", "spce"],
+};
+
+function checkFFWaterCompat() {
+  const ff = document.getElementById('forcefield-select')?.value?.toLowerCase() || '';
+  const water = document.getElementById('water-select')?.value?.toLowerCase() || '';
+  const warningEl = document.getElementById('ff-water-warning');
+  if (!ff || !water || !warningEl) return;
+
+  const compatible = _FF_WATER_COMPATIBLE[ff];
+  const recommended = _FF_WATER_RECOMMENDED[ff];
+  if (!compatible) { warningEl.style.display = 'none'; return; }
+
+  if (!compatible.includes(water)) {
+    warningEl.textContent = `⚠ ${water.toUpperCase()} is not recommended with ${ff}. Recommended: ${(recommended || compatible[0]).toUpperCase()}`;
+    warningEl.style.display = 'block';
+  } else {
+    warningEl.style.display = 'none';
+  }
+}
+
+async function runProtonation() {
+  if (!selectedPdb) { alert('Upload a PDB file first (Step 1)'); return; }
+  const ph = parseFloat(document.getElementById('prot-ph').value) || 7.0;
+  const btn = document.getElementById('protonate-btn');
+  btn.textContent = 'Running…';
+  btn.disabled = true;
+  try {
+    const formData = new FormData();
+    formData.append('pdb_file', selectedPdb);
+    formData.append('ph', ph.toString());
+    const resp = await fetch('/api/pdb/protonate', {method:'POST', body: formData});
+    if (!resp.ok) throw new Error('Protonation analysis failed');
+    const data = await resp.json();
+    window._protonationResult = data;
+    _renderHISTautomers(data.his_states || {});
+    _renderDisulfides((window._pdbAnalysis || {}).disulfide_candidates || []);
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    btn.textContent = 'Analyze';
+    btn.disabled = false;
+  }
+}
+
+function _renderHISTautomers(his_states) {
+  const panel = document.getElementById('his-tautomer-panel');
+  const list = document.getElementById('his-tautomer-list');
+  if (Object.keys(his_states).length === 0) {
+    panel.style.display = 'none';
+    return;
+  }
+  list.innerHTML = Object.entries(his_states).map(([key, state]) => `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+      <span style="min-width:60px;">${key}</span>
+      <select id="his-state-${key.replace(':','-')}"
+        style="background:var(--bg-input);border:1px solid var(--border-color);
+               color:var(--text-primary);padding:3px 6px;border-radius:4px;font-size:12px;">
+        <option value="HSD" ${state==='HSD'?'selected':''}>HSD (δ-H, neutral)</option>
+        <option value="HSE" ${state==='HSE'?'selected':''}>HSE (ε-H, neutral)</option>
+        <option value="HSP" ${state==='HSP'?'selected':''}>HSP (doubly protonated, +1)</option>
+      </select>
+    </div>`).join('');
+  panel.style.display = 'block';
+}
+
+function _renderDisulfides(candidates) {
+  const panel = document.getElementById('disulfide-panel');
+  const list = document.getElementById('disulfide-list');
+  if (!candidates || candidates.length === 0) {
+    panel.style.display = 'none';
+    return;
+  }
+  list.innerHTML = candidates.map((b, i) => `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+      <input type="checkbox" id="ss-bridge-${i}" checked
+        style="width:14px;height:14px;accent-color:var(--accent-cyan);">
+      <label for="ss-bridge-${i}" style="cursor:pointer;">
+        ${b.cys1} — ${b.cys2} <span style="color:var(--text-secondary);">(${b.distance_angstrom} Å)</span>
+      </label>
+    </div>`).join('');
+  panel.style.display = 'block';
+}
+
+function _collectProtonationConfig() {
+  const his_states = {};
+  document.querySelectorAll('[id^="his-state-"]').forEach(sel => {
+    const key = sel.id.replace('his-state-', '').replace('-', ':');
+    his_states[key] = sel.value;
+  });
+  const disulfide_bridges = [];
+  const analysis = window._pdbAnalysis || {};
+  (analysis.disulfide_candidates || []).forEach((b, i) => {
+    const cb = document.getElementById(`ss-bridge-${i}`);
+    if (cb && cb.checked) disulfide_bridges.push([b.cys1, b.cys2]);
+  });
+  const ph = parseFloat(document.getElementById('prot-ph')?.value || '7.0');
+  if (Object.keys(his_states).length === 0 && disulfide_bridges.length === 0) return null;
+  return {ph, his_states, disulfide_bridges};
+}
+
 // ── System Builder Wizard ─────────────────────────────────────────────────────
 
 let _wizardStep = 1;
@@ -2905,6 +3060,8 @@ async function startRun() {
   data.append('tutorial_id', form.querySelector('[name="tutorial_id"]').value);
   data.append('llm', form.querySelector('[name="llm"]').value);
   data.append('auto_approve', form.querySelector('[name="auto_approve"]').value);
+  const protConfig = _collectProtonationConfig();
+  if (protConfig) config.protonation = protConfig;
   data.append('system_config', JSON.stringify(config));
 
   const btnStart = document.getElementById('btn-start');
