@@ -684,7 +684,24 @@ body.light-theme #terminal-container {
   background: #f9fafb;
 }
 
+#chat-panel {
+  transition: background 0.3s;
+}
 
+body.light-theme #chat-panel {
+  background: #f9fafb !important;
+  border: 1px solid var(--border-color);
+}
+
+#fallback-terminal-text,
+#chat-content {
+  color: #ffffff !important;
+}
+
+body.light-theme #fallback-terminal-text,
+body.light-theme #chat-content {
+  color: #000000 !important;
+}
 
 /* Actions - Relocated to top header, compact styling */
 .header-actions {
@@ -835,16 +852,23 @@ body.light-theme .chart-card-title {
 
 /* System Builder Wizard */
 #wizard-nav {
+  position: sticky;
+  top: 0;
+  z-index: 10;
   display: flex;
   overflow-x: auto;
   border-bottom: 1px solid var(--border-color);
   margin-bottom: 18px;
   gap: 0;
+  width: 100%;
+  flex-shrink: 0;
 }
 .wiz-tab {
   /* [마법사 탭 글자 및 크기 설정] 마법사 탭(Structure, Force Field 등)의 간격과 크기입니다. */
   flex: 1;                      /* 회색 가로선 길이에 맞게 균등 배분 */
-  text-align: center;           /* 텍스트 중앙 정렬 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 8px 0;               /* 탭 내부 여백 (세로 가로) */
   font-size: 13px;              /* 글자 크기 (현재 Visualization 탭과 통일됨) */
   font-weight: 500;              /* 글자 두께 */
@@ -862,9 +886,72 @@ body.light-theme .chart-card-title {
 }
 /* 활성화(active)된 탭의 글자 및 밑줄 색상 설정 */
 .wiz-tab.active { color: var(--accent-cyan); border-bottom-color: var(--accent-cyan); }
-.wiz-tab.done   { color: var(--accent-green);   border-bottom-color: var(--accent-green); }
 .wiz-section    { display: none; }
 .wiz-section.active { display: block; }
+.sim-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  margin-top: 8px;
+}
+.sim-card {
+  background: rgba(255, 255, 255, 0.01);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: all 0.3s ease;
+}
+.sim-card-header {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  padding: 4px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  display: flex;
+  align-items: center; /* 세로 방향 중앙 정렬 */
+  justify-content: space-between; /* 가로 방향 왼쪽/오른쪽 정렬 */
+  user-select: none;
+}
+.sim-card.active {
+  background: rgba(255, 255, 255, 0.02);
+}
+.sim-card.active .sim-card-header {
+  color: var(--accent-cyan);
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 8px;
+  margin-bottom: 4px;
+}
+.sim-card .sim-card-body {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease, margin-top 0.35s ease;
+}
+.sim-card.active .sim-card-body {
+  max-height: 400px; /* Ensemble 카드의 5개 항목이 잘리지 않고 완벽히 출력되도록 높이 제한을 400px로 상향 조정 */
+  opacity: 1;
+  pointer-events: auto;
+  margin-top: 8px;
+  overflow: visible; /* 아코디언 확장 시 툴팁(말풍선)이 잘리지 않도록 오버플로우 허용 */
+}
+.sim-card .accordion-icon {
+  font-size: 9px;
+  transition: transform 0.2s ease;
+  color: var(--text-muted);
+}
+.sim-card.active .accordion-icon {
+  transform: rotate(180deg);
+  color: var(--accent-cyan);
+}
 #wiz-footer {
   display: flex;
   align-items: center;
@@ -1139,6 +1226,7 @@ body.light-theme .summary-card {
   justify-content: flex-start;  /* 상단 정렬로 탭 높이 고정 */
   padding: 40px 24px 24px;      /* 상단 여백(40px)과 좌우/하단 여백 */
   overflow-y: auto;
+  scrollbar-gutter: stable;     /* 스크롤바 생성 시 화면 흔들림(Layout Shift) 방지 */
   position: relative;
 }
 
@@ -1196,7 +1284,7 @@ body.light-theme .summary-card {
 #new-visualization-container {
   /* [메인 입력 폼 규격] System Builder와 Visualization 업로드 폼의 가로폭 및 최소 세로길이 설정 */
   width: 100%;
-  max-width: 600px;      /* 폼의 최대 가로 크기 (가로 스크롤바가 나오지 않도록 600px로 확장) */
+  max-width: 600px;      /* 폼의 최대 가로 크기 (600px로 일원화) */
   min-height: 580px;     /* 폼의 최소 세로 크기 */
   display: flex;
   flex-direction: column;
@@ -1244,8 +1332,8 @@ body.light-theme #new-visualization-container h2 {
 #drop-zone,
 #xvg-drop-zone,
 #mol-upload-container {
-  /* [업로드 박스 가로세로 비율 설정] 1 / 1 로 설정하여 완벽한 정방형(정사각형) 형태를 유지합니다. */
-  aspect-ratio: 1 / 1;
+  /* [업로드 박스 가로세로 비율 설정] 세로 길이를 절반으로 줄이기 위해 비율을 2 / 1로 설정합니다. */
+  aspect-ratio: 2 / 1;
 }
 
 #mol-upload-container {
@@ -1864,13 +1952,13 @@ body.resizing * {
         <!-- Terminal panel -->
         <div id="terminal-panel" class="card" role="region" aria-label="실행 터미널">
           <div id="terminal-container">
-            <pre id="fallback-terminal-text" style="color: #a7f3d0; font-size:11px; line-height: 1.4; padding: 6px; overflow-y: auto; height: 100%; white-space: pre-wrap; word-break: break-all; margin: 0;"></pre>
+            <pre id="fallback-terminal-text" style="font-size:11px; line-height: 1.4; padding: 6px; overflow-y: auto; height: 100%; white-space: pre-wrap; word-break: break-all; margin: 0;"></pre>
           </div>
         </div>
 
         <!-- Chat log panel (shown when terminal mode = chat) -->
         <div id="chat-panel" style="display: none; height: 450px; flex: none; background: #04060f; border-radius: var(--radius-md); overflow-y: auto; padding: 14px 16px;">
-          <pre id="chat-content" style="color: #a7f3d0; font-size: 11px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; margin: 0; font-family: 'Fira Code', monospace;"></pre>
+          <pre id="chat-content" style="font-size: 11px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; margin: 0; font-family: 'Fira Code', monospace;"></pre>
         </div>
 
         <!-- Results Gallery -->
@@ -2125,194 +2213,264 @@ body.resizing * {
 
           <!-- Step 5: Simulation Parameters (Expert only) -->
           <div class="wiz-section" id="wiz-section-5">
-            <div class="ff-container">
-              <!-- Temperature 설정 -->
-              <div class="ff-row">
-                <div class="ff-label-col">
-                  <span class="ff-title">Temperature</span>
-                  <div class="tooltip-container">
-                    <span class="info-icon">?</span>
-                    <span class="tooltip-text">The target temperature in Kelvin (K) for the temperature coupling. Room temperature is typically 300K.</span>
+            <div class="sim-grid">
+              
+              <!-- Card 1: Ensemble & Thermodynamics -->
+              <div class="sim-card active">
+                <div class="sim-card-header" onclick="toggleSimAccordion(this)">
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <span>Ensemble & Thermodynamics</span>
+                    <div class="tooltip-container" onclick="event.stopPropagation()">
+                      <span class="info-icon">?</span>
+                      <span class="tooltip-text">Configures the simulation ensemble (temperature, pressure, time) and coupling algorithms.</span>
+                    </div>
                   </div>
+                  <span class="accordion-icon">▼</span>
                 </div>
-                <div class="ff-select-col">
-                  <input type="number" id="sim-temperature" name="temperature_K" value="300" min="200" max="500">
+                <div class="sim-card-body">
+                  <div class="ff-container">
+                    <!-- Temperature 설정 -->
+                    <div class="ff-row">
+                      <div class="ff-label-col">
+                        <span class="ff-title">Temperature</span>
+                        <div class="tooltip-container">
+                          <span class="info-icon">?</span>
+                          <span class="tooltip-text">The target temperature in Kelvin (K) for the temperature coupling. Room temperature is typically 300K.</span>
+                        </div>
+                      </div>
+                      <div class="ff-select-col">
+                        <input type="number" id="sim-temperature" name="temperature_K" value="300" min="200" max="500">
+                      </div>
+                    </div>
+
+                    <!-- Pressure 설정 -->
+                    <div class="ff-row">
+                      <div class="ff-label-col">
+                        <span class="ff-title">Pressure</span>
+                        <div class="tooltip-container">
+                          <span class="info-icon">?</span>
+                          <span class="tooltip-text">The target pressure in bar (1.0 bar ≈ 1.0 atm) for the pressure coupling.</span>
+                        </div>
+                      </div>
+                      <div class="ff-select-col">
+                        <input type="number" id="sim-pressure" name="pressure_bar" value="1.0" min="0.1" max="10" step="0.1">
+                      </div>
+                    </div>
+
+                    <!-- Sim Time 설정 -->
+                    <div class="ff-row">
+                      <div class="ff-label-col">
+                        <span class="ff-title">Sim Time</span>
+                        <div class="tooltip-container">
+                          <span class="info-icon">?</span>
+                          <span class="tooltip-text">The total physical time in nanoseconds (ns) for the molecular dynamics production run.</span>
+                        </div>
+                      </div>
+                      <div class="ff-select-col">
+                        <input type="number" id="sim-time" name="sim_time_ns" value="1.0" min="0.001" max="1000" step="0.1">
+                      </div>
+                    </div>
+
+                    <!-- Thermostat 선택 -->
+                    <div class="ff-row">
+                      <div class="ff-label-col">
+                        <span class="ff-title">Thermostat</span>
+                        <div class="tooltip-container">
+                          <span class="info-icon">?</span>
+                          <span class="tooltip-text">The temperature coupling algorithm (thermostat) to maintain constant temperature. V-rescale is recommended.</span>
+                        </div>
+                      </div>
+                      <div class="ff-select-col">
+                        <select id="sim-thermostat" name="thermostat">
+                          <option value="V-rescale">V-rescale (recommended)</option>
+                          <option value="Nosé-Hoover">Nosé-Hoover</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <!-- Barostat 선택 -->
+                    <div class="ff-row">
+                      <div class="ff-label-col">
+                        <span class="ff-title">Barostat</span>
+                        <div class="tooltip-container">
+                          <span class="info-icon">?</span>
+                          <span class="tooltip-text">The pressure coupling algorithm (barostat) to maintain constant pressure. Parrinello-Rahman is recommended.</span>
+                        </div>
+                      </div>
+                      <div class="ff-select-col">
+                        <select id="sim-barostat" name="barostat">
+                          <option value="Parrinello-Rahman">Parrinello-Rahman (recommended)</option>
+                          <option value="Berendsen">Berendsen</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <!-- Pressure 설정 -->
-              <div class="ff-row">
-                <div class="ff-label-col">
-                  <span class="ff-title">Pressure</span>
-                  <div class="tooltip-container">
-                    <span class="info-icon">?</span>
-                    <span class="tooltip-text">The target pressure in bar (1.0 bar ≈ 1.0 atm) for the pressure coupling.</span>
+              <!-- Card 2: Performance & Output -->
+              <div class="sim-card">
+                <div class="sim-card-header" onclick="toggleSimAccordion(this)">
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <span>Performance & Output</span>
+                    <div class="tooltip-container" onclick="event.stopPropagation()">
+                      <span class="info-icon">?</span>
+                      <span class="tooltip-text">Configures integration time step and coordinate/trajectory output frequencies.</span>
+                    </div>
                   </div>
+                  <span class="accordion-icon">▼</span>
                 </div>
-                <div class="ff-select-col">
-                  <input type="number" id="sim-pressure" name="pressure_bar" value="1.0" min="0.1" max="10" step="0.1">
+                <div class="sim-card-body">
+                  <div class="ff-container">
+                    <!-- Performance Parameters -->
+                    <div class="ff-row">
+                      <div class="ff-label-col">
+                        <span class="ff-title">Time Step</span>
+                        <div class="tooltip-container"><span class="info-icon">?</span>
+                          <span class="tooltip-text">Integration time step in ps. 0.002 ps is standard with LINCS constraints. Reduce to 0.001 ps for unstable systems.</span>
+                        </div>
+                      </div>
+                      <div class="ff-select-col">
+                        <input type="number" id="sim-dt" name="dt_ps" value="0.002" min="0.0001" max="0.004" step="0.0001">
+                      </div>
+                    </div>
+
+                    <div class="ff-row">
+                      <div class="ff-label-col">
+                        <span class="ff-title">Coord Output</span>
+                        <div class="tooltip-container"><span class="info-icon">?</span>
+                          <span class="tooltip-text">Output frequency for .xtc trajectory (in steps). 1000 steps × 0.002 ps/step = 2 ps per frame.</span>
+                        </div>
+                      </div>
+                      <div class="ff-select-col">
+                        <input type="number" id="sim-nstxout-compressed" name="nstxout_compressed" value="1000" min="1" max="100000" step="100">
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <!-- Sim Time 설정 -->
-              <div class="ff-row">
-                <div class="ff-label-col">
-                  <span class="ff-title">Sim Time</span>
-                  <div class="tooltip-container">
-                    <span class="info-icon">?</span>
-                    <span class="tooltip-text">The total physical time in nanoseconds (ns) for the molecular dynamics production run.</span>
+              <!-- Card 3: Electrostatics & Cutoffs -->
+              <div class="sim-card">
+                <div class="sim-card-header" onclick="toggleSimAccordion(this)">
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <span>Electrostatics & Cutoffs</span>
+                    <div class="tooltip-container" onclick="event.stopPropagation()">
+                      <span class="info-icon">?</span>
+                      <span class="tooltip-text">Configures coulomb electrostatics computation methods (PME) and cutoff distances.</span>
+                    </div>
                   </div>
+                  <span class="accordion-icon">▼</span>
                 </div>
-                <div class="ff-select-col">
-                  <input type="number" id="sim-time" name="sim_time_ns" value="1.0" min="0.001" max="1000" step="0.1">
+                <div class="sim-card-body">
+                  <div class="ff-container">
+                    <!-- Cutoff Parameters -->
+                    <div class="ff-row">
+                      <div class="ff-label-col">
+                        <span class="ff-title">Coulomb Type</span>
+                        <div class="tooltip-container"><span class="info-icon">?</span>
+                          <span class="tooltip-text">Electrostatic calculation method. PME (Particle Mesh Ewald) is strongly recommended for accuracy.</span>
+                        </div>
+                      </div>
+                      <div class="ff-select-col">
+                        <select id="sim-coulombtype" name="coulombtype">
+                          <option value="PME">PME (recommended)</option>
+                          <option value="Cut-off">Cut-off</option>
+                          <option value="Ewald">Ewald</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div class="ff-row">
+                      <div class="ff-label-col">
+                        <span class="ff-title">rcoulomb / rvdw</span>
+                        <div class="tooltip-container"><span class="info-icon">?</span>
+                          <span class="tooltip-text">Cutoff distance in nm for electrostatic and van der Waals interactions. 1.0 nm is standard.</span>
+                        </div>
+                      </div>
+                      <div class="ff-select-col" style="display:flex;gap:6px;">
+                        <input type="number" id="sim-rcoulomb" name="rcoulomb_nm" value="1.0" min="0.8" max="2.0" step="0.1" style="width:65px;">
+                        <input type="number" id="sim-rvdw" name="rvdw_nm" value="1.0" min="0.8" max="2.0" step="0.1" style="width:65px;">
+                      </div>
+                    </div>
+
+                    <div class="ff-row">
+                      <div class="ff-label-col">
+                        <span class="ff-title">PME Order</span>
+                        <div class="tooltip-container"><span class="info-icon">?</span>
+                          <span class="tooltip-text">Interpolation order for PME. 4 = cubic (standard). Higher values improve accuracy but increase cost.</span>
+                        </div>
+                      </div>
+                      <div class="ff-select-col">
+                        <select id="sim-pme-order" name="pme_order">
+                          <option value="4">4 (standard)</option>
+                          <option value="6">6 (high accuracy)</option>
+                          <option value="8">8 (very high)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div class="ff-row">
+                      <div class="ff-label-col">
+                        <span class="ff-title">Fourier Spacing</span>
+                        <div class="tooltip-container"><span class="info-icon">?</span>
+                          <span class="tooltip-text">Grid spacing in nm for FFT in PME. 0.16 nm is standard. Smaller values increase accuracy and cost.</span>
+                        </div>
+                      </div>
+                      <div class="ff-select-col">
+                        <input type="number" id="sim-fourierspacing" name="fourierspacing_nm" value="0.16" min="0.1" max="0.3" step="0.01">
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <!-- Thermostat 선택 -->
-              <div class="ff-row">
-                <div class="ff-label-col">
-                  <span class="ff-title">Thermostat</span>
-                  <div class="tooltip-container">
-                    <span class="info-icon">?</span>
-                    <span class="tooltip-text">The temperature coupling algorithm (thermostat) to maintain constant temperature. V-rescale is recommended.</span>
+              <!-- Card 4: Algorithms & Constraints -->
+              <div class="sim-card">
+                <div class="sim-card-header" onclick="toggleSimAccordion(this)">
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <span>Algorithms & Constraints</span>
+                    <div class="tooltip-container" onclick="event.stopPropagation()">
+                      <span class="info-icon">?</span>
+                      <span class="tooltip-text">Configures bond constraints and LINCS algorithm orders to maintain structural stability.</span>
+                    </div>
                   </div>
+                  <span class="accordion-icon">▼</span>
                 </div>
-                <div class="ff-select-col">
-                  <select id="sim-thermostat" name="thermostat">
-                    <option value="V-rescale">V-rescale (recommended)</option>
-                    <option value="Nosé-Hoover">Nosé-Hoover</option>
-                  </select>
+                <div class="sim-card-body">
+                  <div class="ff-container">
+                    <!-- Constraints -->
+                    <div class="ff-row">
+                      <div class="ff-label-col">
+                        <span class="ff-title">Constraints</span>
+                        <div class="tooltip-container"><span class="info-icon">?</span>
+                          <span class="tooltip-text">Bond constraint scheme. all-bonds with LINCS is required for dt=0.002 ps. Use h-bonds for dt=0.001 ps.</span>
+                        </div>
+                      </div>
+                      <div class="ff-select-col">
+                        <select id="sim-constraints" name="constraints">
+                          <option value="all-bonds">all-bonds (recommended)</option>
+                          <option value="h-bonds">h-bonds</option>
+                          <option value="none">none</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div class="ff-row">
+                      <div class="ff-label-col">
+                        <span class="ff-title">LINCS Order</span>
+                        <div class="tooltip-container"><span class="info-icon">?</span>
+                          <span class="tooltip-text">Accuracy of LINCS constraint algorithm. 4 is standard. Increase to 6 for highly constrained systems.</span>
+                        </div>
+                      </div>
+                      <div class="ff-select-col">
+                        <input type="number" id="sim-lincs-order" name="lincs_order" value="4" min="2" max="8" step="2">
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <!-- Barostat 선택 -->
-              <div class="ff-row">
-                <div class="ff-label-col">
-                  <span class="ff-title">Barostat</span>
-                  <div class="tooltip-container">
-                    <span class="info-icon">?</span>
-                    <span class="tooltip-text">The pressure coupling algorithm (barostat) to maintain constant pressure. Parrinello-Rahman is recommended.</span>
-                  </div>
-                </div>
-                <div class="ff-select-col">
-                  <select id="sim-barostat" name="barostat">
-                    <option value="Parrinello-Rahman">Parrinello-Rahman (recommended)</option>
-                    <option value="Berendsen">Berendsen</option>
-                  </select>
-                </div>
-              </div>
-
-              <!-- Performance Parameters -->
-              <div class="ff-row">
-                <div class="ff-label-col">
-                  <span class="ff-title">Time Step</span>
-                  <div class="tooltip-container"><span class="info-icon">?</span>
-                    <span class="tooltip-text">Integration time step in ps. 0.002 ps is standard with LINCS constraints. Reduce to 0.001 ps for unstable systems.</span>
-                  </div>
-                </div>
-                <div class="ff-select-col">
-                  <input type="number" id="sim-dt" name="dt_ps" value="0.002" min="0.0001" max="0.004" step="0.0001">
-                </div>
-              </div>
-
-              <div class="ff-row">
-                <div class="ff-label-col">
-                  <span class="ff-title">Coord Output</span>
-                  <div class="tooltip-container"><span class="info-icon">?</span>
-                    <span class="tooltip-text">Output frequency for .xtc trajectory (in steps). 1000 steps × 0.002 ps/step = 2 ps per frame.</span>
-                  </div>
-                </div>
-                <div class="ff-select-col">
-                  <input type="number" id="sim-nstxout-compressed" name="nstxout_compressed" value="1000" min="1" max="100000" step="100">
-                </div>
-              </div>
-
-              <!-- Cutoff Parameters -->
-              <div class="ff-row">
-                <div class="ff-label-col">
-                  <span class="ff-title">Coulomb Type</span>
-                  <div class="tooltip-container"><span class="info-icon">?</span>
-                    <span class="tooltip-text">Electrostatic calculation method. PME (Particle Mesh Ewald) is strongly recommended for accuracy.</span>
-                  </div>
-                </div>
-                <div class="ff-select-col">
-                  <select id="sim-coulombtype" name="coulombtype">
-                    <option value="PME">PME (recommended)</option>
-                    <option value="Cut-off">Cut-off</option>
-                    <option value="Ewald">Ewald</option>
-                  </select>
-                </div>
-              </div>
-
-              <div class="ff-row">
-                <div class="ff-label-col">
-                  <span class="ff-title">rcoulomb / rvdw</span>
-                  <div class="tooltip-container"><span class="info-icon">?</span>
-                    <span class="tooltip-text">Cutoff distance in nm for electrostatic and van der Waals interactions. 1.0 nm is standard.</span>
-                  </div>
-                </div>
-                <div class="ff-select-col" style="display:flex;gap:6px;">
-                  <input type="number" id="sim-rcoulomb" name="rcoulomb_nm" value="1.0" min="0.8" max="2.0" step="0.1" style="width:65px;">
-                  <input type="number" id="sim-rvdw" name="rvdw_nm" value="1.0" min="0.8" max="2.0" step="0.1" style="width:65px;">
-                </div>
-              </div>
-
-              <div class="ff-row">
-                <div class="ff-label-col">
-                  <span class="ff-title">PME Order</span>
-                  <div class="tooltip-container"><span class="info-icon">?</span>
-                    <span class="tooltip-text">Interpolation order for PME. 4 = cubic (standard). Higher values improve accuracy but increase cost.</span>
-                  </div>
-                </div>
-                <div class="ff-select-col">
-                  <select id="sim-pme-order" name="pme_order">
-                    <option value="4">4 (standard)</option>
-                    <option value="6">6 (high accuracy)</option>
-                    <option value="8">8 (very high)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div class="ff-row">
-                <div class="ff-label-col">
-                  <span class="ff-title">Fourier Spacing</span>
-                  <div class="tooltip-container"><span class="info-icon">?</span>
-                    <span class="tooltip-text">Grid spacing in nm for FFT in PME. 0.16 nm is standard. Smaller values increase accuracy and cost.</span>
-                  </div>
-                </div>
-                <div class="ff-select-col">
-                  <input type="number" id="sim-fourierspacing" name="fourierspacing_nm" value="0.16" min="0.1" max="0.3" step="0.01">
-                </div>
-              </div>
-
-              <!-- Constraints -->
-              <div class="ff-row">
-                <div class="ff-label-col">
-                  <span class="ff-title">Constraints</span>
-                  <div class="tooltip-container"><span class="info-icon">?</span>
-                    <span class="tooltip-text">Bond constraint scheme. all-bonds with LINCS is required for dt=0.002 ps. Use h-bonds for dt=0.001 ps.</span>
-                  </div>
-                </div>
-                <div class="ff-select-col">
-                  <select id="sim-constraints" name="constraints">
-                    <option value="all-bonds">all-bonds (recommended)</option>
-                    <option value="h-bonds">h-bonds</option>
-                    <option value="none">none</option>
-                  </select>
-                </div>
-              </div>
-
-              <div class="ff-row">
-                <div class="ff-label-col">
-                  <span class="ff-title">LINCS Order</span>
-                  <div class="tooltip-container"><span class="info-icon">?</span>
-                    <span class="tooltip-text">Accuracy of LINCS constraint algorithm. 4 is standard. Increase to 6 for highly constrained systems.</span>
-                  </div>
-                </div>
-                <div class="ff-select-col">
-                  <input type="number" id="sim-lincs-order" name="lincs_order" value="4" min="2" max="8" step="2">
-                </div>
-              </div>
             </div>
           </div>
 
@@ -2368,13 +2526,13 @@ body.resizing * {
         </button>
       </div>
 
-      <!-- [작업 선택 화면] 처음 New Run 선택 시 Simulation(새 시뮬레이션 시작)과 Visualization(기존 결과 업로드 시각화) 중 선택하는 메뉴 -->
+      <!-- [작업 선택 화면] 처음 New Run 선택 시 Simulation(새 시뮬레이션 시작), Visualization(기존 결과 업로드 시각화), Virtual Run 중 선택하는 메뉴 -->
       <div id="new-run-select-view">
         <div style="text-align: center; margin-bottom: 24px;">
           <h2 style="font-size: 24px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px;">Select Run Type</h2>
-          <p style="color: var(--text-secondary); font-size: 14px;">Choose whether to configure a new simulation or analyze an XVG file.</p>
+          <p style="color: var(--text-secondary); font-size: 14px;">Choose whether to configure a new simulation, analyze an XVG file, or start a virtual mock run for UI testing.</p>
         </div>
-        <div style="display: flex; gap: 24px; width: 100%; max-width: 600px; flex-wrap: wrap; justify-content: center;">
+        <div style="display: flex; gap: 20px; width: 100%; max-width: 900px; flex-wrap: wrap; justify-content: center;">
           <!-- Choice Card 1: Simulation -->
           <div onclick="selectRunType('simulation')" style="flex: 1; min-width: 250px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 24px; cursor: pointer; text-align: center; transition: all 0.3s ease; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; box-shadow: var(--shadow-sm);" onmouseover="this.style.borderColor='var(--accent-primary)'; this.style.transform='translateY(-4px)'; this.style.background='var(--bg-card-hover)';" onmouseout="this.style.borderColor='var(--border-color)'; this.style.transform='none'; this.style.background='var(--bg-card)';">
             <div style="width: 48px; height: 48px; border-radius: 50%; background: rgba(99, 102, 241, 0.1); display: flex; align-items: center; justify-content: center; color: var(--accent-primary);">
@@ -2390,6 +2548,14 @@ body.resizing * {
             </div>
             <h3 style="font-size: 18px; font-weight: 600; color: var(--text-primary);">Visualization</h3>
             <p style="color: var(--text-secondary); font-size: 13px; line-height: 1.4;">Upload GROMACS output files (.xvg, etc.) to perform visualization analysis.</p>
+          </div>
+          <!-- Choice Card 3: Virtual Run (UI Test / Simulation Sandbox) -->
+          <div onclick="selectRunType('virtual')" style="flex: 1; min-width: 250px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 24px; cursor: pointer; text-align: center; transition: all 0.3s ease; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; box-shadow: var(--shadow-sm);" onmouseover="this.style.borderColor='var(--accent-green)'; this.style.transform='translateY(-4px)'; this.style.background='var(--bg-card-hover)';" onmouseout="this.style.borderColor='var(--border-color)'; this.style.transform='none'; this.style.background='var(--bg-card)';">
+            <div style="width: 48px; height: 48px; border-radius: 50%; background: rgba(16, 185, 129, 0.1); display: flex; align-items: center; justify-content: center; color: var(--accent-green);">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            </div>
+            <h3 style="font-size: 18px; font-weight: 600; color: var(--text-primary);">Virtual Run</h3>
+            <p style="color: var(--text-secondary); font-size: 13px; line-height: 1.4;">Simulate a molecular dynamics execution flow in real-time without physical computation.</p>
           </div>
         </div>
       </div>
@@ -2407,11 +2573,11 @@ body.resizing * {
           <!-- Visualization tabs -->
           <div id="viz-tab-header" style="display:flex;gap:0;border-bottom:1px solid var(--border-color);margin-bottom:16px;flex-shrink:0;">
             <button class="viz-tab active" id="viz-tab-xvg" onclick="switchVizTab('xvg')"
-                    style="flex:1;text-align:center;padding:8px 0;font-size:13px;font-weight:500;background:none;border:none;border-bottom:2px solid var(--accent-cyan);color:var(--accent-cyan);cursor:pointer;transition:all 0.2s;">
+                    style="flex:1;display:flex;align-items:center;justify-content:center;padding:8px 0;font-size:13px;font-weight:500;background:none;border:none;border-bottom:2px solid var(--accent-cyan);color:var(--accent-cyan);cursor:pointer;transition:all 0.2s;">
               XVG Plots
             </button>
             <button class="viz-tab" id="viz-tab-3d" onclick="switchVizTab('3d')"
-                    style="flex:1;text-align:center;padding:8px 0;font-size:13px;font-weight:500;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-secondary);cursor:pointer;transition:all 0.2s;">
+                    style="flex:1;display:flex;align-items:center;justify-content:center;padding:8px 0;font-size:13px;font-weight:500;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-secondary);cursor:pointer;transition:all 0.2s;">
               3D Viewer
             </button>
           </div>
@@ -2963,6 +3129,20 @@ function wizardGoToStep(step) {
   }
 }
 
+function toggleSimAccordion(header) {
+  const card = header.closest('.sim-card');
+  if (!card) return;
+  const isActive = card.classList.contains('active');
+  
+  document.querySelectorAll('#wiz-section-5 .sim-card').forEach(c => {
+    c.classList.remove('active');
+  });
+  
+  if (!isActive) {
+    card.classList.add('active');
+  }
+}
+
 function wizardNext() {
   const next = _wizardNextStep(_wizardStep);
   if (next !== _wizardStep) _wizardShowStep(next);
@@ -3125,7 +3305,8 @@ function wizardLoadPreset(name) {
       if (c.ions?.concentration_M != null) document.getElementById('ion-concentration').value = c.ions.concentration_M;
       if (c.ions?.neutralize != null) document.getElementById('ion-neutralize').checked = c.ions.neutralize;
       if (c.simulation?._expert_mode) {
-        document.getElementById('expert-toggle').checked = true;
+        const expToggle = document.getElementById('expert-toggle');
+        if (expToggle) expToggle.checked = true;
         wizardToggleExpert(true);
         if (c.simulation.temperature_K) document.getElementById('sim-temperature').value = c.simulation.temperature_K;
         if (c.simulation.pressure_bar)  document.getElementById('sim-pressure').value  = c.simulation.pressure_bar;
@@ -3265,6 +3446,10 @@ function selectRunType(type) {
     document.getElementById('view-title').textContent = 'Visualization';
     // Clear drop zone state
     document.getElementById('selected-xvg-file').textContent = '';
+  } else if (type === 'virtual') {
+    document.getElementById('new-run-view').style.display = 'none';
+    document.getElementById('new-visualization-view').style.display = 'none';
+    startVirtualRun();
   }
 }
 
@@ -3335,6 +3520,21 @@ function toggleTheme() {
     localStorage.setItem('theme', 'dark');
   }
   
+  if (term) {
+    const termBg = isLight ? '#f9fafb' : '#04060f';
+    const termFg = isLight ? '#000000' : '#ffffff';
+    const termCursor = isLight ? '#1f2937' : '#06b6d4';
+    term.options.theme = { background: termBg, foreground: termFg, cursor: termCursor };
+  }
+  
+  const fallback = document.getElementById('fallback-terminal-text');
+  if (fallback) {
+    fallback.style.color = isLight ? '#000000' : '#ffffff';
+  }
+  const chatContent = document.getElementById('chat-content');
+  if (chatContent) {
+    chatContent.style.color = isLight ? '#000000' : '#ffffff';
+  }
 }
 
 
@@ -3344,9 +3544,21 @@ const toggle = document.getElementById('cyber-toggle');
 if (savedTheme === 'light') {
   document.body.classList.add('light-theme');
   if (toggle) toggle.checked = true;
+  document.addEventListener('DOMContentLoaded', () => {
+    const fallback = document.getElementById('fallback-terminal-text');
+    if (fallback) fallback.style.color = '#000000';
+    const chatContent = document.getElementById('chat-content');
+    if (chatContent) chatContent.style.color = '#000000';
+  });
 } else {
   document.body.classList.remove('light-theme');
   if (toggle) toggle.checked = false;
+  document.addEventListener('DOMContentLoaded', () => {
+    const fallback = document.getElementById('fallback-terminal-text');
+    if (fallback) fallback.style.color = '#ffffff';
+    const chatContent = document.getElementById('chat-content');
+    if (chatContent) chatContent.style.color = '#ffffff';
+  });
 }
 
 function updateStepper(info) {
@@ -3449,12 +3661,25 @@ function initTerminal() {
 
   if (typeof Terminal === 'undefined') {
     // xterm.js 미로드 시 fallback
-    if (fallback) { fallback.style.display = 'block'; fallback.textContent = ''; }
+    if (fallback) {
+      fallback.style.display = 'block';
+      fallback.textContent = '';
+      if (document.body.classList.contains('light-theme')) {
+        fallback.style.color = '#000000';
+      } else {
+        fallback.style.color = '#ffffff';
+      }
+    }
     return;
   }
 
+  const isLight = document.body.classList.contains('light-theme');
+  const termBg = isLight ? '#f9fafb' : '#04060f';
+  const termFg = isLight ? '#000000' : '#ffffff';
+  const termCursor = isLight ? '#1f2937' : '#06b6d4';
+
   term = new Terminal({
-    theme: { background: '#04060f', foreground: '#a7f3d0', cursor: '#06b6d4' },
+    theme: { background: termBg, foreground: termFg, cursor: termCursor },
     cursorBlink: true,
     fontSize: 11,
     fontFamily: '"Fira Code", "SF Mono", "Menlo", monospace',
@@ -4628,6 +4853,180 @@ async function _loadRunFileIntoNgl(runId, filename, role) {
   } else {
     await handleMolTrajFile(file);
   }
+}
+
+// ── Virtual/Mock Run Sandbox for UI testing without real execution ────────────────────────
+let _virtualRunInterval = null;
+let _virtualRunTimeouts = [];
+
+function startVirtualRun() {
+  stopWs();
+  if (_virtualRunInterval) { clearInterval(_virtualRunInterval); _virtualRunInterval = null; }
+  _virtualRunTimeouts.forEach(t => clearTimeout(t));
+  _virtualRunTimeouts = [];
+
+  currentRunId = 'virtual_sandbox';
+  document.getElementById('new-run-view').style.display = 'none';
+  document.getElementById('new-run-select-view').style.display = 'none';
+  document.getElementById('new-visualization-view').style.display = 'none';
+  document.getElementById('run-view').style.display = 'flex';
+  document.getElementById('view-title').textContent = 'Simulation: [VIRTUAL RUN] 1AKI (Lysozyme)';
+
+  // Reset Stepper
+  updateStepper({ last_completed_stage: 'none', status: 'running', current_step: 1 });
+  updateButtons('running');
+
+  // Initialize terminal mockup
+  initTerminal();
+  const writeLine = (text) => {
+    if (term) {
+      term.write(text + '\r\n');
+    } else {
+      const fallback = document.getElementById('fallback-terminal-text');
+      if (fallback) fallback.textContent += text + '\n';
+    }
+  };
+
+  writeLine('\x1b[1;36m[Virtual Run Mode Started]\x1b[0m Ready to simulate GROMACS execution workflow...');
+  writeLine('\x1b[33mInfo:\x1b[0m This is a simulated run for testing and modifying the frontend UI elements.');
+
+  const stages = [
+    { name: 'Topology', step: 1, delay: 1500, log: 'gmx pdb2gmx -f 1aki.pdb -o 1aki_processed.gro -water spc' },
+    { name: 'Box Def', step: 2, delay: 1500, log: 'gmx editconf -f 1aki_processed.gro -o 1aki_newbox.gro -c -d 1.0 -bt cubic' },
+    { name: 'Solvation', step: 3, delay: 1500, log: 'gmx solvate -cp 1aki_newbox.gro -cs spc216.gro -o 1aki_solv.gro -p topol.top' },
+    { name: 'Ion Prep', step: 4, delay: 1500, log: 'gmx grompp -f ions.mdp -c 1aki_solv.gro -p topol.top -o ions.tpr' },
+    { name: 'Ionization', step: 5, delay: 1500, log: 'gmx genion -s ions.tpr -o 1aki_solv_ions.gro -p topol.top -pname NA -nname CL -neutral' },
+    { name: 'Minim/Equil', step: 6, delay: 2500, log: 'gmx grompp -f minim.mdp -c 1aki_solv_ions.gro -p topol.top -o em.tpr\ngmx mdrun -v -deffnm em' },
+    { name: 'Production', step: 7, delay: 4000, log: 'gmx grompp -f md.mdp -c npt.gro -t npt.cpt -p topol.top -o md_0_10.tpr\ngmx mdrun -v -deffnm md_0_10' },
+    { name: 'Analysis', step: 8, delay: 2000, log: 'gmx energy -f md_0_10.edr -o potential.xvg\ngmx rms -s md_0_10.tpr -f md_0_10.xtc -o rmsd.xvg' }
+  ];
+
+  let cumulativeDelay = 500;
+  stages.forEach((st) => {
+    let t = setTimeout(() => {
+      updateStepper({ last_completed_stage: st.step === 8 ? 'md' : 'none', status: 'running', current_step: st.step });
+      writeLine(`\r\n\x1b[1;32m==> Running Stage ${st.step}: ${st.name}\x1b[0m`);
+      writeLine(`$ ${st.log}`);
+
+      if (st.step === 6) {
+        // Mock energy minimization progress
+        writeLine('   Step     Time          Lambda');
+        writeLine('      0      0.00000      0.00000');
+        writeLine('     50      0.05000      0.00000  Fmax = 4.23e+03');
+        writeLine('    100      0.10000      0.00000  Fmax = 1.84e+03');
+        writeLine('    150      0.15000      0.00000  Fmax = 9.54e+02 (converged!)');
+      }
+
+      if (st.step === 7) {
+        // Mock MD production loop
+        writeLine('Starting production MD...');
+        let mdStep = 0;
+        _virtualRunInterval = setInterval(() => {
+          mdStep += 500;
+          if (mdStep <= 5000) {
+            writeLine(`Step ${mdStep}: Potential energy = -3.421e+05 kJ/mol, Temp = 299.8 K`);
+          } else {
+            clearInterval(_virtualRunInterval);
+            _virtualRunInterval = null;
+          }
+        }, 300);
+      }
+
+      if (st.step === 8) {
+        // Mock completed state and show charts/audit
+        updateStepper({ last_completed_stage: 'viz', status: 'completed' });
+        updateButtons('completed');
+        showToast('Virtual Simulation completed!', 'success');
+
+        // Render mock charts in gallery-panel
+        const panel = document.getElementById('gallery-panel');
+        panel.style.display = '';
+        const grid = document.getElementById('gallery-grid');
+        grid.innerHTML = '';
+
+        const mockPlots = [
+          { title: 'Potential Energy', unit: 'kJ/mol', data: [-341000, -342000, -341500, -342500, -342100, -342900] },
+          { title: 'Temperature', unit: 'K', data: [298.5, 301.2, 299.8, 300.5, 299.7, 300.1] },
+          { title: 'Pressure', unit: 'bar', data: [1.2, -0.8, 2.1, 0.5, -1.1, 1.0] },
+          { title: 'RMSD', unit: 'nm', data: [0.05, 0.12, 0.18, 0.22, 0.23, 0.25] }
+        ];
+
+        mockPlots.forEach((p, idx) => {
+          const color = CHART_COLORS[idx % CHART_COLORS.length];
+          const mn = Math.min(...p.data).toFixed(2);
+          const mx = Math.max(...p.data).toFixed(2);
+          const last = p.data[p.data.length - 1].toFixed(2);
+
+          const card = document.createElement('div');
+          card.className = 'chart-card';
+
+          const titleEl = document.createElement('div');
+          titleEl.className = 'chart-card-title';
+          titleEl.textContent = `${p.title} (${p.unit})`;
+
+          const canvas = document.createElement('canvas');
+          canvas.className = 'chart-canvas';
+          canvas.width = 280;
+          canvas.height = 90;
+
+          const statsEl = document.createElement('div');
+          statsEl.className = 'chart-stats';
+          statsEl.innerHTML = 'min <span></span> max <span></span> last <span></span>';
+          const spans = statsEl.querySelectorAll('span');
+          spans[0].textContent = mn;
+          spans[1].textContent = mx;
+          spans[2].textContent = last;
+
+          card.appendChild(titleEl);
+          card.appendChild(canvas);
+          card.appendChild(statsEl);
+          grid.appendChild(card);
+
+          requestAnimationFrame(() => {
+            drawSparkline(canvas, p.data, color);
+          });
+        });
+
+        // Load mock audit report
+        const auditPanel = document.getElementById('audit-panel');
+        const auditContent = document.getElementById('audit-content');
+        const auditBadge = document.getElementById('audit-badge');
+        if (auditPanel && auditContent) {
+          auditPanel.style.display = '';
+          if (auditBadge) auditBadge.style.background = 'var(--accent-green)';
+          auditContent.innerHTML = `
+            <div style="margin-bottom:10px; font-size:11px; color:var(--text-muted);">Tutorial: <strong style="color:var(--text-primary)">Lysozyme in Water</strong> — 4 passed, 0 failed</div>
+            <div style="display:flex; align-items:baseline; gap:8px; padding:5px 0; border-bottom:1px solid var(--border-color);">
+              <span style="color:var(--accent-green); font-weight:700; width:14px; flex-shrink:0;">✓</span>
+              <span style="color:var(--text-secondary); width:110px; flex-shrink:0;">Forcefield</span>
+              <span style="color:var(--text-muted); flex:1;">expected: <code style="color:var(--accent-cyan)">oplsaa</code></span>
+              <span style="color:var(--accent-green); flex:1;">actual: <code>oplsaa</code></span>
+            </div>
+            <div style="display:flex; align-items:baseline; gap:8px; padding:5px 0; border-bottom:1px solid var(--border-color);">
+              <span style="color:var(--accent-green); font-weight:700; width:14px; flex-shrink:0;">✓</span>
+              <span style="color:var(--text-secondary); width:110px; flex-shrink:0;">Water Model</span>
+              <span style="color:var(--text-muted); flex:1;">expected: <code style="color:var(--accent-cyan)">spce</code></span>
+              <span style="color:var(--accent-green); flex:1;">actual: <code>spce</code></span>
+            </div>
+            <div style="display:flex; align-items:baseline; gap:8px; padding:5px 0; border-bottom:1px solid var(--border-color);">
+              <span style="color:var(--accent-green); font-weight:700; width:14px; flex-shrink:0;">✓</span>
+              <span style="color:var(--text-secondary); width:110px; flex-shrink:0;">Box Type</span>
+              <span style="color:var(--text-muted); flex:1;">expected: <code style="color:var(--accent-cyan)">cubic</code></span>
+              <span style="color:var(--accent-green); flex:1;">actual: <code>cubic</code></span>
+            </div>
+            <div style="display:flex; align-items:baseline; gap:8px; padding:5px 0; border-bottom:1px solid var(--border-color);">
+              <span style="color:var(--accent-green); font-weight:700; width:14px; flex-shrink:0;">✓</span>
+              <span style="color:var(--text-secondary); width:110px; flex-shrink:0;">Box Size</span>
+              <span style="color:var(--text-muted); flex:1;">expected: <code style="color:var(--accent-cyan)">1.0 nm</code></span>
+              <span style="color:var(--accent-green); flex:1;">actual: <code>1.0 nm</code></span>
+            </div>
+          `;
+        }
+      }
+    }, cumulativeDelay);
+    _virtualRunTimeouts.push(t);
+    cumulativeDelay += st.delay;
+  });
 }
 
 </script>
