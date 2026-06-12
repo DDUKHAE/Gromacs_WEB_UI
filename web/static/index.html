@@ -118,10 +118,11 @@ body.light-theme ::-webkit-scrollbar-thumb {
 
 /* Sidebar base */
 #sidebar {
-  width: 250px;
-  min-width: 180px;
-  max-width: 500px;
-  background: rgba(5, 7, 18, 0.9);
+  /* [사이드바 크기 설정] 가로 너비(width) 및 최소/최대 제한 범위를 조절합니다. */
+  width: 250px;       /* 기본 사이드바 가로 폭 */
+  min-width: 0px;   /* 사이드바 최소 가로 크기 제한 */
+  max-width: 500px;   /* 사이드바 최대 가로 크기 제한 */
+  background: rgba(5, 7, 18, 0.9); /* 사이드바 배경 색상 및 불투명도 */
   backdrop-filter: blur(20px);
   border-right: none;
   display: flex;
@@ -149,7 +150,7 @@ body.light-theme ::-webkit-scrollbar-thumb {
 /* Prevent inner content from squishing during width animation */
 #sidebar-header,
 #run-list {
-  min-width: 250px;
+  min-width: 150px; 
 }
 
 /* Content opacity fade during collapse/expand */
@@ -321,10 +322,6 @@ body.light-theme #sidebar-title {
   box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
   filter: brightness(1.08);
 }
-
-
-
-
 
 #run-list {
   flex: 1;
@@ -845,15 +842,26 @@ body.light-theme .chart-card-title {
   gap: 0;
 }
 .wiz-tab {
-  padding: 7px 13px;
-  font-size: 11px;
-  color: var(--text-secondary);
+  /* [마법사 탭 글자 및 크기 설정] 마법사 탭(Structure, Force Field 등)의 간격과 크기입니다. */
+  flex: 1;                      /* 회색 가로선 길이에 맞게 균등 배분 */
+  text-align: center;           /* 텍스트 중앙 정렬 */
+  padding: 8px 0;               /* 탭 내부 여백 (세로 가로) */
+  font-size: 13px;              /* 글자 크기 (현재 Visualization 탭과 통일됨) */
+  font-weight: 500;              /* 글자 두께 */
+  background: none;             /* 버튼 기본 배경 제거 */
+  border: none;                 /* 버튼 기본 테두리 제거 */
+  font-family: inherit;         /* 전역 폰트 상속 */
+  color: var(--text-secondary); /* 비활성 탭 글자 색상 */
   white-space: nowrap;
-  border-bottom: 2px solid transparent;
-  cursor: default;
-  transition: color 0.15s;
+  border-bottom: 2px solid transparent; /* 하단 언더라인 기본형태 (투명) */
+  cursor: pointer;
+  transition: all 0.2s;
 }
-.wiz-tab.active { color: var(--accent-primary); border-bottom-color: var(--accent-primary); }
+.wiz-tab:hover {
+  color: var(--accent-cyan);    /* 마우스 오버 시 글자 색상 */
+}
+/* 활성화(active)된 탭의 글자 및 밑줄 색상 설정 */
+.wiz-tab.active { color: var(--accent-cyan); border-bottom-color: var(--accent-cyan); }
 .wiz-tab.done   { color: var(--accent-green);   border-bottom-color: var(--accent-green); }
 .wiz-section    { display: none; }
 .wiz-section.active { display: block; }
@@ -875,10 +883,266 @@ body.light-theme .chart-card-title {
   margin-top: 8px;
 }
 
+/* Force Field Step 2 Custom Layout */
+.ff-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+.ff-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-color);
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+body.light-theme .ff-row {
+  background: rgba(0, 0, 0, 0.01);
+}
+.ff-row:hover {
+  border-color: rgba(6, 182, 212, 0.35);
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: 0 4px 12px rgba(6, 182, 212, 0.05);
+}
+body.light-theme .ff-row:hover {
+  background: rgba(0, 0, 0, 0.02);
+}
+.ff-label-col {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 140px;
+}
+.ff-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ff-select-col {
+  flex: 1.6;
+  width: 100%;
+}
+.ff-select-col select,
+.ff-select-col input:not([type="checkbox"]) {
+  width: 100%;
+  height: 38px;                 /* 높이를 38px로 고정하여 완벽하게 일치시킴 */
+  padding: 0 14px;              /* 세로 패딩 제거하고 가로만 설정 (수직 중앙 정렬 자동화) */
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: rgba(6, 8, 20, 0.65);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: all 0.2s;
+  font-family: inherit;
+  box-sizing: border-box;       /* 패딩과 테두리가 전체 크기에 포함되도록 설정 */
+}
+.ff-select-col select {
+  cursor: pointer;
+}
+.ff-select-col input:not([type="checkbox"]) {
+  cursor: text;
+}
+body.light-theme .ff-select-col select,
+body.light-theme .ff-select-col input:not([type="checkbox"]) {
+  background: #ffffff;
+  color: var(--text-primary);
+}
+.ff-select-col select:focus,
+.ff-select-col input:not([type="checkbox"]):focus {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.25);
+  background: rgba(6, 8, 20, 0.85);
+}
+body.light-theme .ff-select-col select:focus,
+body.light-theme .ff-select-col input:not([type="checkbox"]):focus {
+  background: #ffffff;
+}
+
+/* Tooltips */
+.tooltip-container {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: help;
+}
+.info-icon {
+  width: 14px;
+  height: 14px;
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  user-select: none;
+}
+.tooltip-container:hover .info-icon {
+  background: var(--accent-cyan);
+  color: #04060f;
+}
+.tooltip-text {
+  visibility: hidden;
+  position: absolute;
+  bottom: 125%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 240px;
+  background: rgba(11, 15, 36, 0.96);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #ffffff; /* 라이트모드에서도 선명하게 보이도록 흰색으로 고정 */
+  text-align: center;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.45;
+  z-index: 1000;
+  opacity: 0;
+  transition: opacity 0.2s, transform 0.2s;
+  pointer-events: none;
+  box-shadow: var(--shadow-lg);
+  font-family: inherit;
+  font-weight: 400;
+}
+.tooltip-container:hover .tooltip-text {
+  visibility: visible;
+  opacity: 1;
+  transform: translateX(-50%) translateY(-4px);
+}
+
+/* Add Force Field button */
+.ff-add-btn {
+  margin-left: 4px;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+.ff-add-btn:hover {
+  background: var(--accent-cyan);
+  color: #04060f;
+  border-color: var(--accent-cyan);
+}
+
+/* Summary Dashboard Card Grid */
+.summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+  width: 100%;
+}
+.summary-card {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+body.light-theme .summary-card {
+  background: rgba(0, 0, 0, 0.01);
+}
+.summary-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-cyan);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 6px;
+  margin-bottom: 2px;
+  cursor: pointer;              /* 마우스 커서 포인터 설정 */
+  transition: all 0.2s ease;
+}
+.summary-card-header:hover {
+  color: var(--text-primary);    /* 마우스 호버 시 텍스트 밝게 변경 */
+  border-bottom-color: var(--accent-cyan); /* 하단 밑줄 불빛 강조 */
+}
+.summary-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+}
+.summary-label {
+  color: var(--text-secondary);
+}
+.summary-value {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.summary-badge {
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.badge-cyan {
+  background: rgba(6, 182, 212, 0.1);
+  color: var(--accent-cyan);
+  border: 1px solid rgba(6, 182, 212, 0.2);
+}
+.badge-indigo {
+  background: rgba(99, 102, 241, 0.1);
+  color: var(--accent-primary);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+}
+.badge-green {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--accent-green);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+.badge-yellow {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--accent-yellow);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+
 /* New Run */
 #new-run-view,
-#new-run-select-view,
 #new-visualization-view {
+  flex: 1;
+  display: none; /* Controlled explicitly via JS style.display */
+  flex-direction: column;
+  align-items: center;
+  /* [컨테이너 정렬 및 패딩] justify-content가 flex-start로 고정되어 탭이 흔들리지 않습니다. */
+  justify-content: flex-start;  /* 상단 정렬로 탭 높이 고정 */
+  padding: 40px 24px 24px;      /* 상단 여백(40px)과 좌우/하단 여백 */
+  overflow-y: auto;
+  position: relative;
+}
+
+#new-run-select-view {
   flex: 1;
   display: none; /* Controlled explicitly via JS style.display */
   flex-direction: column;
@@ -930,12 +1194,13 @@ body.light-theme .chart-card-title {
 }
 #new-run-form,
 #new-visualization-container {
+  /* [메인 입력 폼 규격] System Builder와 Visualization 업로드 폼의 가로폭 및 최소 세로길이 설정 */
   width: 100%;
-  max-width: 480px;
-  min-height: 580px;
+  max-width: 600px;      /* 폼의 최대 가로 크기 (가로 스크롤바가 나오지 않도록 600px로 확장) */
+  min-height: 580px;     /* 폼의 최소 세로 크기 */
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 14px;             /* 요소 간 세로 여백 */
 }
 
 #new-run-form h2,
@@ -976,8 +1241,10 @@ body.light-theme #new-visualization-container h2 {
   gap: 8px;
 }
 
+#drop-zone,
 #xvg-drop-zone,
 #mol-upload-container {
+  /* [업로드 박스 가로세로 비율 설정] 1 / 1 로 설정하여 완벽한 정방형(정사각형) 형태를 유지합니다. */
   aspect-ratio: 1 / 1;
 }
 
@@ -1457,6 +1724,7 @@ body.resizing * {
 
 <div style="display:flex; flex-direction:column; width:100%; height:100vh;">
   <div style="display:flex; flex:1; overflow:hidden;">
+    <!-- [사이드바] 최근 실행된 시뮬레이션 목록 및 새 실행 추가 버튼 영역 -->
     <nav id="sidebar" aria-label="시뮬레이션 실행 목록">
       <div id="sidebar-header">
         <div id="sidebar-title-wrapper">
@@ -1478,6 +1746,7 @@ body.resizing * {
 
     <!-- Sidebar collapsed: external toggle btn (outside sidebar to avoid stacking-context clipping) -->
     <div id="sidebar-toggle-btn" onclick="toggleSidebar()" title="사이드바 펼치기" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' ')toggleSidebar()">G</div>
+    <!-- [메인 콘텐츠] 대시보드 화면 및 각종 모달, 폼 등이 렌더링되는 메인 컨테이너 -->
     <main id="main">
       <header id="main-header">
         <h1 id="view-title">Simulation Dashboard</h1>
@@ -1531,7 +1800,7 @@ body.resizing * {
         </div>
       </header>
 
-      <!-- Run detail view -->
+      <!-- [실행 상세정보] 진행 중이거나 완료된 시뮬레이션의 파이프라인 단계, 실시간 터미널 출력, 분석 차트 등을 모아보는 패널 -->
       <div id="run-view">
         <!-- Stepper -->
         <div id="stepper" class="card" role="progressbar" aria-label="파이프라인 진행 상태">
@@ -1627,19 +1896,19 @@ body.resizing * {
         </div>
       </div>
 
-      <!-- New Run Form -->
+      <!-- [새 시뮬레이션 생성] System Builder 마법사 탭(PDB 업로드, FF 지정, 박스 설정, 이온 등) 설정 폼 영역 -->
       <div id="new-run-view">
         <form id="new-run-form" onsubmit="event.preventDefault(); startRun();" aria-label="새 시뮬레이션 실행 설정">
           <h2>System Builder</h2>
 
           <!-- Wizard nav tabs -->
           <div id="wizard-nav">
-            <div class="wiz-tab active" id="wiz-tab-1">1. Structure</div>
-            <div class="wiz-tab" id="wiz-tab-2">2. Force Field</div>
-            <div class="wiz-tab" id="wiz-tab-3">3. Box</div>
-            <div class="wiz-tab" id="wiz-tab-4">4. Ions</div>
-            <div class="wiz-tab" id="wiz-tab-5" style="display:none">5. Simulation</div>
-            <div class="wiz-tab" id="wiz-tab-6">6. Start</div>
+            <button type="button" class="wiz-tab active" id="wiz-tab-1" onclick="wizardGoToStep(1)">Structure</button>
+            <button type="button" class="wiz-tab" id="wiz-tab-2" onclick="wizardGoToStep(2)">Force Field</button>
+            <button type="button" class="wiz-tab" id="wiz-tab-3" onclick="wizardGoToStep(3)">Box</button>
+            <button type="button" class="wiz-tab" id="wiz-tab-4" onclick="wizardGoToStep(4)">Ions</button>
+            <button type="button" class="wiz-tab" id="wiz-tab-5" onclick="wizardGoToStep(5)">Simulation</button>
+            <button type="button" class="wiz-tab" id="wiz-tab-6" onclick="wizardGoToStep(6)">Start</button>
           </div>
 
           <!-- Step 1: PDB Upload -->
@@ -1657,117 +1926,251 @@ body.resizing * {
               <div id="selected-file"></div>
             </div>
             <input type="file" id="pdb-input" accept=".pdb" onchange="handleFileSelect(this.files[0])">
-            <div class="expert-row">
-              <input type="checkbox" id="expert-toggle" onchange="wizardToggleExpert(this.checked)">
-              <label for="expert-toggle">Expert Mode — configure simulation parameters (Step 5)</label>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:10px;">
+              <span style="font-size:12px;color:var(--text-secondary);">Or PDB ID:</span>
+              <input type="text" id="pdb-id-input" placeholder="e.g. 1AKI" maxlength="4"
+                style="width:72px;background:var(--bg-input);border:1px solid var(--border-color);
+                       color:var(--text-primary);padding:5px 8px;border-radius:4px;
+                       text-transform:uppercase;font-size:12px;">
+              <button type="button" id="pdb-fetch-btn" onclick="fetchPDBFromRCSB()"
+                style="padding:5px 12px;background:var(--accent-secondary);color:var(--text-primary);
+                       border:none;border-radius:4px;cursor:pointer;font-size:12px;">Fetch</button>
+            </div>
+            <!-- Structure Analysis Panel -->
+            <div id="structure-analysis-panel" style="display:none;margin-top:12px;">
+              <div id="structure-analysis-content"
+                style="font-size:12px;padding:10px;border:1px solid var(--border-color);
+                       border-radius:6px;background:var(--bg-card-alt,var(--bg-card));"></div>
             </div>
           </div>
 
           <!-- Step 2: Force Field & Water Model -->
           <div class="wiz-section" id="wiz-section-2">
-            <div class="param-grid">
-              <div class="param-field">
-                <label>Force Field
-                  <button type="button" id="ff-manager-btn" title="Force Field 추가"
-                    style="margin-left:6px;padding:2px;font-size:16px;line-height:1;border:none;background:transparent;color:var(--text-secondary);cursor:pointer;vertical-align:middle;">+</button>
-                </label>
-                <select name="forcefield" id="forcefield-select">
-                  <option value="">Loading...</option>
-                </select>
+            <div class="ff-container">
+              <!-- Force Field 선택 -->
+              <div class="ff-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">Force Field</span>
+                  <div class="tooltip-container">
+                    <span class="info-icon">?</span>
+                    <span class="tooltip-text">A set of physical parameters used to calculate interatomic forces and potential energy during the simulation.</span>
+                  </div>
+                  <button type="button" id="ff-manager-btn" title="Force Field 추가" class="ff-add-btn">+</button>
+                </div>
+                <div class="ff-select-col">
+                  <select name="forcefield" id="forcefield-select">
+                    <option value="">Loading...</option>
+                  </select>
+                </div>
               </div>
-              <div class="param-field">
-                <label>Water Model</label>
-                <select name="water" id="water-select">
-                  <option value="">Select forcefield first</option>
-                </select>
+
+              <!-- Water Model 선택 -->
+              <div class="ff-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">Water Model</span>
+                  <div class="tooltip-container">
+                    <span class="info-icon">?</span>
+                    <span class="tooltip-text">A mathematical model defining the charge distribution and properties of water molecules in the solvent.</span>
+                  </div>
+                </div>
+                <div class="ff-select-col">
+                  <select name="water" id="water-select">
+                    <option value="">Select forcefield first</option>
+                  </select>
+                </div>
               </div>
-              <div class="param-field">
-                <label>Tutorial</label>
-                <select name="tutorial_id" id="tutorial-select">
-                  <option value="">Auto-detect</option>
-                </select>
+
+              <!-- Tutorial 선택 -->
+              <div class="ff-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">Tutorial</span>
+                  <div class="tooltip-container">
+                    <span class="info-icon">?</span>
+                    <span class="tooltip-text">Auto-detects and configures workflow templates tailored for your molecular complex type.</span>
+                  </div>
+                </div>
+                <div class="ff-select-col">
+                  <select name="tutorial_id" id="tutorial-select">
+                    <option value="">Auto-detect</option>
+                  </select>
+                </div>
               </div>
             </div>
           </div>
 
           <!-- Step 3: Box Settings -->
           <div class="wiz-section" id="wiz-section-3">
-            <div class="param-grid">
-              <div class="param-field">
-                <label>Box Type</label>
-                <select name="box_type" id="box-type-select">
-                  <option value="dodecahedron">Dodecahedron (recommended)</option>
-                  <option value="cubic">Cubic</option>
-                  <option value="octahedron">Octahedron</option>
-                </select>
+            <div class="ff-container">
+              <!-- Box Type 선택 -->
+              <div class="ff-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">Box Type</span>
+                  <div class="tooltip-container">
+                    <span class="info-icon">?</span>
+                    <span class="tooltip-text">Determines periodic boundary box geometry. Dodecahedron is highly recommended to minimize box volume and computing resources.</span>
+                  </div>
+                </div>
+                <div class="ff-select-col">
+                  <select name="box_type" id="box-type-select">
+                    <option value="dodecahedron">Dodecahedron (recommended)</option>
+                    <option value="cubic">Cubic</option>
+                    <option value="octahedron">Octahedron</option>
+                  </select>
+                </div>
               </div>
-              <div class="param-field">
-                <label>Edge Distance (nm)
-                  <span style="font-size:11px;color:var(--text-secondary);font-weight:400;"> — min gap from molecule to box wall</span>
-                </label>
-                <input type="number" id="edge-distance" name="edge_distance_nm" value="1.0" min="0.5" max="5.0" step="0.1" style="background:var(--bg-input);border:1px solid var(--border-color);color:var(--text-primary);padding:6px 8px;border-radius:4px;width:100%;box-sizing:border-box;">
+
+              <!-- Edge Distance 설정 -->
+              <div class="ff-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">Edge Distance</span>
+                  <div class="tooltip-container">
+                    <span class="info-icon">?</span>
+                    <span class="tooltip-text">Specifies the minimum distance (nm) between the solute outer boundary and the simulation box walls to prevent self-interaction.</span>
+                  </div>
+                </div>
+                <div class="ff-select-col">
+                  <input type="number" id="edge-distance" name="edge_distance_nm" value="1.0" min="0.5" max="5.0" step="0.1">
+                </div>
               </div>
             </div>
           </div>
 
           <!-- Step 4: Ion Settings -->
           <div class="wiz-section" id="wiz-section-4">
-            <div class="param-grid">
-              <div class="param-field">
-                <label>Salt Type</label>
-                <select id="ion-salt-type" name="salt_type">
-                  <option value="NaCl">NaCl (physiological)</option>
-                  <option value="KCl">KCl</option>
-                  <option value="MgCl2">MgCl₂</option>
-                  <option value="CaCl2">CaCl₂</option>
-                </select>
+            <div class="ff-container">
+              <!-- Salt Type 선택 -->
+              <div class="ff-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">Salt Type</span>
+                  <div class="tooltip-container">
+                    <span class="info-icon">?</span>
+                    <span class="tooltip-text">The type of salt ions to be added for simulating physiological ionic strength.</span>
+                  </div>
+                </div>
+                <div class="ff-select-col">
+                  <select id="ion-salt-type" name="salt_type">
+                    <option value="NaCl">NaCl (physiological)</option>
+                    <option value="KCl">KCl</option>
+                    <option value="MgCl2">MgCl₂</option>
+                    <option value="CaCl2">CaCl₂</option>
+                  </select>
+                </div>
               </div>
-              <div class="param-field">
-                <label>Concentration (M)</label>
-                <input type="number" id="ion-concentration" name="concentration_M" value="0.15" min="0" max="2" step="0.01" style="background:var(--bg-input);border:1px solid var(--border-color);color:var(--text-primary);padding:6px 8px;border-radius:4px;width:100%;box-sizing:border-box;">
+
+              <!-- Concentration 설정 -->
+              <div class="ff-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">Concentration</span>
+                  <div class="tooltip-container">
+                    <span class="info-icon">?</span>
+                    <span class="tooltip-text">The concentration of salt in molarity (M). Standard physiological ionic strength is 0.15M.</span>
+                  </div>
+                </div>
+                <div class="ff-select-col">
+                  <input type="number" id="ion-concentration" name="concentration_M" value="0.15" min="0" max="2" step="0.01">
+                </div>
               </div>
-            </div>
-            <div class="expert-row" style="border-top:none;padding-top:0;">
-              <input type="checkbox" id="ion-neutralize" checked>
-              <label for="ion-neutralize">Neutralize system charge (add/remove ions to reach net charge 0)</label>
+
+              <!-- Neutralize 설정 -->
+              <div class="ff-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">Neutralize</span>
+                  <div class="tooltip-container">
+                    <span class="info-icon">?</span>
+                    <span class="tooltip-text">Automatically adds counter-ions (cations/anions) to neutralize the net charge of the molecular system.</span>
+                  </div>
+                </div>
+                <div class="ff-select-col" style="display: flex; align-items: center; justify-content: flex-end; padding-right: 6px;">
+                  <input type="checkbox" id="ion-neutralize" checked style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent-cyan);">
+                </div>
+              </div>
             </div>
           </div>
 
           <!-- Step 5: Simulation Parameters (Expert only) -->
           <div class="wiz-section" id="wiz-section-5">
-            <div class="param-grid">
-              <div class="param-field">
-                <label>Temperature (K)</label>
-                <input type="number" id="sim-temperature" name="temperature_K" value="300" min="200" max="500" style="background:var(--bg-input);border:1px solid var(--border-color);color:var(--text-primary);padding:6px 8px;border-radius:4px;width:100%;box-sizing:border-box;">
+            <div class="ff-container">
+              <!-- Temperature 설정 -->
+              <div class="ff-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">Temperature</span>
+                  <div class="tooltip-container">
+                    <span class="info-icon">?</span>
+                    <span class="tooltip-text">The target temperature in Kelvin (K) for the temperature coupling. Room temperature is typically 300K.</span>
+                  </div>
+                </div>
+                <div class="ff-select-col">
+                  <input type="number" id="sim-temperature" name="temperature_K" value="300" min="200" max="500">
+                </div>
               </div>
-              <div class="param-field">
-                <label>Pressure (bar)</label>
-                <input type="number" id="sim-pressure" name="pressure_bar" value="1.0" min="0.1" max="10" step="0.1" style="background:var(--bg-input);border:1px solid var(--border-color);color:var(--text-primary);padding:6px 8px;border-radius:4px;width:100%;box-sizing:border-box;">
+
+              <!-- Pressure 설정 -->
+              <div class="ff-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">Pressure</span>
+                  <div class="tooltip-container">
+                    <span class="info-icon">?</span>
+                    <span class="tooltip-text">The target pressure in bar (1.0 bar ≈ 1.0 atm) for the pressure coupling.</span>
+                  </div>
+                </div>
+                <div class="ff-select-col">
+                  <input type="number" id="sim-pressure" name="pressure_bar" value="1.0" min="0.1" max="10" step="0.1">
+                </div>
               </div>
-              <div class="param-field">
-                <label>Simulation Time (ns)</label>
-                <input type="number" id="sim-time" name="sim_time_ns" value="1.0" min="0.001" max="1000" step="0.1" style="background:var(--bg-input);border:1px solid var(--border-color);color:var(--text-primary);padding:6px 8px;border-radius:4px;width:100%;box-sizing:border-box;">
+
+              <!-- Sim Time 설정 -->
+              <div class="ff-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">Sim Time</span>
+                  <div class="tooltip-container">
+                    <span class="info-icon">?</span>
+                    <span class="tooltip-text">The total physical time in nanoseconds (ns) for the molecular dynamics production run.</span>
+                  </div>
+                </div>
+                <div class="ff-select-col">
+                  <input type="number" id="sim-time" name="sim_time_ns" value="1.0" min="0.001" max="1000" step="0.1">
+                </div>
               </div>
-              <div class="param-field">
-                <label>Thermostat</label>
-                <select id="sim-thermostat" name="thermostat">
-                  <option value="V-rescale">V-rescale (recommended)</option>
-                  <option value="Nosé-Hoover">Nosé-Hoover</option>
-                </select>
+
+              <!-- Thermostat 선택 -->
+              <div class="ff-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">Thermostat</span>
+                  <div class="tooltip-container">
+                    <span class="info-icon">?</span>
+                    <span class="tooltip-text">The temperature coupling algorithm (thermostat) to maintain constant temperature. V-rescale is recommended.</span>
+                  </div>
+                </div>
+                <div class="ff-select-col">
+                  <select id="sim-thermostat" name="thermostat">
+                    <option value="V-rescale">V-rescale (recommended)</option>
+                    <option value="Nosé-Hoover">Nosé-Hoover</option>
+                  </select>
+                </div>
               </div>
-              <div class="param-field">
-                <label>Barostat</label>
-                <select id="sim-barostat" name="barostat">
-                  <option value="Parrinello-Rahman">Parrinello-Rahman (recommended)</option>
-                  <option value="Berendsen">Berendsen</option>
-                </select>
+
+              <!-- Barostat 선택 -->
+              <div class="ff-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">Barostat</span>
+                  <div class="tooltip-container">
+                    <span class="info-icon">?</span>
+                    <span class="tooltip-text">The pressure coupling algorithm (barostat) to maintain constant pressure. Parrinello-Rahman is recommended.</span>
+                  </div>
+                </div>
+                <div class="ff-select-col">
+                  <select id="sim-barostat" name="barostat">
+                    <option value="Parrinello-Rahman">Parrinello-Rahman (recommended)</option>
+                    <option value="Berendsen">Berendsen</option>
+                  </select>
+                </div>
               </div>
             </div>
           </div>
 
           <!-- Step 6: Summary + Preset + LLM + Start -->
           <div class="wiz-section" id="wiz-section-6">
-            <div id="wiz-summary" style="background:var(--bg-secondary);border-radius:6px;padding:12px 14px;font-size:12px;margin-bottom:14px;line-height:1.8;"></div>
+            <div id="wiz-summary" style="margin-bottom: 14px;"></div>
 
             <div class="param-grid" style="margin-bottom:10px;">
               <div class="param-field">
@@ -1809,11 +2212,7 @@ body.resizing * {
             <button type="submit" id="btn-start" disabled>Start Simulation Run</button>
           </div>
 
-          <!-- Wizard footer navigation -->
-          <div id="wiz-footer">
-            <button type="button" id="wiz-back-btn" onclick="wizardBack()" style="display:none;padding:7px 16px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border-color);border-radius:4px;cursor:pointer;font-size:13px;">← Back</button>
-            <button type="button" id="wiz-next-btn" onclick="wizardNext()" style="padding:7px 16px;background:var(--accent-primary);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:13px;">Next →</button>
-          </div>
+
         </form>
         <!-- Right Arrow Navigation Button to Visualization -->
         <button type="button" class="nav-arrow-btn" onclick="selectRunType('visualization')" style="right: 24px;" title="Go to Visualization">
@@ -1821,7 +2220,7 @@ body.resizing * {
         </button>
       </div>
 
-      <!-- New Run Choice View (Type Selection) -->
+      <!-- [작업 선택 화면] 처음 New Run 선택 시 Simulation(새 시뮬레이션 시작)과 Visualization(기존 결과 업로드 시각화) 중 선택하는 메뉴 -->
       <div id="new-run-select-view">
         <div style="text-align: center; margin-bottom: 24px;">
           <h2 style="font-size: 24px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px;">Select Run Type</h2>
@@ -1847,7 +2246,7 @@ body.resizing * {
         </div>
       </div>
 
-      <!-- New Visualization View -->
+      <!-- [분석/시각화 화면] XVG 차트 생성 및 Gro/Pdb/Xtc 파일을 이용한 3D 시뮬레이션 분석 페이지 -->
       <div id="new-visualization-view">
         <!-- Left Arrow Navigation Button to Simulation -->
         <button type="button" class="nav-arrow-btn" onclick="selectRunType('simulation')" style="left: 24px;" title="Go to Simulation">
@@ -1860,11 +2259,11 @@ body.resizing * {
           <!-- Visualization tabs -->
           <div id="viz-tab-header" style="display:flex;gap:0;border-bottom:1px solid var(--border-color);margin-bottom:16px;flex-shrink:0;">
             <button class="viz-tab active" id="viz-tab-xvg" onclick="switchVizTab('xvg')"
-                    style="padding:8px 20px;font-size:13px;font-weight:500;background:none;border:none;border-bottom:2px solid var(--accent-cyan);color:var(--accent-cyan);cursor:pointer;transition:all 0.2s;">
+                    style="flex:1;text-align:center;padding:8px 0;font-size:13px;font-weight:500;background:none;border:none;border-bottom:2px solid var(--accent-cyan);color:var(--accent-cyan);cursor:pointer;transition:all 0.2s;">
               XVG Plots
             </button>
             <button class="viz-tab" id="viz-tab-3d" onclick="switchVizTab('3d')"
-                    style="padding:8px 20px;font-size:13px;font-weight:500;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-secondary);cursor:pointer;transition:all 0.2s;">
+                    style="flex:1;text-align:center;padding:8px 0;font-size:13px;font-weight:500;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-secondary);cursor:pointer;transition:all 0.2s;">
               3D Viewer
             </button>
           </div>
@@ -1927,7 +2326,7 @@ body.resizing * {
         </div>
       </div>
 
-      <!-- XVG Visualization Result Modal -->
+      <!-- [XVG 분석 결과 모달] 업로드된 XVG 플롯 결과 데이터와 러닝 에버리지(Smooth) 조정 차트를 띄우는 팝업창 -->
       <div id="xvg-result-modal" style="display:none;position:fixed;inset:0;background:rgba(6, 8, 19, 0.8);backdrop-filter:blur(8px);z-index:1050;align-items:center;justify-content:center;overflow-y:auto;padding:40px 16px;">
         <div style="background:var(--bg-surface,#0b0f24);border:1px solid var(--border-color);border-radius:14px;width:100%;max-width:860px;overflow:hidden;box-shadow:var(--shadow-lg);pointer-events:auto;margin:auto;">
           <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--border-color);">
@@ -1946,7 +2345,7 @@ body.resizing * {
         </div>
       </div>
 
-      <!-- NGL 3D Viewer Modal -->
+      <!-- [3D 분자 구조 뷰어 모달] NGL Library를 활용해 .gro/.pdb 분자 구조 및 .xtc 궤적을 3D 애니메이션으로 출력하는 팝업창 -->
       <div id="ngl-viewer-modal" style="display:none;position:fixed;inset:0;background:rgba(6, 8, 19, 0.8);backdrop-filter:blur(8px);z-index:1060;align-items:center;justify-content:center;padding:16px;">
         <div style="background:var(--bg-surface,#0b0f24);border:1px solid var(--border-color);border-radius:14px;width:100%;max-width:860px;height:80vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:var(--shadow-lg);pointer-events:auto;margin:auto;">
           <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--border-color);flex-shrink:0;">
@@ -1974,7 +2373,7 @@ body.resizing * {
         </div>
       </div>
 
-      <!-- Force Field Manager Modal -->
+      <!-- [포스필드 매니저 모달] 새로운 GROMACS 포스필드 파일(.tar.gz 등)을 업로드하거나 로컬 서버 경로를 입력해 설치/관리하는 팝업창 -->
       <div id="ff-modal-overlay" style="display:none;position:absolute;inset:0;background:rgba(6, 8, 19, 0.6);backdrop-filter:blur(8px);z-index:1000;align-items:center;justify-content:center;">
         <div style="background:var(--bg-surface,#0b0f24);border:1px solid var(--border-color,rgba(255,255,255,0.12));border-radius:12px;width:480px;max-width:95vw;padding:0;overflow:hidden;box-shadow:var(--shadow-lg,0 16px 48px rgba(0,0,0,.65));pointer-events:auto;">
           <!-- Header -->
@@ -2177,12 +2576,80 @@ function handleFileSelect(file) {
   selectedPdb = file;
   document.getElementById('selected-file').textContent = `✓ ${file.name}`;
   document.getElementById('btn-start').disabled = false;
+  _analyzePDBStructure(file);
+}
+
+async function _analyzePDBStructure(file) {
+  const formData = new FormData();
+  formData.append('pdb_file', file);
+  try {
+    const resp = await fetch('/api/pdb/analyze', {method: 'POST', body: formData});
+    if (!resp.ok) return;
+    _renderStructureAnalysis(await resp.json());
+  } catch (e) {
+    console.warn('PDB analysis failed:', e);
+  }
+}
+
+function _renderStructureAnalysis(a) {
+  const panel = document.getElementById('structure-analysis-panel');
+  const content = document.getElementById('structure-analysis-content');
+  let html = `<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:6px;">
+    <span>Chains: <b>${a.chains.join(', ')}</b></span>
+    <span>Residues: <b>${a.residue_count}</b></span>
+    <span>Atoms: <b>${a.atom_count.toLocaleString()}</b></span>
+    <span>Net charge: <b>${a.net_charge >= 0 ? '+' : ''}${a.net_charge}</b></span>
+  </div>`;
+  if (a.hetatm && a.hetatm.length > 0) {
+    html += `<div style="margin-bottom:4px;">HETATM: ${a.hetatm.map(h => `${h.resname}(${h.chain})`).join(', ')}</div>`;
+  }
+  if (a.missing_residues && a.missing_residues.length > 0) {
+    a.missing_residues.forEach(m => {
+      html += `<div style="color:var(--accent-yellow,#f59e0b);margin-bottom:4px;">⚠ Chain ${m.chain}: ${m.missing_count} residues missing</div>`;
+    });
+  }
+  if (a.altloc_residues && a.altloc_residues.length > 0) {
+    html += `<div style="color:var(--accent-yellow,#f59e0b);margin-bottom:4px;">⚠ AltLoc detected: ${a.altloc_residues.join(', ')} — altLoc A used automatically</div>`;
+  }
+  if (a.disulfide_candidates && a.disulfide_candidates.length > 0) {
+    html += `<div style="color:var(--accent-cyan);margin-bottom:4px;">🔗 ${a.disulfide_candidates.length} potential disulfide bridge(s) — configure in Step 2</div>`;
+  }
+  content.innerHTML = html;
+  panel.style.display = 'block';
+  window._pdbAnalysis = a;
+}
+
+async function fetchPDBFromRCSB() {
+  const pdbId = document.getElementById('pdb-id-input').value.trim().toUpperCase();
+  if (!/^[A-Z0-9]{4}$/.test(pdbId)) {
+    alert('PDB ID must be exactly 4 alphanumeric characters (e.g. 1AKI)');
+    return;
+  }
+  const btn = document.getElementById('pdb-fetch-btn');
+  btn.textContent = 'Fetching…';
+  btn.disabled = true;
+  try {
+    const resp = await fetch(`/api/pdb/fetch?pdb_id=${pdbId}`);
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || 'PDB ID not found');
+    }
+    const data = await resp.json();
+    const blob = new Blob([data.content], {type: 'text/plain'});
+    const file = new File([blob], `${pdbId}.pdb`, {type: 'text/plain'});
+    await handleFileSelect(file);
+  } catch (e) {
+    alert(`Failed to fetch ${pdbId}: ${e.message}`);
+  } finally {
+    btn.textContent = 'Fetch';
+    btn.disabled = false;
+  }
 }
 
 // ── System Builder Wizard ─────────────────────────────────────────────────────
 
 let _wizardStep = 1;
-let _wizardExpert = false;
+let _wizardExpert = true;
 
 function _wizardVisibleSteps() {
   return _wizardExpert ? [1,2,3,4,5,6] : [1,2,3,4,6];
@@ -2217,22 +2684,19 @@ function _wizardShowStep(step) {
     if (!tab) continue;
     tab.classList.remove('active', 'done');
     if (i === step) tab.classList.add('active');
-    else if (visible.indexOf(i) !== -1 && visible.indexOf(i) < visible.indexOf(step)) tab.classList.add('done');
   }
-  const backBtn = document.getElementById('wiz-back-btn');
-  const nextBtn = document.getElementById('wiz-next-btn');
-  const isFirst = visible.indexOf(step) === 0;
-  const isLast  = step === 6;
-  backBtn.style.display = isFirst ? 'none' : '';
-  nextBtn.style.display = isLast ? 'none' : '';
+
   if (step === 6) { _wizardBuildSummary(); wizardLoadPresets(); }
 }
 
-function wizardNext() {
-  if (_wizardStep === 1 && !selectedPdb) {
-    showToast('Please upload a PDB file first', 'error');
-    return;
+function wizardGoToStep(step) {
+  const visible = _wizardVisibleSteps();
+  if (visible.indexOf(step) !== -1) {
+    _wizardShowStep(step);
   }
+}
+
+function wizardNext() {
   const next = _wizardNextStep(_wizardStep);
   if (next !== _wizardStep) _wizardShowStep(next);
 }
@@ -2278,14 +2742,87 @@ function _wizardBuildSummary() {
   const box = config.box;
   const ions = config.ions;
   const sim = config.simulation;
+  const pdbName = selectedPdb ? selectedPdb.name : '(No PDB file)';
+  
   let html = `
-    <strong>Force field:</strong> ${ff.name || '(not set)'} &nbsp;|&nbsp; <strong>Water:</strong> ${ff.water_model || '(not set)'}<br>
-    <strong>Box:</strong> ${box.type}, edge ${box.edge_distance_nm} nm<br>
-    <strong>Ions:</strong> ${ions.salt_type} ${ions.concentration_M} M, neutralize=${ions.neutralize}
+    <div class="summary-grid">
+      <!-- 카드 1: 구조 및 포스필드 -->
+      <div class="summary-card">
+        <div class="summary-card-header" onclick="wizardGoToStep(2)" title="Force Field 설정 탭으로 바로가기">
+          <span>Structure & Force Field</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">PDB File</span>
+          <span class="summary-value" style="max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${pdbName}">${pdbName}</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Force Field</span>
+          <span class="summary-badge badge-cyan">${ff.name || 'Not set'}</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Water Model</span>
+          <span class="summary-badge badge-indigo">${ff.water_model || 'Not set'}</span>
+        </div>
+      </div>
+
+      <!-- 카드 2: 공간 상자 설정 -->
+      <div class="summary-card">
+        <div class="summary-card-header" onclick="wizardGoToStep(3)" title="Box 설정 탭으로 바로가기">
+          <span>Simulation Box</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Box Type</span>
+          <span class="summary-value" style="text-transform: capitalize;">${box.type}</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Edge Distance</span>
+          <span class="summary-badge badge-cyan">${box.edge_distance_nm} nm</span>
+        </div>
+      </div>
+
+      <!-- 카드 3: 이온 및 용액 환경 -->
+      <div class="summary-card">
+        <div class="summary-card-header" onclick="wizardGoToStep(4)" title="Ions 설정 탭으로 바로가기">
+          <span>Solvation & Ions</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Salt Type</span>
+          <span class="summary-value">${ions.salt_type}</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Concentration</span>
+          <span class="summary-badge badge-yellow">${ions.concentration_M} M</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Neutralization</span>
+          <span class="summary-badge ${ions.neutralize ? 'badge-green' : 'badge-yellow'}">${ions.neutralize ? 'ON' : 'OFF'}</span>
+        </div>
+      </div>
+
+      <!-- 카드 4: 시뮬레이션 제어 변수 -->
+      <div class="summary-card">
+        <div class="summary-card-header" onclick="wizardGoToStep(5)" title="Simulation 설정 탭으로 바로가기">
+          <span>Simulation</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Temperature</span>
+          <span class="summary-value">${sim.temperature_K} K</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Pressure</span>
+          <span class="summary-value">${sim.pressure_bar} bar</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Sim Time</span>
+          <span class="summary-badge badge-cyan">${sim.sim_time_ns} ns</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Control</span>
+          <span class="summary-value" style="font-size:10px; color:var(--text-secondary); max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${sim.thermostat} / ${sim.barostat}</span>
+        </div>
+      </div>
+    </div>
   `;
-  if (sim._expert_mode) {
-    html += `<br><strong>Temperature:</strong> ${sim.temperature_K} K &nbsp;|&nbsp; <strong>Pressure:</strong> ${sim.pressure_bar} bar &nbsp;|&nbsp; <strong>Time:</strong> ${sim.sim_time_ns} ns`;
-  }
   document.getElementById('wiz-summary').innerHTML = html;
 }
 
