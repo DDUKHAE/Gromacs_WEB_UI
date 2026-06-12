@@ -4708,38 +4708,45 @@ function toggleTerminalMode() {
 
 let _lastChatText = '';
 
+function _makeBubble(text) {
+  const bubble = document.createElement('div');
+  bubble.className = 'chat-bubble';
+  const icon = document.createElement('div');
+  icon.className = 'chat-bubble-icon';
+  icon.textContent = '✦';
+  const body = document.createElement('div');
+  body.className = 'chat-bubble-body';
+  body.textContent = text;
+  bubble.appendChild(icon);
+  bubble.appendChild(body);
+  return bubble;
+}
+
+function _addChatBubble(text) {
+  const container = document.getElementById('chat-messages');
+  if (!container) return;
+  container.appendChild(_makeBubble(text));
+  const panel = document.getElementById('chat-panel');
+  if (panel) panel.scrollTop = panel.scrollHeight;
+}
+
 function _renderChatBubbles(text) {
   const container = document.getElementById('chat-messages');
   if (!container || text === _lastChatText) return;
   _lastChatText = text;
 
-  // Split into paragraphs (double-newline separated)
   const paragraphs = text.split(/\n{2,}/).map(p => p.trim()).filter(p => p.length > 0);
-
   container.innerHTML = '';
   for (const para of paragraphs) {
-    const bubble = document.createElement('div');
-    bubble.className = 'chat-bubble';
-
-    const icon = document.createElement('div');
-    icon.className = 'chat-bubble-icon';
-    icon.textContent = '✦';
-
-    const body = document.createElement('div');
-    body.className = 'chat-bubble-body';
-    body.textContent = para;
-
-    bubble.appendChild(icon);
-    bubble.appendChild(body);
-    container.appendChild(bubble);
+    container.appendChild(_makeBubble(para));
   }
-
   const panel = document.getElementById('chat-panel');
   if (panel) panel.scrollTop = panel.scrollHeight;
 }
 
 async function pollChatLog() {
   if (!currentRunId || terminalMode !== 'chat') return;
+  if (currentRunId === 'virtual_sandbox') return; // virtual run uses direct injection
   try {
     const resp = await fetch(`/api/runs/${currentRunId}/chat_log`);
     if (resp.ok && terminalMode === 'chat') {
@@ -4943,6 +4950,9 @@ function startVirtualRun() {
   if (_virtualRunInterval) { clearInterval(_virtualRunInterval); _virtualRunInterval = null; }
   _virtualRunTimeouts.forEach(t => clearTimeout(t));
   _virtualRunTimeouts = [];
+  _lastChatText = '';
+  const _chatMsgs = document.getElementById('chat-messages');
+  if (_chatMsgs) _chatMsgs.innerHTML = '';
 
   currentRunId = 'virtual_sandbox';
   document.getElementById('new-run-view').style.display = 'none';
@@ -5105,6 +5115,32 @@ function startVirtualRun() {
     }, cumulativeDelay);
     _virtualRunTimeouts.push(t);
     cumulativeDelay += st.delay;
+  });
+
+  // Mock AI dialogue — injected into chat panel at realistic intervals
+  const mockDialogue = [
+    { delay: 400,   text: "안녕하세요! 1AKI (Lysozyme) 시뮬레이션을 시작하겠습니다. OPLS-AA 포스필드와 SPC/E 워터 모델을 사용해 300 K, 1 bar 조건으로 진행합니다." },
+    { delay: 2200,  text: "pdb2gmx로 토폴로지를 생성했습니다. 1960개의 ATOM 레코드를 읽었으며 C-terminus를 표준 형태로 처리했습니다. 4개의 이황화결합(Cys6-Cys127, Cys30-Cys115, Cys64-Cys80, Cys76-Cys94)이 자동으로 설정되었습니다." },
+    { delay: 4000,  text: "editconf으로 cubic 박스를 정의했습니다. 단백질 표면에서 최소 1.0 nm 여유를 두어 주기적 경계조건 충돌을 방지했습니다." },
+    { delay: 5700,  text: "solvate로 용매화를 완료했습니다. SPC/E 물 분자 8,501개가 시스템에 추가되었습니다." },
+    { delay: 7400,  text: "이온 준비 단계입니다. 총 전하 +8e를 중화하기 위해 genion으로 Cl⁻ 이온 8개를 추가하겠습니다." },
+    { delay: 9200,  text: "이온화 완료. Cl⁻ 8개가 용매 분자를 대체하여 전기적으로 중립인 시스템이 구성되었습니다. 총 원자 수: 약 26,000개." },
+    { delay: 11200, text: "에너지 최소화를 실행합니다. steepest-descent 알고리즘으로 Fmax < 1000 kJ/mol·nm 수렴 기준을 적용합니다.\n\n약 150 스텝 만에 수렴했습니다 (Fmax ≈ 952 kJ/mol·nm). 구조가 안정적입니다." },
+    { delay: 14500, text: "NPT 앙상블로 프로덕션 MD를 실행합니다. V-rescale 서모스탯(τ=0.1 ps)과 Parrinello-Rahman 바로스탯(τ=2.0 ps)을 사용합니다. 5,000 스텝(10 ps) 시뮬레이션을 진행합니다." },
+    { delay: 19000, text: "시뮬레이션이 완료되었습니다! 평균 온도 300.0 K, 압력 1.0 bar로 목표값과 잘 일치합니다.\n\nRMSD 분석 결과 초기 구조 대비 0.25 nm로 안정적인 폴드를 유지하고 있습니다. 결과 파일(trajectory, energy, XVG plots)이 생성되었습니다." },
+  ];
+
+  mockDialogue.forEach(({ delay, text }) => {
+    const t = setTimeout(() => {
+      if (terminalMode === 'chat') {
+        _addChatBubble(text);
+      } else {
+        // Store for when user switches to chat mode
+        const container = document.getElementById('chat-messages');
+        if (container) container.appendChild(_makeBubble(text));
+      }
+    }, delay);
+    _virtualRunTimeouts.push(t);
   });
 }
 
