@@ -693,14 +693,62 @@ body.light-theme #chat-panel {
   border: 1px solid var(--border-color);
 }
 
-#fallback-terminal-text,
-#chat-content {
+#fallback-terminal-text {
   color: #ffffff !important;
 }
 
-body.light-theme #fallback-terminal-text,
-body.light-theme #chat-content {
+body.light-theme #fallback-terminal-text {
   color: #000000 !important;
+}
+
+/* Chat bubble styles */
+.chat-bubble {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 100%;
+  animation: chatFadeIn 0.2s ease;
+}
+@keyframes chatFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.chat-bubble-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  background: linear-gradient(135deg, #1a2a4a, #0d1f3c);
+  border: 1px solid rgba(0,200,255,0.25);
+  color: var(--accent-cyan, #00c8ff);
+}
+.chat-bubble-body {
+  flex: 1;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 0 10px 10px 10px;
+  padding: 10px 13px;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--text-primary, #e0e6f0);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+body.light-theme .chat-bubble-body {
+  background: rgba(0,0,0,0.04);
+  border-color: rgba(0,0,0,0.1);
+  color: #1a1a2e;
+}
+body.light-theme .chat-bubble-icon {
+  background: linear-gradient(135deg, #daeeff, #b8d8f8);
+  border-color: rgba(0,100,200,0.2);
+  color: #005fa3;
 }
 
 /* Actions - Relocated to top header, compact styling */
@@ -1957,8 +2005,9 @@ body.resizing * {
         </div>
 
         <!-- Chat log panel (shown when terminal mode = chat) -->
-        <div id="chat-panel" style="display: none; height: 450px; flex: none; background: #04060f; border-radius: var(--radius-md); overflow-y: auto; padding: 14px 16px;">
-          <pre id="chat-content" style="font-size: 11px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; margin: 0; font-family: 'Fira Code', monospace;"></pre>
+        <div id="chat-panel" style="display: none; height: 450px; flex: none; background: var(--bg-secondary, #0d1117); border-radius: var(--radius-md); overflow-y: auto; padding: 12px 14px; display: none;">
+          <div id="chat-messages" style="display: flex; flex-direction: column; gap: 10px;"></div>
+          <div id="chat-typing" style="display:none; padding: 8px 12px; font-size: 11px; color: var(--text-muted); font-style: italic;">AI가 응답 중...</div>
         </div>
 
         <!-- Results Gallery -->
@@ -4639,7 +4688,11 @@ function toggleTerminalMode() {
     btn.textContent = 'TERMINAL';
     btn.style.color = 'var(--accent-green)';
     termPanel.style.display = 'none';
-    chatPanel.style.display = 'block';
+    chatPanel.style.display = 'flex';
+    chatPanel.style.flexDirection = 'column';
+    _lastChatText = '';
+    const msgs = document.getElementById('chat-messages');
+    if (msgs) msgs.innerHTML = '';
     clearTimeout(chatPollTimer);
     chatPollTimer = null;
     if (currentRunId) pollChatLog();
@@ -4653,21 +4706,47 @@ function toggleTerminalMode() {
   }
 }
 
+let _lastChatText = '';
+
+function _renderChatBubbles(text) {
+  const container = document.getElementById('chat-messages');
+  if (!container || text === _lastChatText) return;
+  _lastChatText = text;
+
+  // Split into paragraphs (double-newline separated)
+  const paragraphs = text.split(/\n{2,}/).map(p => p.trim()).filter(p => p.length > 0);
+
+  container.innerHTML = '';
+  for (const para of paragraphs) {
+    const bubble = document.createElement('div');
+    bubble.className = 'chat-bubble';
+
+    const icon = document.createElement('div');
+    icon.className = 'chat-bubble-icon';
+    icon.textContent = '✦';
+
+    const body = document.createElement('div');
+    body.className = 'chat-bubble-body';
+    body.textContent = para;
+
+    bubble.appendChild(icon);
+    bubble.appendChild(body);
+    container.appendChild(bubble);
+  }
+
+  const panel = document.getElementById('chat-panel');
+  if (panel) panel.scrollTop = panel.scrollHeight;
+}
+
 async function pollChatLog() {
   if (!currentRunId || terminalMode !== 'chat') return;
   try {
     const resp = await fetch(`/api/runs/${currentRunId}/chat_log`);
     if (resp.ok && terminalMode === 'chat') {
       const text = await resp.text();
-      const el = document.getElementById('chat-content');
-      if (el) {
-        el.textContent = text;
-        const panel = document.getElementById('chat-panel');
-        if (panel) panel.scrollTop = panel.scrollHeight;
-      }
+      _renderChatBubbles(text);
     }
   } catch (_) {}
-  // Only re-schedule if still in chat mode
   if (terminalMode === 'chat') {
     chatPollTimer = setTimeout(pollChatLog, 3000);
   }

@@ -22,17 +22,36 @@ from web.llm_adapters import ADAPTERS
 from web import llm_runner
 from web.run_reader import RunInfo, list_runs, read_run
 
+# Lines matching this pattern are stripped from the chat view entirely
 _CHAT_STRIP = re.compile(
-    r'^\s*[\$>]\s'
-    r'|^:-\)'
-    r'|^GROMACS'
+    r'^\s*[\$>]\s'                      # shell prompts
+    r'|^:-\)'                           # GROMACS smiley
+    r'|^GROMACS'                        # GROMACS header
+    r'|^Executable:'
+    r'|^Data prefix:'
+    r'|^Working dir:'
+    r'|^Command line:'
+    r'|^\s*gmx\b'                       # gmx commands
     r'|^\s*NOTE:'
     r'|^\s*WARNING:'
     r'|^\s*Error\s*in\s*user\s*input'
-    r'|^[-=]{4,}'
+    r'|^\s*Fatal\s*error'
+    r'|^[-=+*]{4,}'                     # separator lines
+    r'|^\s*Step\s+Time'                 # MD progress header
+    r'|^\s*\d+\s+\d+\.\d+'             # MD step/time rows
+    r'|^\s*#\s*gmx\b'                   # commented gmx commands
     r'|Allow\?\s*\[y/n\]\s*$'
     r'|\[y/n\]\s*$|\[Y/n\]\s*$|\(y/n\)\s*$'
     r'|^\s*$',
+    re.IGNORECASE,
+)
+
+# Purely technical/numeric lines (energy tables, etc.)
+_TECH_LINE = re.compile(
+    r'^\s*[-\d\s.eE+]+$'
+    r'|^\s*Energies\s*\(kJ/mol\)'
+    r'|^\s*Bond\s+Angle'
+    r'|^\s*Potential\s+Kinetic',
     re.IGNORECASE,
 )
 
@@ -40,9 +59,26 @@ _PRESETS_DIR = "presets"
 
 
 def _filter_chat_log(raw: str) -> str:
+    """Return only AI narrative text from runner.log, stripping GROMACS output."""
     lines = raw.splitlines()
-    kept = [line for line in lines if not _CHAT_STRIP.search(line)]
-    return "\n".join(kept)
+    kept: list[str] = []
+    for line in lines:
+        if _CHAT_STRIP.search(line):
+            continue
+        if _TECH_LINE.search(line):
+            continue
+        kept.append(line)
+
+    # Collapse more than 1 consecutive blank line
+    result: list[str] = []
+    prev_blank = False
+    for line in kept:
+        is_blank = line.strip() == ""
+        if is_blank and prev_blank:
+            continue
+        result.append(line)
+        prev_blank = is_blank
+    return "\n".join(result).strip()
 
 
 HARNESS_DIR: Path = Path(__file__).parent.parent
