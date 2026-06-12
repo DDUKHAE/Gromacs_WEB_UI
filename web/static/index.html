@@ -2201,6 +2201,118 @@ body.resizing * {
                   </select>
                 </div>
               </div>
+
+              <!-- Performance Parameters -->
+              <div class="ff-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">Time Step</span>
+                  <div class="tooltip-container"><span class="info-icon">?</span>
+                    <span class="tooltip-text">Integration time step in ps. 0.002 ps is standard with LINCS constraints. Reduce to 0.001 ps for unstable systems.</span>
+                  </div>
+                </div>
+                <div class="ff-select-col">
+                  <input type="number" id="sim-dt" name="dt_ps" value="0.002" min="0.0001" max="0.004" step="0.0001">
+                </div>
+              </div>
+
+              <div class="ff-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">Coord Output</span>
+                  <div class="tooltip-container"><span class="info-icon">?</span>
+                    <span class="tooltip-text">Output frequency for .xtc trajectory (in steps). 1000 steps × 0.002 ps/step = 2 ps per frame.</span>
+                  </div>
+                </div>
+                <div class="ff-select-col">
+                  <input type="number" id="sim-nstxout-compressed" name="nstxout_compressed" value="1000" min="1" max="100000" step="100">
+                </div>
+              </div>
+
+              <!-- Cutoff Parameters -->
+              <div class="ff-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">Coulomb Type</span>
+                  <div class="tooltip-container"><span class="info-icon">?</span>
+                    <span class="tooltip-text">Electrostatic calculation method. PME (Particle Mesh Ewald) is strongly recommended for accuracy.</span>
+                  </div>
+                </div>
+                <div class="ff-select-col">
+                  <select id="sim-coulombtype" name="coulombtype">
+                    <option value="PME">PME (recommended)</option>
+                    <option value="Cut-off">Cut-off</option>
+                    <option value="Ewald">Ewald</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="ff-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">rcoulomb / rvdw</span>
+                  <div class="tooltip-container"><span class="info-icon">?</span>
+                    <span class="tooltip-text">Cutoff distance in nm for electrostatic and van der Waals interactions. 1.0 nm is standard.</span>
+                  </div>
+                </div>
+                <div class="ff-select-col" style="display:flex;gap:6px;">
+                  <input type="number" id="sim-rcoulomb" name="rcoulomb_nm" value="1.0" min="0.8" max="2.0" step="0.1" style="width:65px;">
+                  <input type="number" id="sim-rvdw" name="rvdw_nm" value="1.0" min="0.8" max="2.0" step="0.1" style="width:65px;">
+                </div>
+              </div>
+
+              <div class="ff-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">PME Order</span>
+                  <div class="tooltip-container"><span class="info-icon">?</span>
+                    <span class="tooltip-text">Interpolation order for PME. 4 = cubic (standard). Higher values improve accuracy but increase cost.</span>
+                  </div>
+                </div>
+                <div class="ff-select-col">
+                  <select id="sim-pme-order" name="pme_order">
+                    <option value="4">4 (standard)</option>
+                    <option value="6">6 (high accuracy)</option>
+                    <option value="8">8 (very high)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="ff-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">Fourier Spacing</span>
+                  <div class="tooltip-container"><span class="info-icon">?</span>
+                    <span class="tooltip-text">Grid spacing in nm for FFT in PME. 0.16 nm is standard. Smaller values increase accuracy and cost.</span>
+                  </div>
+                </div>
+                <div class="ff-select-col">
+                  <input type="number" id="sim-fourierspacing" name="fourierspacing_nm" value="0.16" min="0.1" max="0.3" step="0.01">
+                </div>
+              </div>
+
+              <!-- Constraints -->
+              <div class="ff-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">Constraints</span>
+                  <div class="tooltip-container"><span class="info-icon">?</span>
+                    <span class="tooltip-text">Bond constraint scheme. all-bonds with LINCS is required for dt=0.002 ps. Use h-bonds for dt=0.001 ps.</span>
+                  </div>
+                </div>
+                <div class="ff-select-col">
+                  <select id="sim-constraints" name="constraints">
+                    <option value="all-bonds">all-bonds (recommended)</option>
+                    <option value="h-bonds">h-bonds</option>
+                    <option value="none">none</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="ff-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">LINCS Order</span>
+                  <div class="tooltip-container"><span class="info-icon">?</span>
+                    <span class="tooltip-text">Accuracy of LINCS constraint algorithm. 4 is standard. Increase to 6 for highly constrained systems.</span>
+                  </div>
+                </div>
+                <div class="ff-select-col">
+                  <input type="number" id="sim-lincs-order" name="lincs_order" value="4" min="2" max="8" step="2">
+                </div>
+              </div>
             </div>
           </div>
 
