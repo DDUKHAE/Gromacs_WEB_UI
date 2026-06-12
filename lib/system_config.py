@@ -5,10 +5,14 @@ from pathlib import Path
 VALID_BOX_TYPES = {"cubic", "dodecahedron", "octahedron"}
 VALID_THERMOSTATS = {"V-rescale", "Nosé-Hoover"}
 VALID_BAROSTATS = {"Parrinello-Rahman", "Berendsen"}
+VALID_HIS_STATES = {"HSD", "HSE", "HSP"}
+VALID_COULOMB_TYPES = {"PME", "Cut-off", "Ewald"}
+VALID_CONSTRAINTS = {"none", "h-bonds", "all-bonds"}
+VALID_CONSTRAINT_ALGORITHMS = {"LINCS", "SETTLE"}
 
 
 def validate_solution_config(config: dict) -> list[str]:
-    """Validate a solution builder config dict. Returns list of error strings."""
+    """Validate a solution builder config dict (v1.1). Returns list of error strings."""
     errors: list[str] = []
 
     box = config.get("box", {})
@@ -39,15 +43,52 @@ def validate_solution_config(config: dict) -> list[str]:
     if "sim_time_ns" in sim and not (0.001 <= sim["sim_time_ns"] <= 1000):
         errors.append("sim_time_ns must be between 0.001 and 1000")
 
+    # Extended MDP (v1.1)
+    if "dt_ps" in sim and not (0.0001 <= sim["dt_ps"] <= 0.004):
+        errors.append("dt_ps must be between 0.0001 and 0.004")
+    if "rcoulomb_nm" in sim and not (0.8 <= sim["rcoulomb_nm"] <= 2.0):
+        errors.append("rcoulomb_nm must be between 0.8 and 2.0")
+    if "rvdw_nm" in sim and not (0.8 <= sim["rvdw_nm"] <= 2.0):
+        errors.append("rvdw_nm must be between 0.8 and 2.0")
+    if sim.get("coulombtype") and sim["coulombtype"] not in VALID_COULOMB_TYPES:
+        errors.append(
+            f"Invalid coulombtype '{sim['coulombtype']}'. Must be one of: {', '.join(sorted(VALID_COULOMB_TYPES))}"
+        )
+    if sim.get("constraints") and sim["constraints"] not in VALID_CONSTRAINTS:
+        errors.append(
+            f"Invalid constraints '{sim['constraints']}'. Must be one of: {', '.join(sorted(VALID_CONSTRAINTS))}"
+        )
+    if sim.get("constraint_algorithm") and sim["constraint_algorithm"] not in VALID_CONSTRAINT_ALGORITHMS:
+        errors.append(
+            f"Invalid constraint_algorithm '{sim['constraint_algorithm']}'. Must be one of: {', '.join(sorted(VALID_CONSTRAINT_ALGORITHMS))}"
+        )
+    if "pme_order" in sim and sim["pme_order"] not in {4, 6, 8}:
+        errors.append("pme_order must be 4, 6, or 8")
+    if "fourierspacing_nm" in sim and not (0.1 <= sim["fourierspacing_nm"] <= 0.3):
+        errors.append("fourierspacing_nm must be between 0.1 and 0.3")
+    if "lincs_order" in sim and not (2 <= sim["lincs_order"] <= 8):
+        errors.append("lincs_order must be between 2 and 8")
+
+    # Protonation (v1.1)
+    prot = config.get("protonation", {})
+    if "ph" in prot and not (0.0 <= prot["ph"] <= 14.0):
+        errors.append("ph must be between 0.0 and 14.0")
+    for residue_key, state in prot.get("his_states", {}).items():
+        if state not in VALID_HIS_STATES:
+            errors.append(
+                f"Invalid HIS state '{state}' for {residue_key}. Must be one of: {', '.join(sorted(VALID_HIS_STATES))}"
+            )
+
     return errors
 
 
 def build_constraint_prompt(config: dict) -> str:
-    """Build LLM constraint block string from a system_config dict."""
+    """Build LLM constraint block string from a system_config dict (v1.1)."""
     ff = config.get("forcefield", {})
     box = config.get("box", {})
     ions = config.get("ions", {})
     sim = config.get("simulation", {})
+    prot = config.get("protonation", {})
 
     lines = [
         "",
@@ -56,6 +97,7 @@ def build_constraint_prompt(config: dict) -> str:
         "You MUST use these parameters without modification:",
         "",
     ]
+
     if ff.get("name"):
         lines.append(f"- Force field: {ff['name']}")
     if ff.get("water_model"):
@@ -69,6 +111,17 @@ def build_constraint_prompt(config: dict) -> str:
             f"- Ions: {ions['salt_type']} at {ions.get('concentration_M', 0.15)} M, "
             f"neutralize={str(ions.get('neutralize', True)).lower()}"
         )
+
+    # Protonation
+    if prot.get("ph") is not None:
+        lines.append(f"- pH: {prot['ph']}")
+    if prot.get("his_states"):
+        his_str = ", ".join(f"{k}={v}" for k, v in prot["his_states"].items())
+        lines.append(f"- Histidine states: {his_str}")
+    if prot.get("disulfide_bridges"):
+        bridges_str = ", ".join(f"{b[0]}-{b[1]}" for b in prot["disulfide_bridges"])
+        lines.append(f"- Disulfide bridges: {bridges_str}")
+
     if sim.get("_expert_mode"):
         lines.append(f"- Temperature: {sim.get('temperature_K', 300)} K")
         lines.append(f"- Pressure: {sim.get('pressure_bar', 1.0)} bar")
@@ -77,6 +130,21 @@ def build_constraint_prompt(config: dict) -> str:
             lines.append(f"- Thermostat: {sim['thermostat']}")
         if sim.get("barostat"):
             lines.append(f"- Barostat: {sim['barostat']}")
+        if sim.get("dt_ps") is not None:
+            lines.append(f"- Time step: {sim['dt_ps']} ps")
+        if sim.get("rcoulomb_nm") is not None:
+            lines.append(
+                f"- Cutoffs: rcoulomb={sim['rcoulomb_nm']} nm, rvdw={sim.get('rvdw_nm', sim['rcoulomb_nm'])} nm"
+            )
+        if sim.get("coulombtype"):
+            lines.append(f"- Coulomb type: {sim['coulombtype']}")
+        if sim.get("pme_order"):
+            lines.append(f"- PME order: {sim['pme_order']}, fourier spacing: {sim.get('fourierspacing_nm', 0.16)} nm")
+        if sim.get("constraints") and sim["constraints"] != "none":
+            alg = sim.get("constraint_algorithm", "LINCS")
+            order = sim.get("lincs_order", 4)
+            lines.append(f"- Constraints: {sim['constraints']} ({alg} order {order})")
+
     lines += [
         "",
         "Do NOT override these settings based on tutorial defaults.",
