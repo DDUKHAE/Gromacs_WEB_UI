@@ -1,6 +1,5 @@
 from __future__ import annotations
 import shutil
-from pathlib import Path
 
 SUPPORTED_LIPIDS: list[dict] = [
     {"name": "POPC", "full_name": "1-palmitoyl-2-oleoyl-sn-glycero-3-phosphocholine",   "charge": 0,  "description": "Generic PC bilayer"},
@@ -19,4 +18,4 @@ def is_packmol_memgen_available() -> bool:
 
 
 def list_supported_lipids() -> list[dict]:
-    return SUPPORTED_LIPIDS
+    return list(SUPPORTED_LIPIDS)

@@ -22,7 +22,7 @@ def test_list_supported_lipids_all_have_required_keys():
 
 
 def test_list_supported_lipids_contains_expected_names():
-    names = {l["name"] for l in list_supported_lipids()}
+    names = {lipid["name"] for lipid in list_supported_lipids()}
     assert names == {"POPC", "POPE", "POPS", "DPPC", "DPPE", "DPPS", "CHL1", "PSM"}
 
 
@@ -32,3 +32,15 @@ def test_supported_lipids_charge_types():
     assert charges["DPPS"] == -1
     assert charges["POPC"] == 0
     assert charges["CHL1"] == 0
+
+
+def test_is_packmol_memgen_available_false_when_absent(monkeypatch):
+    import shutil
+    monkeypatch.setattr(shutil, "which", lambda _: None)
+    assert is_packmol_memgen_available() is False
+
+
+def test_is_packmol_memgen_available_true_when_present(monkeypatch):
+    import shutil
+    monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/packmol-memgen")
+    assert is_packmol_memgen_available() is True
