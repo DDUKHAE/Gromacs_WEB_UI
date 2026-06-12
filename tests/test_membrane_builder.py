@@ -44,3 +44,52 @@ def test_is_packmol_memgen_available_true_when_present(monkeypatch):
     import shutil
     monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/packmol-memgen")
     assert is_packmol_memgen_available() is True
+
+
+from lib.membrane_builder import build_membrane
+
+
+def test_build_membrane_graceful_when_unavailable(monkeypatch, tmp_path):
+    monkeypatch.setattr("lib.membrane_builder.is_packmol_memgen_available", lambda: False)
+    result = build_membrane({
+        "lipids_upper": [{"name": "POPC", "fraction": 1.0}],
+        "lipids_lower": [{"name": "POPC", "fraction": 1.0}],
+    }, tmp_path)
+    assert result["available"] is False
+    assert result["gro"] == ""
+    assert result["top"] == ""
+
+
+def test_build_membrane_raises_on_invalid_fraction_sum(monkeypatch, tmp_path):
+    monkeypatch.setattr("lib.membrane_builder.is_packmol_memgen_available", lambda: True)
+    with pytest.raises(ValueError, match="fractions"):
+        build_membrane({
+            "lipids_upper": [
+                {"name": "POPC", "fraction": 0.5},
+                {"name": "POPE", "fraction": 0.3},
+            ],
+            "lipids_lower": [{"name": "POPC", "fraction": 1.0}],
+        }, tmp_path)
+
+
+def test_build_membrane_command_includes_protein_pdb(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        import types
+        r = types.SimpleNamespace(returncode=1, stdout="", stderr="mock")
+        return r
+
+    monkeypatch.setattr("lib.membrane_builder.is_packmol_memgen_available", lambda: True)
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    protein = tmp_path / "protein.pdb"
+    protein.write_text("ATOM")
+    build_membrane({
+        "lipids_upper": [{"name": "POPC", "fraction": 1.0}],
+        "lipids_lower": [{"name": "POPC", "fraction": 1.0}],
+        "protein_pdb": str(protein),
+        "protein_orientation": "opm",
+    }, tmp_path)
+    assert "--pdb" in captured["cmd"]
