@@ -96,10 +96,17 @@
     overflow-y: scroll;
     cursor: default;
     position: absolute;
-    right: 0;
     left: 0;
     top: 0;
     bottom: 0;
+}
+
+.xterm .xterm-viewport {
+    background-color: #04060f !important;
+}
+
+body.light-theme .xterm .xterm-viewport {
+    background-color: #f9fafb !important;
 }
 
 .xterm .xterm-screen {
