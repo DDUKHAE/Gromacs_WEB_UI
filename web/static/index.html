@@ -4690,9 +4690,12 @@ function toggleTerminalMode() {
     termPanel.style.display = 'none';
     chatPanel.style.display = 'flex';
     chatPanel.style.flexDirection = 'column';
-    _lastChatText = '';
-    const msgs = document.getElementById('chat-messages');
-    if (msgs) msgs.innerHTML = '';
+    // Only reset bubbles for real runs (virtual run builds incrementally)
+    if (currentRunId && currentRunId !== 'virtual_sandbox') {
+      _lastChatText = '';
+      const msgs = document.getElementById('chat-messages');
+      if (msgs) msgs.innerHTML = '';
+    }
     clearTimeout(chatPollTimer);
     chatPollTimer = null;
     if (currentRunId) pollChatLog();
@@ -4700,6 +4703,7 @@ function toggleTerminalMode() {
     btn.textContent = 'CHAT';
     btn.style.color = 'var(--accent-cyan)';
     termPanel.style.display = '';
+    // Keep chatPanel hidden but preserve its content
     chatPanel.style.display = 'none';
     clearTimeout(chatPollTimer);
     chatPollTimer = null;
