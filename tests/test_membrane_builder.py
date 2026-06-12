@@ -4,6 +4,7 @@ from lib.membrane_builder import (
     is_packmol_memgen_available,
     list_supported_lipids,
     SUPPORTED_LIPIDS,
+    build_membrane,
 )
 
 
@@ -46,9 +47,6 @@ def test_is_packmol_memgen_available_true_when_present(monkeypatch):
     assert is_packmol_memgen_available() is True
 
 
-from lib.membrane_builder import build_membrane
-
-
 def test_build_membrane_graceful_when_unavailable(monkeypatch, tmp_path):
     monkeypatch.setattr("lib.membrane_builder.is_packmol_memgen_available", lambda: False)
     result = build_membrane({
@@ -82,7 +80,7 @@ def test_build_membrane_command_includes_protein_pdb(monkeypatch, tmp_path):
         return r
 
     monkeypatch.setattr("lib.membrane_builder.is_packmol_memgen_available", lambda: True)
-    monkeypatch.setattr("subprocess.run", fake_run)
+    monkeypatch.setattr("lib.membrane_builder.subprocess.run", fake_run)
 
     protein = tmp_path / "protein.pdb"
     protein.write_text("ATOM")
