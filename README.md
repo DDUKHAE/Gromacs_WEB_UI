@@ -37,6 +37,17 @@ flowchart LR
 ```
 
 - **LLM-guided** — An LLM agent follows the tutorial protocol step by step, driven by the input data and bundled tutorial documentation; tool-approval requests surface as Y/N dialogs
+- **System Builder** — A 6-step wizard for configuring MD system parameters before a run; saves settings as reusable presets and injects them as hard constraints into the LLM prompt
+
+### System Builder
+
+```
+Step 1 → Step 2 → Step 3 → Step 4 → [Step 5] → Step 6
+PDB       Force    Box      Ions     Simulation  Review &
+Upload    Field             Settings (Expert)    Start
+```
+
+The wizard generates a `system_config.json` that the LLM must follow exactly. Parameters include force field, water model, box type, edge distance, salt type & concentration, and (in Expert mode) temperature, pressure, simulation time, thermostat, and barostat. Configurations can be saved as named presets and reloaded across runs. After a run completes, the audit endpoint (`/api/runs/{id}/audit`) reports which parameters the LLM actually used versus the builder's constraints.
 
 ### Supported LLMs
 
@@ -240,12 +251,15 @@ https://mackerell.umaryland.edu/charmm_ff.shtml
 
 ## Usage
 
-### Starting a New Simulation
+### Starting a New Simulation (System Builder Wizard)
 
-1. Select a PDB file in the **New Run** panel
-2. Set force field, water model, and simulation box type (hover over fields for parameter descriptions)
-3. Optionally select an LLM orchestrator — leave unset for manual control mode
-4. Click **Start**
+1. Click **New Run** — the 6-step System Builder wizard opens
+2. **Step 1** — Upload a PDB file (drag & drop or click). Toggle **Expert Mode** to expose simulation parameters (Step 5)
+3. **Step 2** — Choose force field and water model
+4. **Step 3** — Set box type and edge distance
+5. **Step 4** — Configure salt type and ion concentration
+6. **Step 5** *(Expert only)* — Set temperature, pressure, simulation time, thermostat, barostat
+7. **Step 6** — Review all settings, optionally save as a preset, choose LLM, and click **Start**
 
 ### LLM-Orchestrated Mode
 
@@ -292,6 +306,8 @@ After the pipeline completes, open the **Results Gallery** panel to inspect RMSD
 │   └── illustrator/           Step 8: RMSD/RMSF/PCA + plots + report
 │
 ├── lib/                       Internal shared library
+│   ├── system_config.py       System Builder — config validation + LLM constraint prompt
+│   ├── system_config_validator.py  Post-run audit: builder settings vs LLM actual usage
 │   ├── xvg_parser.py          XVG file parser (analysis gallery backend)
 │   ├── state.py               workspace/state.json I/O
 │   ├── validators.py          Per-step validation gates
@@ -299,6 +315,7 @@ After the pipeline completes, open the **Results Gallery** panel to inspect RMSD
 │   ├── tutorial_registry.py   Tutorial routing logic
 │   └── mdp_templates/         MDP parameter templates
 │
+├── presets/                   Saved System Builder presets (user-created, gitignored)
 ├── tutorial_data/             Reference input files for all 8 tutorials (PDB/GRO/TOP)
 │
 ├── scripts/
