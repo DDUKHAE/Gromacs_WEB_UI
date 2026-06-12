@@ -134,7 +134,8 @@ def test_valid_protonation_config():
 
 def test_ph_out_of_range_returns_error():
     errors = validate_solution_config({"protonation": {"ph": 15.0}})
-    assert any("ph" in e.lower() for e in errors)
+    assert len(errors) == 1
+    assert "ph" in errors[0].lower()
 
 
 def test_invalid_his_state_returns_error():
@@ -163,12 +164,14 @@ def test_valid_extended_mdp_config():
 
 def test_invalid_dt_returns_error():
     errors = validate_solution_config({"simulation": {"dt_ps": 0.1}})
-    assert any("dt_ps" in e for e in errors)
+    assert len(errors) == 1
+    assert "dt_ps" in errors[0]
 
 
 def test_invalid_rcoulomb_returns_error():
     errors = validate_solution_config({"simulation": {"rcoulomb_nm": 5.0}})
-    assert any("rcoulomb_nm" in e for e in errors)
+    assert len(errors) == 1
+    assert "rcoulomb_nm" in errors[0]
 
 
 def test_invalid_coulombtype_returns_error():
@@ -183,7 +186,8 @@ def test_invalid_constraints_returns_error():
 
 def test_invalid_pme_order_returns_error():
     errors = validate_solution_config({"simulation": {"pme_order": 3}})
-    assert any("pme_order" in e for e in errors)
+    assert len(errors) == 1
+    assert "pme_order" in errors[0]
 
 
 # ── build_constraint_prompt v1.1 ───────────────────────────────────────────────
@@ -216,3 +220,8 @@ def test_constraint_prompt_includes_extended_mdp():
     assert "0.002 ps" in prompt
     assert "PME" in prompt
     assert "all-bonds" in prompt
+
+
+def test_ph_boundary_values_are_valid():
+    assert validate_solution_config({"protonation": {"ph": 0.0}}) == []
+    assert validate_solution_config({"protonation": {"ph": 14.0}}) == []

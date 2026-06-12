@@ -140,7 +140,7 @@ def build_constraint_prompt(config: dict) -> str:
             lines.append(f"- Coulomb type: {sim['coulombtype']}")
         if sim.get("pme_order"):
             lines.append(f"- PME order: {sim['pme_order']}, fourier spacing: {sim.get('fourierspacing_nm', 0.16)} nm")
-        if sim.get("constraints"):
+        if sim.get("constraints") and sim["constraints"] != "none":
             alg = sim.get("constraint_algorithm", "LINCS")
             order = sim.get("lincs_order", 4)
             lines.append(f"- Constraints: {sim['constraints']} ({alg} order {order})")
