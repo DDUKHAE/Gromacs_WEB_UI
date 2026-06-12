@@ -652,6 +652,38 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
             results.append({"filename": f.filename, **parsed, "stats": stats})
         return results
 
+    @app.post("/api/pdb/analyze")
+    async def api_pdb_analyze(pdb_file: UploadFile = File(...)) -> dict:
+        from lib.pdb_analyzer import PDBAnalyzer
+        import tempfile, os
+        content = await pdb_file.read()
+        with tempfile.NamedTemporaryFile(suffix=".pdb", delete=False) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+        try:
+            return PDBAnalyzer(tmp_path).analyze()
+        finally:
+            os.unlink(tmp_path)
+
+    @app.get("/api/pdb/fetch")
+    async def api_pdb_fetch(pdb_id: str) -> dict:
+        import urllib.request, urllib.error
+        if not (len(pdb_id) == 4 and pdb_id.isalnum()):
+            raise HTTPException(status_code=400, detail="PDB ID must be exactly 4 alphanumeric characters")
+        pdb_id = pdb_id.upper()
+        url = f"https://files.rcsb.org/download/{pdb_id}.pdb"
+        try:
+            with urllib.request.urlopen(url, timeout=15) as resp:
+                content = resp.read().decode("utf-8")
+        except urllib.error.HTTPError:
+            raise HTTPException(status_code=404, detail=f"PDB ID {pdb_id} not found in RCSB")
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"RCSB fetch failed: {exc}")
+        tmp_dir = harness_dir / "tmp"
+        tmp_dir.mkdir(exist_ok=True)
+        (tmp_dir / f"{pdb_id}.pdb").write_text(content)
+        return {"pdb_id": pdb_id, "content": content}
+
     if STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
