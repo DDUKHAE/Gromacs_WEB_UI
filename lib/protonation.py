@@ -21,9 +21,8 @@ def run_propka(pdb_path: str | Path, ph: float = 7.0) -> dict:
     cmd = shutil.which("propka3") or shutil.which("propka")
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        import shutil as sh
         tmp_pdb = Path(tmpdir) / pdb_path.name
-        sh.copy(pdb_path, tmp_pdb)
+        shutil.copy(pdb_path, tmp_pdb)
 
         proc = subprocess.run(
             [cmd, str(tmp_pdb)],
