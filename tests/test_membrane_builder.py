@@ -27,7 +27,7 @@ def test_list_supported_lipids_contains_expected_names():
 
 
 def test_supported_lipids_charge_types():
-    charges = {l["name"]: l["charge"] for l in list_supported_lipids()}
+    charges = {lipid["name"]: lipid["charge"] for lipid in list_supported_lipids()}
     assert charges["POPS"] == -1
     assert charges["DPPS"] == -1
     assert charges["POPC"] == 0
