@@ -716,16 +716,17 @@ body.light-theme #fallback-terminal-text {
 .chat-bubble-icon {
   width: 28px;
   height: 28px;
-  border-radius: 50%;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: 12px;
+  font-weight: 800;
   flex-shrink: 0;
   margin-top: 2px;
-  background: linear-gradient(135deg, #1a2a4a, #0d1f3c);
-  border: 1px solid rgba(0,200,255,0.25);
-  color: var(--accent-cyan, #00c8ff);
+  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-primary));
+  border: none;
+  color: #fff;
 }
 .chat-bubble-body {
   flex: 1;
@@ -746,9 +747,9 @@ body.light-theme .chat-bubble-body {
   color: #1a1a2e;
 }
 body.light-theme .chat-bubble-icon {
-  background: linear-gradient(135deg, #daeeff, #b8d8f8);
-  border-color: rgba(0,100,200,0.2);
-  color: #005fa3;
+  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-primary));
+  border: none;
+  color: #fff;
 }
 
 /* Actions - Relocated to top header, compact styling */
@@ -2007,7 +2008,7 @@ body.resizing * {
         <!-- Chat log panel (shown when terminal mode = chat) -->
         <div id="chat-panel" style="display: none; height: 450px; flex: none; background: var(--bg-secondary, #0d1117); border-radius: var(--radius-md); overflow-y: auto; padding: 12px 14px; display: none;">
           <div id="chat-messages" style="display: flex; flex-direction: column; gap: 10px;"></div>
-          <div id="chat-typing" style="display:none; padding: 8px 12px; font-size: 11px; color: var(--text-muted); font-style: italic;">AI가 응답 중...</div>
+          <div id="chat-typing" style="display:none; padding: 8px 12px; font-size: 11px; color: var(--text-muted); font-style: italic;">LLM이 응답 중...</div>
         </div>
 
         <!-- Results Gallery -->
@@ -4717,7 +4718,7 @@ function _makeBubble(text) {
   bubble.className = 'chat-bubble';
   const icon = document.createElement('div');
   icon.className = 'chat-bubble-icon';
-  icon.textContent = '✦';
+  icon.textContent = 'G';
   const body = document.createElement('div');
   body.className = 'chat-bubble-body';
   body.textContent = text;
@@ -5123,15 +5124,15 @@ function startVirtualRun() {
 
   // Mock AI dialogue — injected into chat panel at realistic intervals
   const mockDialogue = [
-    { delay: 400,   text: "안녕하세요! 1AKI (Lysozyme) 시뮬레이션을 시작하겠습니다. OPLS-AA 포스필드와 SPC/E 워터 모델을 사용해 300 K, 1 bar 조건으로 진행합니다." },
-    { delay: 2200,  text: "pdb2gmx로 토폴로지를 생성했습니다. 1960개의 ATOM 레코드를 읽었으며 C-terminus를 표준 형태로 처리했습니다. 4개의 이황화결합(Cys6-Cys127, Cys30-Cys115, Cys64-Cys80, Cys76-Cys94)이 자동으로 설정되었습니다." },
-    { delay: 4000,  text: "editconf으로 cubic 박스를 정의했습니다. 단백질 표면에서 최소 1.0 nm 여유를 두어 주기적 경계조건 충돌을 방지했습니다." },
-    { delay: 5700,  text: "solvate로 용매화를 완료했습니다. SPC/E 물 분자 8,501개가 시스템에 추가되었습니다." },
-    { delay: 7400,  text: "이온 준비 단계입니다. 총 전하 +8e를 중화하기 위해 genion으로 Cl⁻ 이온 8개를 추가하겠습니다." },
-    { delay: 9200,  text: "이온화 완료. Cl⁻ 8개가 용매 분자를 대체하여 전기적으로 중립인 시스템이 구성되었습니다. 총 원자 수: 약 26,000개." },
-    { delay: 11200, text: "에너지 최소화를 실행합니다. steepest-descent 알고리즘으로 Fmax < 1000 kJ/mol·nm 수렴 기준을 적용합니다.\n\n약 150 스텝 만에 수렴했습니다 (Fmax ≈ 952 kJ/mol·nm). 구조가 안정적입니다." },
-    { delay: 14500, text: "NPT 앙상블로 프로덕션 MD를 실행합니다. V-rescale 서모스탯(τ=0.1 ps)과 Parrinello-Rahman 바로스탯(τ=2.0 ps)을 사용합니다. 5,000 스텝(10 ps) 시뮬레이션을 진행합니다." },
-    { delay: 19000, text: "시뮬레이션이 완료되었습니다! 평균 온도 300.0 K, 압력 1.0 bar로 목표값과 잘 일치합니다.\n\nRMSD 분석 결과 초기 구조 대비 0.25 nm로 안정적인 폴드를 유지하고 있습니다. 결과 파일(trajectory, energy, XVG plots)이 생성되었습니다." },
+    { delay: 400,   text: "Starting simulation for 1AKI (Lysozyme) using OPLS-AA force field and SPC/E water model at 300 K, 1 bar." },
+    { delay: 2200,  text: "Topology generated with pdb2gmx. Read 1960 ATOM records; C-terminus processed in standard form. 4 disulfide bonds detected and applied automatically (Cys6–Cys127, Cys30–Cys115, Cys64–Cys80, Cys76–Cys94)." },
+    { delay: 4000,  text: "Cubic simulation box defined with editconf. A minimum 1.0 nm clearance from the protein surface ensures no periodic boundary artifacts." },
+    { delay: 5700,  text: "Solvation complete. 8,501 SPC/E water molecules added to the system." },
+    { delay: 7400,  text: "Preparing ions. The system carries a net charge of +8e; genion will replace 8 solvent molecules with Cl⁻ to neutralize." },
+    { delay: 9200,  text: "Ionization complete. 8 Cl⁻ ions added. System is now electroneutral. Total atom count: ~26,000." },
+    { delay: 11200, text: "Running energy minimization with the steepest-descent algorithm (convergence criterion: Fmax < 1000 kJ/mol·nm).\n\nConverged in ~150 steps (Fmax ≈ 952 kJ/mol·nm). Structure is stable and ready for equilibration." },
+    { delay: 14500, text: "Launching production MD under NPT ensemble. Using V-rescale thermostat (τ = 0.1 ps) and Parrinello–Rahman barostat (τ = 2.0 ps). Running 5,000 steps (10 ps)." },
+    { delay: 19000, text: "Simulation complete! Average temperature 300.0 K and pressure 1.0 bar match target values well.\n\nRMSD vs. initial structure: 0.25 nm — the protein maintains a stable fold throughout. Output files (trajectory, energy, XVG plots) are ready." },
   ];
 
   mockDialogue.forEach(({ delay, text }) => {
