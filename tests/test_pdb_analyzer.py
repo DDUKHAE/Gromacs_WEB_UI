@@ -17,7 +17,7 @@ def test_analyze_residue_count():
 
 def test_analyze_atom_count():
     result = PDBAnalyzer(LYSOZYME_PDB).analyze()
-    assert result["atom_count"] > 1000
+    assert result["atom_count"] == 1001
 
 
 def test_analyze_net_charge():
@@ -49,7 +49,7 @@ def test_hetatm_excludes_water():
 
 def test_missing_residues_empty_for_complete_structure():
     result = PDBAnalyzer(LYSOZYME_PDB).analyze()
-    assert isinstance(result["missing_residues"], list)
+    assert result["missing_residues"] == []
 
 
 def test_result_schema():
