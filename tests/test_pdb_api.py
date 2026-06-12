@@ -62,3 +62,42 @@ class TestFetchEndpoint:
     def test_fetch_missing_param_returns_422(self, client):
         resp = client.get("/api/pdb/fetch")
         assert resp.status_code == 422
+
+
+class TestProtonateEndpoint:
+    def test_protonate_returns_200(self, client):
+        pdb_bytes = LYSOZYME_PDB.read_bytes()
+        resp = client.post(
+            "/api/pdb/protonate",
+            files={"pdb_file": ("1AKI.pdb", io.BytesIO(pdb_bytes), "text/plain")},
+            data={"ph": "7.0"},
+        )
+        assert resp.status_code == 200
+
+    def test_protonate_returns_available_field(self, client):
+        pdb_bytes = LYSOZYME_PDB.read_bytes()
+        data = client.post(
+            "/api/pdb/protonate",
+            files={"pdb_file": ("1AKI.pdb", io.BytesIO(pdb_bytes), "text/plain")},
+            data={"ph": "7.0"},
+        ).json()
+        assert "available" in data
+        assert "his_states" in data
+        assert "pka_list" in data
+
+    def test_protonate_default_ph(self, client):
+        pdb_bytes = LYSOZYME_PDB.read_bytes()
+        resp = client.post(
+            "/api/pdb/protonate",
+            files={"pdb_file": ("1AKI.pdb", io.BytesIO(pdb_bytes), "text/plain")},
+        )
+        assert resp.status_code == 200
+
+    def test_protonate_invalid_ph_returns_422(self, client):
+        pdb_bytes = LYSOZYME_PDB.read_bytes()
+        resp = client.post(
+            "/api/pdb/protonate",
+            files={"pdb_file": ("1AKI.pdb", io.BytesIO(pdb_bytes), "text/plain")},
+            data={"ph": "99.0"},
+        )
+        assert resp.status_code == 422

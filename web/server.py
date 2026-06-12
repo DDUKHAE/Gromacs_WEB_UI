@@ -684,6 +684,22 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         (tmp_dir / f"{pdb_id}.pdb").write_text(content)
         return {"pdb_id": pdb_id, "content": content}
 
+    @app.post("/api/pdb/protonate")
+    async def api_pdb_protonate(
+        pdb_file: UploadFile = File(...),
+        ph: Annotated[float, Form(ge=0.0, le=14.0)] = 7.0,
+    ) -> dict:
+        from lib.protonation import run_propka
+        import tempfile, os
+        content = await pdb_file.read()
+        with tempfile.NamedTemporaryFile(suffix=".pdb", delete=False) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+        try:
+            return run_propka(tmp_path, ph=ph)
+        finally:
+            os.unlink(tmp_path)
+
     if STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
