@@ -225,3 +225,109 @@ def test_constraint_prompt_includes_extended_mdp():
 def test_ph_boundary_values_are_valid():
     assert validate_solution_config({"protonation": {"ph": 0.0}}) == []
     assert validate_solution_config({"protonation": {"ph": 14.0}}) == []
+
+# ── membrane config validation ─────────────────────────────────────────────
+
+def test_valid_membrane_config():
+    config = {
+        "build_type": "membrane",
+        "membrane": {
+            "lipids_upper": [{"name": "POPC", "fraction": 0.7}, {"name": "CHL1", "fraction": 0.3}],
+            "lipids_lower": [{"name": "POPC", "fraction": 0.7}, {"name": "CHL1", "fraction": 0.3}],
+            "water_z_nm": 2.0,
+            "salt_M": 0.15,
+        }
+    }
+    assert validate_solution_config(config) == []
+
+
+def test_membrane_fraction_sum_not_1_returns_error():
+    config = {
+        "membrane": {
+            "lipids_upper": [{"name": "POPC", "fraction": 0.5}, {"name": "POPE", "fraction": 0.3}],
+            "lipids_lower": [{"name": "POPC", "fraction": 1.0}],
+        }
+    }
+    errors = validate_solution_config(config)
+    assert len(errors) == 1
+    assert "upper" in errors[0].lower()
+
+
+def test_membrane_water_z_out_of_range_returns_error():
+    config = {"membrane": {"water_z_nm": 6.0}}
+    errors = validate_solution_config(config)
+    assert len(errors) == 1
+    assert "water_z_nm" in errors[0]
+
+
+def test_membrane_salt_out_of_range_returns_error():
+    config = {"membrane": {"salt_M": 3.0}}
+    errors = validate_solution_config(config)
+    assert len(errors) == 1
+    assert "salt_M" in errors[0]
+
+
+def test_constraint_prompt_includes_membrane_block():
+    config = {
+        "build_type": "membrane",
+        "membrane": {
+            "lipids_upper": [{"name": "POPC", "fraction": 0.7}, {"name": "CHL1", "fraction": 0.3}],
+            "lipids_lower": [{"name": "POPC", "fraction": 0.6}, {"name": "CHL1", "fraction": 0.4}],
+            "water_z_nm": 2.0,
+            "salt_M": 0.15,
+        }
+    }
+    prompt = build_constraint_prompt(config)
+    assert "MEMBRANE BUILDER" in prompt
+    assert "POPC" in prompt
+    assert "CHL1" in prompt
+    assert "2.0 nm" in prompt
+
+
+# ── ligand config validation ───────────────────────────────────────────────
+
+def test_valid_ligand_config():
+    config = {
+        "build_type": "ligand",
+        "ligand": {
+            "residue_name": "LIG",
+            "net_charge": 0,
+            "atom_type": "gaff2",
+        }
+    }
+    assert validate_solution_config(config) == []
+
+
+def test_ligand_net_charge_out_of_range_returns_error():
+    errors = validate_solution_config({"ligand": {"net_charge": 15}})
+    assert len(errors) == 1
+    assert "net_charge" in errors[0]
+
+
+def test_ligand_residue_name_too_long_returns_error():
+    errors = validate_solution_config({"ligand": {"residue_name": "TOOLONG"}})
+    assert len(errors) == 1
+    assert "residue_name" in errors[0]
+
+
+def test_ligand_invalid_atom_type_returns_error():
+    errors = validate_solution_config({"ligand": {"atom_type": "opls"}})
+    assert len(errors) == 1
+    assert "atom_type" in errors[0]
+
+
+def test_constraint_prompt_includes_ligand_block():
+    config = {
+        "build_type": "ligand",
+        "ligand": {
+            "residue_name": "LIG",
+            "net_charge": -1,
+            "atom_type": "gaff2",
+            "itp_file": "LIG.itp",
+        }
+    }
+    prompt = build_constraint_prompt(config)
+    assert "LIGAND CONSTRAINTS" in prompt
+    assert "LIG" in prompt
+    assert "gaff2" in prompt.lower()
+    assert "LIG.itp" in prompt

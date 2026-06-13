@@ -79,6 +79,32 @@ def validate_solution_config(config: dict) -> list[str]:
                 f"Invalid HIS state '{state}' for {residue_key}. Must be one of: {', '.join(sorted(VALID_HIS_STATES))}"
             )
 
+    # Membrane (v1.2)
+    mem = config.get("membrane", {})
+    for leaflet_key in ("lipids_upper", "lipids_lower"):
+        leaflet = mem.get(leaflet_key, [])
+        if leaflet:
+            total = sum(e.get("fraction", 0) for e in leaflet)
+            if abs(total - 1.0) > 0.001:
+                errors.append(
+                    f"membrane.{leaflet_key} fractions must sum to 1.0, got {total:.4f}"
+                )
+    if "water_z_nm" in mem and not (0.5 <= mem["water_z_nm"] <= 5.0):
+        errors.append("water_z_nm must be between 0.5 and 5.0")
+    if "salt_M" in mem and not (0.0 <= mem["salt_M"] <= 2.0):
+        errors.append("salt_M must be between 0.0 and 2.0")
+
+    # Ligand (v1.2)
+    lig = config.get("ligand", {})
+    if "net_charge" in lig and not (-10 <= lig["net_charge"] <= 10):
+        errors.append("net_charge must be between -10 and 10")
+    if "residue_name" in lig:
+        rn = lig["residue_name"]
+        if not (1 <= len(rn) <= 3 and rn.isalnum()):
+            errors.append("residue_name must be 1–3 alphanumeric characters")
+    if "atom_type" in lig and lig["atom_type"] not in {"gaff", "gaff2"}:
+        errors.append(f"atom_type must be 'gaff' or 'gaff2', got '{lig['atom_type']}'")
+
     return errors
 
 
@@ -144,6 +170,47 @@ def build_constraint_prompt(config: dict) -> str:
             alg = sim.get("constraint_algorithm", "LINCS")
             order = sim.get("lincs_order", 4)
             lines.append(f"- Constraints: {sim['constraints']} ({alg} order {order})")
+
+    # Membrane (v1.2)
+    mem = config.get("membrane", {})
+    if config.get("build_type") == "membrane" or mem:
+        lines.append("")
+        lines.append("[MEMBRANE BUILDER CONSTRAINTS — MUST FOLLOW EXACTLY]")
+        if mem.get("lipids_upper"):
+            upper_str = ", ".join(
+                f"{e['name']} {int(round(e['fraction'] * 100))}%"
+                for e in mem["lipids_upper"]
+            )
+            lines.append(f"- Upper leaflet: {upper_str}")
+        if mem.get("lipids_lower"):
+            lower_str = ", ".join(
+                f"{e['name']} {int(round(e['fraction'] * 100))}%"
+                for e in mem["lipids_lower"]
+            )
+            lines.append(f"- Lower leaflet: {lower_str}")
+        if mem.get("protein_pdb"):
+            orientation = mem.get("protein_orientation", "opm")
+            lines.append(f"- Protein insertion: yes (orientation: {orientation})")
+        if mem.get("water_z_nm") is not None:
+            lines.append(f"- Water layer: {mem['water_z_nm']} nm, Salt: {mem.get('salt_M', 0.15)} M NaCl")
+        lines.append("- Force field: CHARMM36 (required for membrane lipids)")
+        lines.append("Use the pre-built membrane topology; do NOT rebuild the bilayer.")
+
+    # Ligand (v1.2)
+    lig = config.get("ligand", {})
+    if config.get("build_type") == "ligand" or lig:
+        lines.append("")
+        lines.append("[LIGAND CONSTRAINTS — MUST FOLLOW EXACTLY]")
+        if lig.get("residue_name"):
+            charge = lig.get("net_charge", 0)
+            atype = lig.get("atom_type", "gaff2")
+            lines.append(f"- Ligand: {lig['residue_name']} ({atype}, net charge {charge})")
+        if lig.get("itp_file"):
+            lines.append(f"- Pre-parameterized: {lig['itp_file']} provided")
+            lines.append(f'- Include via: #include "{lig["itp_file"]}" in topol.top')
+        if lig.get("complex_gro"):
+            lines.append(f"- Complex topology pre-assembled: {lig['complex_gro']}")
+        lines.append("Do NOT re-run ACPYPE; use provided parameter files.")
 
     lines += [
         "",
