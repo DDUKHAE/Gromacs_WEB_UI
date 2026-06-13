@@ -736,6 +736,75 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         finally:
             os.unlink(tmp_path)
 
+    # ── Ligand Parameterization ──────────────────────────────────────────────
+    from lib import ligand_params as _lp
+
+    @app.get("/api/ligand/status")
+    def api_ligand_status() -> dict:
+        available = _lp.is_acpype_available()
+        version: str | None = None
+        if available:
+            try:
+                r = subprocess.run(
+                    ["acpype", "--version"],
+                    capture_output=True, text=True, timeout=5,
+                )
+                version = (r.stdout or r.stderr).strip()[:80] or None
+            except Exception:
+                pass
+        return {"available": available, "version": version}
+
+    @app.post("/api/ligand/parameterize")
+    async def api_ligand_parameterize(
+        ligand: UploadFile,
+        charge: Annotated[int, Form(ge=-10, le=10)] = 0,
+        atom_type: Annotated[str, Form()] = "gaff2",
+        residue_name: Annotated[str, Form()] = "LIG",
+    ) -> dict:
+        if not _lp.is_acpype_available():
+            raise HTTPException(
+                status_code=503,
+                detail="acpype not installed. Run: conda install -c conda-forge ambertools",
+            )
+        import tempfile as _tmpfile
+        suffix = Path(ligand.filename or "ligand.pdb").suffix or ".pdb"
+        with _tmpfile.NamedTemporaryFile(delete=False, suffix=suffix) as f:
+            f.write(await ligand.read())
+            tmp_path = Path(f.name)
+        try:
+            result = _lp.run_acpype(tmp_path, charge=charge, atom_type=atom_type, residue_name=residue_name)
+            if result.get("error"):
+                raise HTTPException(status_code=500, detail=result["error"])
+            return result
+        finally:
+            if tmp_path.exists():
+                tmp_path.unlink()
+
+    @app.post("/api/ligand/assemble")
+    async def api_ligand_assemble(
+        protein_gro: UploadFile,
+        ligand_gro: UploadFile,
+        ligand_itp: UploadFile,
+        topol_top: UploadFile,
+    ) -> dict:
+        import tempfile as _tmpfile2
+        import shutil as _shutil
+        workspace = Path(_tmpfile2.mkdtemp())
+        try:
+            async def _save(upload: UploadFile, name: str) -> Path:
+                p = workspace / name
+                p.write_bytes(await upload.read())
+                return p
+
+            p_gro = await _save(protein_gro, "protein.gro")
+            l_gro = await _save(ligand_gro, "LIG.gro")
+            l_itp = await _save(ligand_itp, "LIG.itp")
+            t_top = await _save(topol_top, "topol.top")
+
+            return _lp.assemble_complex(p_gro, l_gro, l_itp, t_top, workspace)
+        finally:
+            _shutil.rmtree(workspace, ignore_errors=True)
+
     # ── Membrane Builder ────────────────────────────────────────────────────
     from lib import membrane_builder as _mb
 
