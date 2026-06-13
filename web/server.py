@@ -736,6 +736,83 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         finally:
             os.unlink(tmp_path)
 
+    # ── Membrane Builder ────────────────────────────────────────────────────
+    from lib import membrane_builder as _mb
+
+    @app.get("/api/membrane/status")
+    def api_membrane_status() -> dict:
+        available = _mb.is_packmol_memgen_available()
+        version: str | None = None
+        if available:
+            try:
+                r = subprocess.run(
+                    ["packmol-memgen", "--version"],
+                    capture_output=True, text=True, timeout=5,
+                )
+                version = (r.stdout or r.stderr).strip()[:80] or None
+            except Exception:
+                pass
+        return {"available": available, "version": version}
+
+    @app.get("/api/membrane/lipids")
+    def api_membrane_lipids() -> list[dict]:
+        return _mb.list_supported_lipids()
+
+    @app.post("/api/membrane/build")
+    async def api_membrane_build(
+        hd: HarnessDir,
+        config_json: Annotated[str, Form()],
+        protein_pdb: UploadFile | None = None,
+    ) -> dict:
+        import json as _json
+        if not _mb.is_packmol_memgen_available():
+            raise HTTPException(
+                status_code=503,
+                detail="packmol-memgen not installed. Run: conda install -c conda-forge ambertools",
+            )
+        try:
+            config = _json.loads(config_json)
+        except Exception:
+            raise HTTPException(status_code=422, detail="config_json is not valid JSON")
+
+        for leaflet_key in ("lipids_upper", "lipids_lower"):
+            leaflet = config.get(leaflet_key, [])
+            if leaflet:
+                total = sum(e.get("fraction", 0) for e in leaflet)
+                if abs(total - 1.0) > 0.001:
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"{leaflet_key} fractions must sum to 1.0, got {total:.4f}",
+                    )
+
+        tmp_dir = hd / "tmp"
+        tmp_dir.mkdir(exist_ok=True)
+        tmp_protein: Path | None = None
+
+        try:
+            if protein_pdb:
+                import tempfile
+                suffix = Path(protein_pdb.filename or "protein.pdb").suffix or ".pdb"
+                with tempfile.NamedTemporaryFile(
+                    delete=False, suffix=suffix, dir=tmp_dir
+                ) as f:
+                    f.write(await protein_pdb.read())
+                    tmp_protein = Path(f.name)
+                config["protein_pdb"] = str(tmp_protein)
+
+            try:
+                result = _mb.build_membrane(config, tmp_dir)
+            except ValueError as e:
+                raise HTTPException(status_code=422, detail=str(e))
+
+            if result.get("error"):
+                raise HTTPException(status_code=500, detail=result["error"])
+
+            return result
+        finally:
+            if tmp_protein and tmp_protein.exists():
+                tmp_protein.unlink()
+
     if STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
