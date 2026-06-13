@@ -2607,6 +2607,211 @@ body.resizing * {
             <h3 style="font-size: 18px; font-weight: 600; color: var(--text-primary);">Virtual Run</h3>
             <p style="color: var(--text-secondary); font-size: 13px; line-height: 1.4;">Simulate a molecular dynamics execution flow in real-time without physical computation.</p>
           </div>
+          <!-- Choice Card 4: Membrane Builder -->
+          <div onclick="showMembraneBuilder()" style="flex: 1; min-width: 250px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 24px; cursor: pointer; text-align: center; transition: all 0.3s ease; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; box-shadow: var(--shadow-sm);" onmouseover="this.style.borderColor='var(--accent-cyan)'; this.style.transform='translateY(-4px)'; this.style.background='var(--bg-card-hover)';" onmouseout="this.style.borderColor='var(--border-color)'; this.style.transform='none'; this.style.background='var(--bg-card)';">
+            <div style="width: 48px; height: 48px; border-radius: 50%; background: rgba(6, 182, 212, 0.1); display: flex; align-items: center; justify-content: center; color: var(--accent-cyan);">
+              <span style="font-size: 24px;">🧬</span>
+            </div>
+            <h3 style="font-size: 18px; font-weight: 600; color: var(--text-primary);">Membrane Builder</h3>
+            <p style="color: var(--text-secondary); font-size: 13px; line-height: 1.4;">Build lipid bilayer systems with packmol-memgen. Supports protein insertion and mixed lipid compositions.</p>
+            <div id="membrane-tool-badge" style="font-size: 11px; color: var(--text-muted);"></div>
+          </div>
+          <!-- Choice Card 5: Protein-Ligand Builder -->
+          <div onclick="showLigandBuilder()" style="flex: 1; min-width: 250px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 24px; cursor: pointer; text-align: center; transition: all 0.3s ease; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; box-shadow: var(--shadow-sm);" onmouseover="this.style.borderColor='var(--accent-primary)'; this.style.transform='translateY(-4px)'; this.style.background='var(--bg-card-hover)';" onmouseout="this.style.borderColor='var(--border-color)'; this.style.transform='none'; this.style.background='var(--bg-card)';">
+            <div style="width: 48px; height: 48px; border-radius: 50%; background: rgba(99, 102, 241, 0.1); display: flex; align-items: center; justify-content: center; color: var(--accent-primary);">
+              <span style="font-size: 24px;">💊</span>
+            </div>
+            <h3 style="font-size: 18px; font-weight: 600; color: var(--text-primary);">Protein-Ligand</h3>
+            <p style="color: var(--text-secondary); font-size: 13px; line-height: 1.4;">Parameterize small-molecule ligands with ACPYPE (GAFF2) and assemble protein-ligand complex topologies.</p>
+            <div id="ligand-tool-badge" style="font-size: 11px; color: var(--text-muted);"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Membrane Builder Wizard ─────────────────────────────────────── -->
+      <div id="membrane-builder-view" style="display:none;">
+        <h2 style="margin-bottom:16px;">Membrane Builder</h2>
+        <div style="display:flex; gap:8px; margin-bottom:20px; font-size:11px;">
+          <span id="mb-step-1-label" style="padding:4px 10px; border-radius:12px; background:var(--accent-cyan); color:#000;">1 Protein</span>
+          <span id="mb-step-2-label" style="padding:4px 10px; border-radius:12px; background:var(--bg-tertiary); color:var(--text-muted);">2 Composition</span>
+          <span id="mb-step-3-label" style="padding:4px 10px; border-radius:12px; background:var(--bg-tertiary); color:var(--text-muted);">3 Box &amp; Solvent</span>
+          <span id="mb-step-4-label" style="padding:4px 10px; border-radius:12px; background:var(--bg-tertiary); color:var(--text-muted);">4 Simulation</span>
+        </div>
+        <div id="mb-section-1" class="card" style="padding:20px;">
+          <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
+            <label style="font-size:13px; font-weight:600;">Membrane only (no protein)</label>
+            <input type="checkbox" id="mb-membrane-only" onchange="toggleMbProtein()" style="width:16px;height:16px;">
+          </div>
+          <div id="mb-protein-inputs">
+            <div style="margin-bottom:12px;">
+              <label class="ff-label">PDB ID</label>
+              <div style="display:flex; gap:8px;">
+                <input type="text" id="mb-pdb-id" maxlength="4" placeholder="e.g. 1AKI" style="text-transform:uppercase; width:90px; padding:6px 10px; border-radius:6px; border:1px solid var(--border-color); background:var(--bg-tertiary); color:var(--text-primary); font-size:12px;">
+                <button type="button" onclick="mbFetchPDB()" style="padding:6px 14px; border-radius:6px; border:1px solid var(--accent-cyan); background:transparent; color:var(--accent-cyan); font-size:12px; cursor:pointer;">Fetch</button>
+              </div>
+            </div>
+            <div style="margin-bottom:12px;">
+              <label class="ff-label">Or upload PDB</label>
+              <input type="file" id="mb-pdb-file" accept=".pdb" onchange="mbHandleFile(this)" style="font-size:12px; color:var(--text-secondary);">
+            </div>
+            <div id="mb-protein-info" style="display:none; font-size:11px; color:var(--accent-green); margin-bottom:8px;"></div>
+            <div>
+              <label class="ff-label">Protein orientation</label>
+              <select id="mb-orientation" style="padding:6px; border-radius:6px; border:1px solid var(--border-color); background:var(--bg-tertiary); color:var(--text-primary); font-size:12px; width:100%;">
+                <option value="opm">Pre-oriented (OPM DB)</option>
+                <option value="auto">Auto-orient (packmol-memgen --orient)</option>
+                <option value="manual">Manual (no reorientation)</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:flex; justify-content:flex-end; margin-top:16px;">
+            <button type="button" onclick="mbGoStep(2)" style="padding:8px 20px; border-radius:6px; background:var(--accent-cyan); color:#000; border:none; font-size:13px; font-weight:600; cursor:pointer;">Next →</button>
+          </div>
+        </div>
+        <div id="mb-section-2" class="card" style="padding:20px; display:none;">
+          <div style="display:flex; gap:24px; flex-wrap:wrap;">
+            <div style="flex:1; min-width:260px;">
+              <div style="font-size:12px; font-weight:700; margin-bottom:8px; color:var(--text-primary);">Upper Leaflet</div>
+              <div id="mb-upper-rows"></div>
+              <button type="button" onclick="mbAddLipid('upper')" style="margin-top:6px; padding:4px 12px; border-radius:6px; border:1px dashed var(--border-color); background:transparent; color:var(--text-muted); font-size:11px; cursor:pointer;">+ Add lipid</button>
+              <div id="mb-upper-total" style="font-size:11px; margin-top:6px; color:var(--text-muted);">Total: 0%</div>
+            </div>
+            <div style="flex:1; min-width:260px;">
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                <span style="font-size:12px; font-weight:700; color:var(--text-primary);">Lower Leaflet</span>
+                <button type="button" onclick="mbCopyUpperToLower()" style="padding:2px 8px; border-radius:4px; border:1px solid var(--border-color); background:transparent; color:var(--text-muted); font-size:10px; cursor:pointer;">Copy upper</button>
+              </div>
+              <div id="mb-lower-rows"></div>
+              <button type="button" onclick="mbAddLipid('lower')" style="margin-top:6px; padding:4px 12px; border-radius:6px; border:1px dashed var(--border-color); background:transparent; color:var(--text-muted); font-size:11px; cursor:pointer;">+ Add lipid</button>
+              <div id="mb-lower-total" style="font-size:11px; margin-top:6px; color:var(--text-muted);">Total: 0%</div>
+            </div>
+          </div>
+          <div id="mb-comp-error" style="display:none; color:var(--accent-red, #ff4444); font-size:11px; margin-top:8px;"></div>
+          <div style="display:flex; justify-content:space-between; margin-top:16px;">
+            <button type="button" onclick="mbGoStep(1)" style="padding:8px 20px; border-radius:6px; border:1px solid var(--border-color); background:transparent; color:var(--text-secondary); font-size:13px; cursor:pointer;">← Back</button>
+            <button type="button" onclick="mbGoStep(3)" style="padding:8px 20px; border-radius:6px; background:var(--accent-cyan); color:#000; border:none; font-size:13px; font-weight:600; cursor:pointer;">Next →</button>
+          </div>
+        </div>
+        <div id="mb-section-3" class="card" style="padding:20px; display:none;">
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+            <div>
+              <label class="ff-label">Protein–membrane distance (nm)</label>
+              <input type="number" id="mb-dist" value="1.0" min="0.5" max="3.0" step="0.1" style="width:100%; padding:6px; border-radius:6px; border:1px solid var(--border-color); background:var(--bg-tertiary); color:var(--text-primary); font-size:12px;">
+            </div>
+            <div>
+              <label class="ff-label">Water layer thickness z (nm)</label>
+              <input type="number" id="mb-water-z" value="2.0" min="0.5" max="5.0" step="0.5" style="width:100%; padding:6px; border-radius:6px; border:1px solid var(--border-color); background:var(--bg-tertiary); color:var(--text-primary); font-size:12px;">
+            </div>
+            <div>
+              <label class="ff-label">Ion concentration (M NaCl)</label>
+              <input type="number" id="mb-salt" value="0.15" min="0.0" max="2.0" step="0.05" style="width:100%; padding:6px; border-radius:6px; border:1px solid var(--border-color); background:var(--bg-tertiary); color:var(--text-primary); font-size:12px;">
+            </div>
+          </div>
+          <div style="display:flex; justify-content:space-between; margin-top:16px;">
+            <button type="button" onclick="mbGoStep(2)" style="padding:8px 20px; border-radius:6px; border:1px solid var(--border-color); background:transparent; color:var(--text-secondary); font-size:13px; cursor:pointer;">← Back</button>
+            <button type="button" onclick="mbGoStep(4)" style="padding:8px 20px; border-radius:6px; background:var(--accent-cyan); color:#000; border:none; font-size:13px; font-weight:600; cursor:pointer;">Next →</button>
+          </div>
+        </div>
+        <div id="mb-section-4" class="card" style="padding:20px; display:none;">
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:16px;">
+            <div>
+              <label class="ff-label">Temperature (K)</label>
+              <input type="number" id="mb-temp" value="310" min="200" max="500" style="width:100%; padding:6px; border-radius:6px; border:1px solid var(--border-color); background:var(--bg-tertiary); color:var(--text-primary); font-size:12px;">
+            </div>
+            <div>
+              <label class="ff-label">Simulation time (ns)</label>
+              <input type="number" id="mb-simtime" value="100" min="1" max="1000" style="width:100%; padding:6px; border-radius:6px; border:1px solid var(--border-color); background:var(--bg-tertiary); color:var(--text-primary); font-size:12px;">
+            </div>
+          </div>
+          <div id="mb-build-status" style="display:none; margin-bottom:12px; font-size:12px; padding:10px; border-radius:6px; background:var(--bg-tertiary);"></div>
+          <div style="display:flex; justify-content:space-between; margin-top:8px;">
+            <button type="button" onclick="mbGoStep(3)" style="padding:8px 20px; border-radius:6px; border:1px solid var(--border-color); background:transparent; color:var(--text-secondary); font-size:13px; cursor:pointer;">← Back</button>
+            <button type="button" id="mb-build-btn" onclick="mbBuild()" style="padding:10px 28px; border-radius:6px; background:var(--accent-green); color:#000; border:none; font-size:14px; font-weight:700; cursor:pointer;">Build Membrane System</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Ligand Builder Wizard ──────────────────────────────────────── -->
+      <div id="ligand-builder-view" style="display:none;">
+        <h2 style="margin-bottom:16px;">Protein-Ligand Builder</h2>
+        <div style="display:flex; gap:8px; margin-bottom:20px; font-size:11px;">
+          <span id="lb-step-1-label" style="padding:4px 10px; border-radius:12px; background:var(--accent-cyan); color:#000;">1 Input</span>
+          <span id="lb-step-2-label" style="padding:4px 10px; border-radius:12px; background:var(--bg-tertiary); color:var(--text-muted);">2 Parameterize</span>
+          <span id="lb-step-3-label" style="padding:4px 10px; border-radius:12px; background:var(--bg-tertiary); color:var(--text-muted);">3 Assemble</span>
+        </div>
+        <div id="lb-section-1" class="card" style="padding:20px;">
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
+            <div>
+              <div style="font-size:12px; font-weight:700; margin-bottom:10px; color:var(--text-primary);">Protein</div>
+              <div style="margin-bottom:10px;">
+                <label class="ff-label">PDB ID</label>
+                <div style="display:flex; gap:8px;">
+                  <input type="text" id="lb-pdb-id" maxlength="4" placeholder="e.g. 1HSG" style="text-transform:uppercase; width:90px; padding:6px 10px; border-radius:6px; border:1px solid var(--border-color); background:var(--bg-tertiary); color:var(--text-primary); font-size:12px;">
+                  <button type="button" onclick="lbFetchPDB()" style="padding:6px 14px; border-radius:6px; border:1px solid var(--accent-cyan); background:transparent; color:var(--accent-cyan); font-size:12px; cursor:pointer;">Fetch</button>
+                </div>
+              </div>
+              <div>
+                <label class="ff-label">Or upload PDB</label>
+                <input type="file" id="lb-protein-file" accept=".pdb" onchange="lbHandleProtein(this)" style="font-size:12px; color:var(--text-secondary);">
+              </div>
+              <div id="lb-protein-info" style="display:none; font-size:11px; color:var(--accent-green); margin-top:6px;"></div>
+            </div>
+            <div>
+              <div style="font-size:12px; font-weight:700; margin-bottom:10px; color:var(--text-primary);">Ligand</div>
+              <div style="margin-bottom:10px;">
+                <label class="ff-label">Ligand file (.pdb / .mol2 / .sdf)</label>
+                <input type="file" id="lb-ligand-file" accept=".pdb,.mol2,.sdf" onchange="lbHandleLigand(this)" style="font-size:12px; color:var(--text-secondary);">
+              </div>
+              <div id="lb-ligand-info" style="display:none; font-size:11px; color:var(--accent-green); margin-bottom:8px;"></div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                <div>
+                  <label class="ff-label">Net charge</label>
+                  <input type="number" id="lb-charge" value="0" min="-10" max="10" step="1" style="width:100%; padding:6px; border-radius:6px; border:1px solid var(--border-color); background:var(--bg-tertiary); color:var(--text-primary); font-size:12px;">
+                </div>
+                <div>
+                  <label class="ff-label">Residue name</label>
+                  <input type="text" id="lb-resname" value="LIG" maxlength="3" style="text-transform:uppercase; width:100%; padding:6px; border-radius:6px; border:1px solid var(--border-color); background:var(--bg-tertiary); color:var(--text-primary); font-size:12px;">
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex; justify-content:flex-end; margin-top:16px;">
+            <button type="button" onclick="lbGoStep(2)" style="padding:8px 20px; border-radius:6px; background:var(--accent-cyan); color:#000; border:none; font-size:13px; font-weight:600; cursor:pointer;">Next →</button>
+          </div>
+        </div>
+        <div id="lb-section-2" class="card" style="padding:20px; display:none;">
+          <div style="margin-bottom:14px;">
+            <label class="ff-label">Force field</label>
+            <select id="lb-atomtype" style="padding:6px; border-radius:6px; border:1px solid var(--border-color); background:var(--bg-tertiary); color:var(--text-primary); font-size:12px;">
+              <option value="gaff2">GAFF2 (recommended)</option>
+              <option value="gaff">GAFF</option>
+            </select>
+          </div>
+          <button type="button" id="lb-param-btn" onclick="lbRunAcpype()" style="padding:9px 22px; border-radius:6px; background:var(--accent-cyan); color:#000; border:none; font-size:13px; font-weight:600; cursor:pointer;">Run ACPYPE</button>
+          <div id="lb-param-status" style="display:none; margin-top:12px; font-size:12px; padding:10px; border-radius:6px; background:var(--bg-tertiary);"></div>
+          <div id="lb-param-files" style="display:none; margin-top:10px; font-size:11px; color:var(--text-secondary);"></div>
+          <div style="display:flex; justify-content:space-between; margin-top:16px;">
+            <button type="button" onclick="lbGoStep(1)" style="padding:8px 20px; border-radius:6px; border:1px solid var(--border-color); background:transparent; color:var(--text-secondary); font-size:13px; cursor:pointer;">← Back</button>
+            <button type="button" id="lb-next-3-btn" onclick="lbGoStep(3)" disabled style="padding:8px 20px; border-radius:6px; background:var(--accent-cyan); color:#000; border:none; font-size:13px; font-weight:600; cursor:pointer; opacity:0.4;">Next →</button>
+          </div>
+        </div>
+        <div id="lb-section-3" class="card" style="padding:20px; display:none;">
+          <div id="lb-complex-summary" style="font-size:12px; color:var(--text-secondary); margin-bottom:14px;"></div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px;">
+            <div>
+              <label class="ff-label">Temperature (K)</label>
+              <input type="number" id="lb-temp" value="300" min="200" max="500" style="width:100%; padding:6px; border-radius:6px; border:1px solid var(--border-color); background:var(--bg-tertiary); color:var(--text-primary); font-size:12px;">
+            </div>
+            <div>
+              <label class="ff-label">Ion concentration (M NaCl)</label>
+              <input type="number" id="lb-salt" value="0.15" min="0" max="2" step="0.05" style="width:100%; padding:6px; border-radius:6px; border:1px solid var(--border-color); background:var(--bg-tertiary); color:var(--text-primary); font-size:12px;">
+            </div>
+          </div>
+          <div id="lb-assemble-status" style="display:none; margin-bottom:12px; font-size:12px; padding:10px; border-radius:6px; background:var(--bg-tertiary);"></div>
+          <div style="display:flex; justify-content:space-between;">
+            <button type="button" onclick="lbGoStep(2)" style="padding:8px 20px; border-radius:6px; border:1px solid var(--border-color); background:transparent; color:var(--text-secondary); font-size:13px; cursor:pointer;">← Back</button>
+            <button type="button" id="lb-assemble-btn" onclick="lbAssemble()" style="padding:10px 28px; border-radius:6px; background:var(--accent-green); color:#000; border:none; font-size:14px; font-weight:700; cursor:pointer;">Assemble Complex</button>
+          </div>
         </div>
       </div>
 
@@ -3610,6 +3815,23 @@ if (savedTheme === 'light') {
     if (chatContent) chatContent.style.color = '#ffffff';
   });
 }
+
+// Tool availability badges for Membrane Builder and Ligand Builder cards
+fetch('/api/membrane/status').then(r => r.json()).then(data => {
+  const badge = document.getElementById('membrane-tool-badge');
+  if (badge) {
+    badge.textContent = data.available ? `✓ packmol-memgen available` : '⚠ packmol-memgen not installed';
+    badge.style.color = data.available ? 'var(--accent-green)' : 'var(--accent-yellow, #f5a623)';
+  }
+}).catch(() => {});
+
+fetch('/api/ligand/status').then(r => r.json()).then(data => {
+  const badge = document.getElementById('ligand-tool-badge');
+  if (badge) {
+    badge.textContent = data.available ? `✓ acpype available` : '⚠ acpype not installed';
+    badge.style.color = data.available ? 'var(--accent-green)' : 'var(--accent-yellow, #f5a623)';
+  }
+}).catch(() => {});
 
 function updateStepper(info) {
   const stage = info.last_completed_stage;
@@ -5147,6 +5369,313 @@ function startVirtualRun() {
     }, delay);
     _virtualRunTimeouts.push(t);
   });
+}
+
+// ── Membrane Builder ───────────────────────────────────────────────────────
+const _MB_LIPIDS = ["POPC","POPE","POPS","DPPC","DPPE","DPPS","CHL1","PSM"];
+let _mbPdbContent = null;
+let _mbPdbFilename = null;
+
+function showMembraneBuilder() {
+  document.getElementById('new-run-select-view').style.display = 'none';
+  document.getElementById('membrane-builder-view').style.display = 'block';
+  mbGoStep(1);
+  if (!document.getElementById('mb-upper-rows').children.length) {
+    mbAddLipid('upper');
+    mbAddLipid('lower');
+  }
+}
+
+function mbGoStep(n) {
+  for (let i = 1; i <= 4; i++) {
+    const sec = document.getElementById(`mb-section-${i}`);
+    const lbl = document.getElementById(`mb-step-${i}-label`);
+    if (sec) sec.style.display = i === n ? '' : 'none';
+    if (lbl) {
+      lbl.style.background = i === n ? 'var(--accent-cyan)' : 'var(--bg-tertiary)';
+      lbl.style.color = i === n ? '#000' : 'var(--text-muted)';
+    }
+  }
+}
+
+function toggleMbProtein() {
+  const memOnly = document.getElementById('mb-membrane-only').checked;
+  document.getElementById('mb-protein-inputs').style.display = memOnly ? 'none' : '';
+}
+
+async function mbFetchPDB() {
+  const id = document.getElementById('mb-pdb-id').value.trim().toUpperCase();
+  if (!/^[A-Z0-9]{4}$/.test(id)) { showToast('Enter a valid 4-character PDB ID', 'error'); return; }
+  try {
+    const resp = await fetch(`/api/pdb/fetch?pdb_id=${id}`);
+    if (!resp.ok) { showToast('PDB not found', 'error'); return; }
+    const data = await resp.json();
+    _mbPdbContent = data.content;
+    _mbPdbFilename = `${id}.pdb`;
+    document.getElementById('mb-protein-info').style.display = '';
+    document.getElementById('mb-protein-info').textContent = `✓ Loaded ${id}.pdb`;
+  } catch { showToast('Fetch failed', 'error'); }
+}
+
+function mbHandleFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    _mbPdbContent = e.target.result;
+    _mbPdbFilename = file.name;
+    document.getElementById('mb-protein-info').style.display = '';
+    document.getElementById('mb-protein-info').textContent = `✓ Loaded ${file.name}`;
+  };
+  reader.readAsText(file);
+}
+
+function mbAddLipid(leaflet) {
+  const container = document.getElementById(`mb-${leaflet}-rows`);
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex; gap:6px; margin-bottom:6px; align-items:center;';
+  row.innerHTML = `
+    <select style="flex:1; padding:5px; border-radius:5px; border:1px solid var(--border-color); background:var(--bg-tertiary); color:var(--text-primary); font-size:12px;">
+      ${_MB_LIPIDS.map(l => `<option value="${l}">${l}</option>`).join('')}
+    </select>
+    <input type="number" value="50" min="1" max="100" step="1"
+      style="width:60px; padding:5px; border-radius:5px; border:1px solid var(--border-color); background:var(--bg-tertiary); color:var(--text-primary); font-size:12px;"
+      onchange="mbUpdateTotal('${leaflet}')">
+    <span style="font-size:11px; color:var(--text-muted);">%</span>
+    <button type="button" onclick="this.parentElement.remove(); mbUpdateTotal('${leaflet}')"
+      style="padding:2px 7px; border-radius:4px; border:1px solid var(--border-color); background:transparent; color:var(--text-muted); cursor:pointer; font-size:11px;">✕</button>
+  `;
+  container.appendChild(row);
+  mbUpdateTotal(leaflet);
+}
+
+function mbUpdateTotal(leaflet) {
+  const rows = document.getElementById(`mb-${leaflet}-rows`).querySelectorAll('input[type=number]');
+  const total = Array.from(rows).reduce((s, el) => s + Number(el.value), 0);
+  const el = document.getElementById(`mb-${leaflet}-total`);
+  el.textContent = `Total: ${total}%`;
+  el.style.color = Math.abs(total - 100) < 1 ? 'var(--accent-green)' : 'var(--accent-red, #ff4444)';
+}
+
+function mbCopyUpperToLower() {
+  const upper = document.getElementById('mb-upper-rows');
+  const lower = document.getElementById('mb-lower-rows');
+  lower.innerHTML = upper.innerHTML;
+  lower.querySelectorAll('button').forEach(btn => {
+    btn.onclick = () => { btn.parentElement.remove(); mbUpdateTotal('lower'); };
+  });
+  lower.querySelectorAll('input[type=number]').forEach(inp => {
+    inp.onchange = () => mbUpdateTotal('lower');
+  });
+  mbUpdateTotal('lower');
+}
+
+function _mbGetLeaflet(leaflet) {
+  const rows = document.getElementById(`mb-${leaflet}-rows`).children;
+  return Array.from(rows).map(row => {
+    const sel = row.querySelector('select');
+    const inp = row.querySelector('input[type=number]');
+    return { name: sel.value, fraction: Number(inp.value) / 100 };
+  });
+}
+
+async function mbBuild() {
+  const upper = _mbGetLeaflet('upper');
+  const lower = _mbGetLeaflet('lower');
+  const upperSum = upper.reduce((s, e) => s + e.fraction, 0);
+  const lowerSum = lower.reduce((s, e) => s + e.fraction, 0);
+  const errEl = document.getElementById('mb-comp-error');
+  if (Math.abs(upperSum - 1.0) > 0.01 || Math.abs(lowerSum - 1.0) > 0.01) {
+    mbGoStep(2);
+    errEl.style.display = '';
+    errEl.textContent = 'Leaflet fractions must sum to 100%. Please adjust.';
+    return;
+  }
+  errEl.style.display = 'none';
+
+  const config = {
+    lipids_upper: upper,
+    lipids_lower: lower,
+    protein_orientation: document.getElementById('mb-orientation').value,
+    dist_nm: parseFloat(document.getElementById('mb-dist').value),
+    water_z_nm: parseFloat(document.getElementById('mb-water-z').value),
+    salt_M: parseFloat(document.getElementById('mb-salt').value),
+  };
+
+  const formData = new FormData();
+  formData.append('config_json', JSON.stringify(config));
+  const memOnly = document.getElementById('mb-membrane-only').checked;
+  if (!memOnly && _mbPdbContent) {
+    formData.append('protein_pdb', new Blob([_mbPdbContent], { type: 'text/plain' }), _mbPdbFilename || 'protein.pdb');
+  }
+
+  const statusEl = document.getElementById('mb-build-status');
+  const buildBtn = document.getElementById('mb-build-btn');
+  statusEl.style.display = '';
+  statusEl.textContent = 'Building membrane system... this may take a few minutes.';
+  buildBtn.disabled = true;
+
+  try {
+    const resp = await fetch('/api/membrane/build', { method: 'POST', body: formData });
+    const data = await resp.json();
+    if (!resp.ok) {
+      statusEl.textContent = `Error: ${data.detail || 'Build failed'}`;
+      statusEl.style.color = 'var(--accent-red, #ff4444)';
+    } else {
+      statusEl.textContent = '✓ Membrane system built. Files saved to workspace.';
+      statusEl.style.color = 'var(--accent-green)';
+    }
+  } catch {
+    statusEl.textContent = 'Network error.';
+  } finally {
+    buildBtn.disabled = false;
+  }
+}
+
+// ── Ligand Builder ─────────────────────────────────────────────────────────
+let _lbProteinContent = null;
+let _lbProteinFilename = null;
+let _lbLigandFile = null;
+let _lbItp = null;
+let _lbLigandGro = null;
+let _lbResname = "LIG";
+
+function showLigandBuilder() {
+  document.getElementById('new-run-select-view').style.display = 'none';
+  document.getElementById('ligand-builder-view').style.display = 'block';
+  lbGoStep(1);
+}
+
+function lbGoStep(n) {
+  for (let i = 1; i <= 3; i++) {
+    const sec = document.getElementById(`lb-section-${i}`);
+    const lbl = document.getElementById(`lb-step-${i}-label`);
+    if (sec) sec.style.display = i === n ? '' : 'none';
+    if (lbl) {
+      lbl.style.background = i === n ? 'var(--accent-cyan)' : 'var(--bg-tertiary)';
+      lbl.style.color = i === n ? '#000' : 'var(--text-muted)';
+    }
+  }
+}
+
+async function lbFetchPDB() {
+  const id = document.getElementById('lb-pdb-id').value.trim().toUpperCase();
+  if (!/^[A-Z0-9]{4}$/.test(id)) { showToast('Enter a valid 4-character PDB ID', 'error'); return; }
+  try {
+    const resp = await fetch(`/api/pdb/fetch?pdb_id=${id}`);
+    if (!resp.ok) { showToast('PDB not found', 'error'); return; }
+    const data = await resp.json();
+    _lbProteinContent = data.content;
+    _lbProteinFilename = `${id}.pdb`;
+    const info = document.getElementById('lb-protein-info');
+    info.style.display = '';
+    info.textContent = `✓ Loaded ${id}.pdb`;
+  } catch { showToast('Fetch failed', 'error'); }
+}
+
+function lbHandleProtein(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    _lbProteinContent = e.target.result;
+    _lbProteinFilename = file.name;
+    const info = document.getElementById('lb-protein-info');
+    info.style.display = '';
+    info.textContent = `✓ Loaded ${file.name}`;
+  };
+  reader.readAsText(file);
+}
+
+function lbHandleLigand(input) {
+  _lbLigandFile = input.files[0] || null;
+  const info = document.getElementById('lb-ligand-info');
+  if (_lbLigandFile) {
+    info.style.display = '';
+    info.textContent = `✓ ${_lbLigandFile.name}`;
+  }
+}
+
+async function lbRunAcpype() {
+  if (!_lbLigandFile) { showToast('Upload a ligand file first', 'error'); return; }
+  const btn = document.getElementById('lb-param-btn');
+  const statusEl = document.getElementById('lb-param-status');
+  const filesEl = document.getElementById('lb-param-files');
+  btn.disabled = true;
+  statusEl.style.display = '';
+  statusEl.textContent = 'Running ACPYPE...';
+  statusEl.style.color = 'var(--text-secondary)';
+
+  _lbResname = (document.getElementById('lb-resname').value || 'LIG').toUpperCase().slice(0, 3);
+  const formData = new FormData();
+  formData.append('ligand', _lbLigandFile);
+  formData.append('charge', document.getElementById('lb-charge').value);
+  formData.append('atom_type', document.getElementById('lb-atomtype').value);
+  formData.append('residue_name', _lbResname);
+
+  try {
+    const resp = await fetch('/api/ligand/parameterize', { method: 'POST', body: formData });
+    const data = await resp.json();
+    if (!resp.ok) {
+      statusEl.textContent = `Error: ${data.detail || 'Parameterization failed'}`;
+      statusEl.style.color = 'var(--accent-red, #ff4444)';
+    } else if (!data.available) {
+      statusEl.textContent = 'acpype is not installed on this server.';
+    } else {
+      _lbItp = data.itp;
+      _lbLigandGro = data.gro;
+      const penalty = data.penalty || 0;
+      let msg = `✓ Parameterization complete. Penalty score: ${penalty.toFixed(1)}`;
+      if (penalty > 10) msg += ' ⚠ (review recommended)';
+      statusEl.textContent = msg;
+      statusEl.style.color = penalty > 10 ? 'var(--accent-yellow, #f5a623)' : 'var(--accent-green)';
+      filesEl.style.display = '';
+      filesEl.textContent = `Files generated: ${_lbResname}.itp, ${_lbResname}.gro, posre_${_lbResname}.itp`;
+      document.getElementById('lb-next-3-btn').disabled = false;
+      document.getElementById('lb-next-3-btn').style.opacity = '1';
+    }
+  } catch {
+    statusEl.textContent = 'Network error.';
+    statusEl.style.color = 'var(--accent-red, #ff4444)';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function lbAssemble() {
+  if (!_lbProteinContent || !_lbItp || !_lbLigandGro) {
+    showToast('Complete Steps 1 and 2 first', 'error');
+    return;
+  }
+  const statusEl = document.getElementById('lb-assemble-status');
+  const btn = document.getElementById('lb-assemble-btn');
+  statusEl.style.display = '';
+  statusEl.textContent = 'Assembling protein-ligand complex...';
+  btn.disabled = true;
+
+  const minimalTop = '#include "amber99sb-ildn.ff/forcefield.itp"\n[ system ]\nProtein in water\n[ molecules ]\nProtein_chain_A  1\n';
+  const formData = new FormData();
+  formData.append('protein_gro', new Blob([_lbProteinContent], {type:'text/plain'}), _lbProteinFilename || 'protein.pdb');
+  formData.append('ligand_gro', new Blob([_lbLigandGro], {type:'text/plain'}), `${_lbResname}.gro`);
+  formData.append('ligand_itp', new Blob([_lbItp], {type:'text/plain'}), `${_lbResname}.itp`);
+  formData.append('topol_top', new Blob([minimalTop], {type:'text/plain'}), 'topol.top');
+
+  try {
+    const resp = await fetch('/api/ligand/assemble', { method: 'POST', body: formData });
+    const data = await resp.json();
+    if (!resp.ok) {
+      statusEl.textContent = `Error: ${data.detail || 'Assembly failed'}`;
+      statusEl.style.color = 'var(--accent-red, #ff4444)';
+    } else {
+      statusEl.textContent = '✓ Complex assembled. Files: complex.gro, topol_complex.top';
+      statusEl.style.color = 'var(--accent-green)';
+    }
+  } catch {
+    statusEl.textContent = 'Network error.';
+    statusEl.style.color = 'var(--accent-red, #ff4444)';
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 </script>
