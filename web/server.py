@@ -22,17 +22,36 @@ from web.llm_adapters import ADAPTERS
 from web import llm_runner
 from web.run_reader import RunInfo, list_runs, read_run
 
+# Lines matching this pattern are stripped from the chat view entirely
 _CHAT_STRIP = re.compile(
-    r'^\s*[\$>]\s'
-    r'|^:-\)'
-    r'|^GROMACS'
+    r'^\s*[\$>]\s'                      # shell prompts
+    r'|^:-\)'                           # GROMACS smiley
+    r'|^GROMACS'                        # GROMACS header
+    r'|^Executable:'
+    r'|^Data prefix:'
+    r'|^Working dir:'
+    r'|^Command line:'
+    r'|^\s*gmx\b'                       # gmx commands
     r'|^\s*NOTE:'
     r'|^\s*WARNING:'
     r'|^\s*Error\s*in\s*user\s*input'
-    r'|^[-=]{4,}'
+    r'|^\s*Fatal\s*error'
+    r'|^[-=+*]{4,}'                     # separator lines
+    r'|^\s*Step\s+Time'                 # MD progress header
+    r'|^\s*\d+\s+\d+\.\d+'             # MD step/time rows
+    r'|^\s*#\s*gmx\b'                   # commented gmx commands
     r'|Allow\?\s*\[y/n\]\s*$'
     r'|\[y/n\]\s*$|\[Y/n\]\s*$|\(y/n\)\s*$'
     r'|^\s*$',
+    re.IGNORECASE,
+)
+
+# Purely technical/numeric lines (energy tables, etc.)
+_TECH_LINE = re.compile(
+    r'^\s*[-\d\s.eE+]+$'
+    r'|^\s*Energies\s*\(kJ/mol\)'
+    r'|^\s*Bond\s+Angle'
+    r'|^\s*Potential\s+Kinetic',
     re.IGNORECASE,
 )
 
@@ -40,9 +59,26 @@ _PRESETS_DIR = "presets"
 
 
 def _filter_chat_log(raw: str) -> str:
+    """Return only AI narrative text from runner.log, stripping GROMACS output."""
     lines = raw.splitlines()
-    kept = [line for line in lines if not _CHAT_STRIP.search(line)]
-    return "\n".join(kept)
+    kept: list[str] = []
+    for line in lines:
+        if _CHAT_STRIP.search(line):
+            continue
+        if _TECH_LINE.search(line):
+            continue
+        kept.append(line)
+
+    # Collapse more than 1 consecutive blank line
+    result: list[str] = []
+    prev_blank = False
+    for line in kept:
+        is_blank = line.strip() == ""
+        if is_blank and prev_blank:
+            continue
+        result.append(line)
+        prev_blank = is_blank
+    return "\n".join(result).strip()
 
 
 HARNESS_DIR: Path = Path(__file__).parent.parent
@@ -699,6 +735,152 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
             return run_propka(tmp_path, ph=ph)
         finally:
             os.unlink(tmp_path)
+
+    # ── Ligand Parameterization ──────────────────────────────────────────────
+    from lib import ligand_params as _lp
+
+    @app.get("/api/ligand/status")
+    def api_ligand_status() -> dict:
+        available = _lp.is_acpype_available()
+        version: str | None = None
+        if available:
+            try:
+                r = subprocess.run(
+                    ["acpype", "--version"],
+                    capture_output=True, text=True, timeout=5,
+                )
+                version = (r.stdout or r.stderr).strip()[:80] or None
+            except Exception:
+                pass
+        return {"available": available, "version": version}
+
+    @app.post("/api/ligand/parameterize")
+    async def api_ligand_parameterize(
+        ligand: UploadFile,
+        charge: Annotated[int, Form(ge=-10, le=10)] = 0,
+        atom_type: Annotated[str, Form()] = "gaff2",
+        residue_name: Annotated[str, Form()] = "LIG",
+    ) -> dict:
+        if not _lp.is_acpype_available():
+            raise HTTPException(
+                status_code=503,
+                detail="acpype not installed. Run: conda install -c conda-forge ambertools",
+            )
+        import tempfile as _tmpfile
+        suffix = Path(ligand.filename or "ligand.pdb").suffix or ".pdb"
+        with _tmpfile.NamedTemporaryFile(delete=False, suffix=suffix) as f:
+            f.write(await ligand.read())
+            tmp_path = Path(f.name)
+        try:
+            result = _lp.run_acpype(tmp_path, charge=charge, atom_type=atom_type, residue_name=residue_name)
+            if result.get("error"):
+                raise HTTPException(status_code=500, detail=result["error"])
+            return result
+        finally:
+            if tmp_path.exists():
+                tmp_path.unlink()
+
+    @app.post("/api/ligand/assemble")
+    async def api_ligand_assemble(
+        protein_gro: UploadFile,
+        ligand_gro: UploadFile,
+        ligand_itp: UploadFile,
+        topol_top: UploadFile,
+    ) -> dict:
+        import tempfile as _tmpfile2
+        import shutil as _shutil
+        workspace = Path(_tmpfile2.mkdtemp())
+        try:
+            async def _save(upload: UploadFile, name: str) -> Path:
+                p = workspace / name
+                p.write_bytes(await upload.read())
+                return p
+
+            p_gro = await _save(protein_gro, "protein.gro")
+            l_gro = await _save(ligand_gro, "LIG.gro")
+            l_itp = await _save(ligand_itp, "LIG.itp")
+            t_top = await _save(topol_top, "topol.top")
+
+            return _lp.assemble_complex(p_gro, l_gro, l_itp, t_top, workspace)
+        finally:
+            _shutil.rmtree(workspace, ignore_errors=True)
+
+    # ── Membrane Builder ────────────────────────────────────────────────────
+    from lib import membrane_builder as _mb
+
+    @app.get("/api/membrane/status")
+    def api_membrane_status() -> dict:
+        available = _mb.is_packmol_memgen_available()
+        version: str | None = None
+        if available:
+            try:
+                r = subprocess.run(
+                    ["packmol-memgen", "--version"],
+                    capture_output=True, text=True, timeout=5,
+                )
+                version = (r.stdout or r.stderr).strip()[:80] or None
+            except Exception:
+                pass
+        return {"available": available, "version": version}
+
+    @app.get("/api/membrane/lipids")
+    def api_membrane_lipids() -> list[dict]:
+        return _mb.list_supported_lipids()
+
+    @app.post("/api/membrane/build")
+    async def api_membrane_build(
+        hd: HarnessDir,
+        config_json: Annotated[str, Form()],
+        protein_pdb: UploadFile | None = None,
+    ) -> dict:
+        import json as _json
+        if not _mb.is_packmol_memgen_available():
+            raise HTTPException(
+                status_code=503,
+                detail="packmol-memgen not installed. Run: conda install -c conda-forge ambertools",
+            )
+        try:
+            config = _json.loads(config_json)
+        except Exception:
+            raise HTTPException(status_code=422, detail="config_json is not valid JSON")
+
+        for leaflet_key in ("lipids_upper", "lipids_lower"):
+            leaflet = config.get(leaflet_key, [])
+            if leaflet:
+                total = sum(e.get("fraction", 0) for e in leaflet)
+                if abs(total - 1.0) > 0.001:
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"{leaflet_key} fractions must sum to 1.0, got {total:.4f}",
+                    )
+
+        tmp_dir = hd / "tmp"
+        tmp_dir.mkdir(exist_ok=True)
+        tmp_protein: Path | None = None
+
+        try:
+            if protein_pdb:
+                import tempfile
+                suffix = Path(protein_pdb.filename or "protein.pdb").suffix or ".pdb"
+                with tempfile.NamedTemporaryFile(
+                    delete=False, suffix=suffix, dir=tmp_dir
+                ) as f:
+                    f.write(await protein_pdb.read())
+                    tmp_protein = Path(f.name)
+                config["protein_pdb"] = str(tmp_protein)
+
+            try:
+                result = _mb.build_membrane(config, tmp_dir)
+            except ValueError as e:
+                raise HTTPException(status_code=422, detail=str(e))
+
+            if result.get("error"):
+                raise HTTPException(status_code=500, detail=result["error"])
+
+            return result
+        finally:
+            if tmp_protein and tmp_protein.exists():
+                tmp_protein.unlink()
 
     if STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")

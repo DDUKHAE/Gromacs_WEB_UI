@@ -693,14 +693,63 @@ body.light-theme #chat-panel {
   border: 1px solid var(--border-color);
 }
 
-#fallback-terminal-text,
-#chat-content {
+#fallback-terminal-text {
   color: #ffffff !important;
 }
 
-body.light-theme #fallback-terminal-text,
-body.light-theme #chat-content {
+body.light-theme #fallback-terminal-text {
   color: #000000 !important;
+}
+
+/* Chat bubble styles */
+.chat-bubble {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 100%;
+  animation: chatFadeIn 0.2s ease;
+}
+@keyframes chatFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.chat-bubble-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  flex-shrink: 0;
+  margin-top: 2px;
+  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-primary));
+  border: none;
+  color: #fff;
+}
+.chat-bubble-body {
+  flex: 1;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 0 10px 10px 10px;
+  padding: 10px 13px;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--text-primary, #e0e6f0);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+body.light-theme .chat-bubble-body {
+  background: rgba(0,0,0,0.04);
+  border-color: rgba(0,0,0,0.1);
+  color: #1a1a2e;
+}
+body.light-theme .chat-bubble-icon {
+  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-primary));
+  border: none;
+  color: #fff;
 }
 
 /* Actions - Relocated to top header, compact styling */
@@ -851,9 +900,10 @@ body.light-theme .chart-card-title {
 }
 
 /* System Builder Wizard */
-#wizard-nav {
-  position: sticky;
-  top: 0;
+#wizard-nav,
+#mb-wizard-nav,
+#lb-wizard-nav {
+  position: relative;
   z-index: 10;
   display: flex;
   overflow-x: auto;
@@ -997,6 +1047,29 @@ body.light-theme .ff-row {
   box-shadow: 0 4px 12px rgba(6, 182, 212, 0.05);
 }
 body.light-theme .ff-row:hover {
+  background: rgba(0, 0, 0, 0.02);
+}
+.leaflet-card {
+  flex: 1;
+  min-width: 260px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.leaflet-card:hover {
+  border-color: rgba(6, 182, 212, 0.25);
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: 0 4px 20px rgba(6, 182, 212, 0.04);
+}
+body.light-theme .leaflet-card {
+  background: rgba(0, 0, 0, 0.01);
+}
+body.light-theme .leaflet-card:hover {
   background: rgba(0, 0, 0, 0.02);
 }
 .ff-label-col {
@@ -1217,7 +1290,9 @@ body.light-theme .summary-card {
 
 /* New Run */
 #new-run-view,
-#new-visualization-view {
+#new-visualization-view,
+#membrane-builder-view,
+#ligand-builder-view {
   flex: 1;
   display: none; /* Controlled explicitly via JS style.display */
   flex-direction: column;
@@ -1281,7 +1356,9 @@ body.light-theme .summary-card {
   overflow-y: auto;
 }
 #new-run-form,
-#new-visualization-container {
+#new-visualization-container,
+#membrane-builder-form,
+#ligand-builder-form {
   /* [메인 입력 폼 규격] System Builder와 Visualization 업로드 폼의 가로폭 및 최소 세로길이 설정 */
   width: 100%;
   max-width: 600px;      /* 폼의 최대 가로 크기 (600px로 일원화) */
@@ -1292,7 +1369,9 @@ body.light-theme .summary-card {
 }
 
 #new-run-form h2,
-#new-visualization-container h2 {
+#new-visualization-container h2,
+#membrane-builder-form h2,
+#ligand-builder-form h2 {
   font-size: 20px;
   font-weight: 700;
   color: var(--text-primary);
@@ -1305,7 +1384,9 @@ body.light-theme .summary-card {
 }
 
 body.light-theme #new-run-form h2,
-body.light-theme #new-visualization-container h2 {
+body.light-theme #new-visualization-container h2,
+body.light-theme #membrane-builder-form h2,
+body.light-theme #ligand-builder-form h2 {
   background: linear-gradient(135deg, #1f2937, #4f46e5);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -1314,7 +1395,10 @@ body.light-theme #new-visualization-container h2 {
 #drop-zone,
 #xvg-drop-zone,
 #mol-struct-drop,
-#mol-traj-drop {
+#mol-traj-drop,
+#membrane-drop-zone,
+#lb-protein-drop-zone,
+#lb-ligand-drop-zone {
   border: 2px dashed rgba(99, 102, 241, 0.35);
   border-radius: var(--radius-md);
   padding: 16px 12px;
@@ -1331,7 +1415,10 @@ body.light-theme #new-visualization-container h2 {
 
 #drop-zone,
 #xvg-drop-zone,
-#mol-upload-container {
+#mol-upload-container,
+#membrane-drop-zone,
+#lb-protein-drop-zone,
+#lb-ligand-drop-zone {
   /* [업로드 박스 가로세로 비율 설정] 세로 길이를 절반으로 줄이기 위해 비율을 2 / 1로 설정합니다. */
   aspect-ratio: 2 / 1;
 }
@@ -1346,7 +1433,10 @@ body.light-theme #new-visualization-container h2 {
 body.light-theme #drop-zone,
 body.light-theme #xvg-drop-zone,
 body.light-theme #mol-struct-drop,
-body.light-theme #mol-traj-drop {
+body.light-theme #mol-traj-drop,
+body.light-theme #membrane-drop-zone,
+body.light-theme #lb-protein-drop-zone,
+body.light-theme #lb-ligand-drop-zone {
   background: rgba(79, 70, 229, 0.01);
   border-color: rgba(79, 70, 229, 0.25);
 }
@@ -1354,7 +1444,10 @@ body.light-theme #mol-traj-drop {
 #drop-zone:hover,
 #xvg-drop-zone:hover,
 #mol-struct-drop:hover,
-#mol-traj-drop:hover {
+#mol-traj-drop:hover,
+#membrane-drop-zone:hover,
+#lb-protein-drop-zone:hover,
+#lb-ligand-drop-zone:hover {
   background: rgba(99, 102, 241, 0.05);
   border-color: var(--accent-primary);
   box-shadow: 0 0 16px rgba(99, 102, 241, 0.12);
@@ -1376,7 +1469,10 @@ body.light-theme #mol-traj-drop {
 #drop-zone:hover .upload-icon,
 #xvg-drop-zone:hover .upload-icon,
 #mol-struct-drop:hover .upload-icon,
-#mol-traj-drop:hover .upload-icon {
+#mol-traj-drop:hover .upload-icon,
+#membrane-drop-zone:hover .upload-icon,
+#lb-protein-drop-zone:hover .upload-icon,
+#lb-ligand-drop-zone:hover .upload-icon {
   transform: translateY(-2px);
   background: var(--accent-primary);
   color: #fff;
@@ -1957,8 +2053,9 @@ body.resizing * {
         </div>
 
         <!-- Chat log panel (shown when terminal mode = chat) -->
-        <div id="chat-panel" style="display: none; height: 450px; flex: none; background: #04060f; border-radius: var(--radius-md); overflow-y: auto; padding: 14px 16px;">
-          <pre id="chat-content" style="font-size: 11px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; margin: 0; font-family: 'Fira Code', monospace;"></pre>
+        <div id="chat-panel" style="display: none; height: 450px; flex: none; background: var(--bg-secondary, #0d1117); border-radius: var(--radius-md); overflow-y: auto; padding: 12px 14px; display: none;">
+          <div id="chat-messages" style="display: flex; flex-direction: column; gap: 10px;"></div>
+          <div id="chat-typing" style="display:none; padding: 8px 12px; font-size: 11px; color: var(--text-muted); font-style: italic;">LLM이 응답 중...</div>
         </div>
 
         <!-- Results Gallery -->
@@ -2009,8 +2106,8 @@ body.resizing * {
               <div class="upload-icon">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
               </div>
-              <p>Drop PDB file here</p>
-              <small>or click to browse from files</small>
+              <p>Protein Input</p>
+              <small>Support: .pdb (Click to browse)</small>
               <div id="selected-file"></div>
             </div>
             <input type="file" id="pdb-input" accept=".pdb" onchange="handleFileSelect(this.files[0])">
@@ -2557,7 +2654,388 @@ body.resizing * {
             <h3 style="font-size: 18px; font-weight: 600; color: var(--text-primary);">Virtual Run</h3>
             <p style="color: var(--text-secondary); font-size: 13px; line-height: 1.4;">Simulate a molecular dynamics execution flow in real-time without physical computation.</p>
           </div>
+          <!-- Choice Card 4: Membrane Builder -->
+          <div onclick="showMembraneBuilder()" style="flex: 1; min-width: 250px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 24px; cursor: pointer; text-align: center; transition: all 0.3s ease; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; box-shadow: var(--shadow-sm);" onmouseover="this.style.borderColor='var(--accent-cyan)'; this.style.transform='translateY(-4px)'; this.style.background='var(--bg-card-hover)';" onmouseout="this.style.borderColor='var(--border-color)'; this.style.transform='none'; this.style.background='var(--bg-card)';">
+            <div style="width: 48px; height: 48px; border-radius: 50%; background: rgba(6, 182, 212, 0.1); display: flex; align-items: center; justify-content: center; color: var(--accent-cyan);">
+              <span style="font-size: 24px;">🧬</span>
+            </div>
+            <h3 style="font-size: 18px; font-weight: 600; color: var(--text-primary);">Membrane Builder</h3>
+            <p style="color: var(--text-secondary); font-size: 13px; line-height: 1.4;">Build lipid bilayer systems with packmol-memgen. Supports protein insertion and mixed lipid compositions.</p>
+            <div id="membrane-tool-badge" style="font-size: 11px; color: var(--text-muted);"></div>
+          </div>
+          <!-- Choice Card 5: Protein-Ligand Builder -->
+          <div onclick="showLigandBuilder()" style="flex: 1; min-width: 250px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 24px; cursor: pointer; text-align: center; transition: all 0.3s ease; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; box-shadow: var(--shadow-sm);" onmouseover="this.style.borderColor='var(--accent-primary)'; this.style.transform='translateY(-4px)'; this.style.background='var(--bg-card-hover)';" onmouseout="this.style.borderColor='var(--border-color)'; this.style.transform='none'; this.style.background='var(--bg-card)';">
+            <div style="width: 48px; height: 48px; border-radius: 50%; background: rgba(99, 102, 241, 0.1); display: flex; align-items: center; justify-content: center; color: var(--accent-primary);">
+              <span style="font-size: 24px;">💊</span>
+            </div>
+            <h3 style="font-size: 18px; font-weight: 600; color: var(--text-primary);">Protein-Ligand</h3>
+            <p style="color: var(--text-secondary); font-size: 13px; line-height: 1.4;">Parameterize small-molecule ligands with ACPYPE (GAFF2) and assemble protein-ligand complex topologies.</p>
+            <div id="ligand-tool-badge" style="font-size: 11px; color: var(--text-muted);"></div>
+          </div>
         </div>
+      </div>
+
+      <!-- ── Membrane Builder Wizard ─────────────────────────────────────── -->
+      <div id="membrane-builder-view">
+        <form id="membrane-builder-form" onsubmit="event.preventDefault();" aria-label="Membrane Builder 설정">
+          <h2>Membrane Builder</h2>
+          <div id="mb-wizard-nav">
+            <button type="button" class="wiz-tab active" id="mb-step-1-label" onclick="mbGoStep(1)">Protein</button>
+            <button type="button" class="wiz-tab" id="mb-step-2-label" onclick="mbGoStep(2)">Composition</button>
+            <button type="button" class="wiz-tab" id="mb-step-3-label" onclick="mbGoStep(3)">Box &amp; Solvent</button>
+            <button type="button" class="wiz-tab" id="mb-step-4-label" onclick="mbGoStep(4)">Simulation</button>
+            <button type="button" class="wiz-tab" id="mb-step-5-label" onclick="mbGoStep(5)">Start</button>
+          </div>
+          <div id="mb-section-1" class="wiz-section active">
+            <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
+              <label style="font-size:13px; font-weight:600; color: var(--text-primary);">Membrane only (no protein)</label>
+              <input type="checkbox" id="mb-membrane-only" onchange="toggleMbProtein()" style="width:16px;height:16px; accent-color: var(--accent-cyan);">
+              <div class="tooltip-container" onclick="event.stopPropagation()">
+                <span class="info-icon">?</span>
+                <span class="tooltip-text">Builds a pure lipid bilayer without an embedded protein. Use for membrane-only studies such as lateral diffusion, bilayer thickness, or area per lipid.</span>
+              </div>
+            </div>
+            <div id="mb-protein-inputs">
+              <div id="membrane-drop-zone"
+                onclick="document.getElementById('mb-pdb-file').click()"
+                ondragover="event.preventDefault(); this.style.borderColor='var(--accent-primary)'"
+                ondragleave="this.style.borderColor=''"
+                ondrop="event.preventDefault(); this.style.borderColor=''; mbHandleFile(event.dataTransfer.files[0])">
+                <div class="upload-icon">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                </div>
+                <p>Protein Input</p>
+                <small>Support: .pdb (Click to browse)</small>
+                <div id="mb-selected-file-name" style="margin-top: 8px; font-weight: 600; color: var(--accent-green); font-size: 12px;"></div>
+              </div>
+              <input type="file" id="mb-pdb-file" accept=".pdb" onchange="mbHandleFile(this.files ? this.files[0] : null)" style="display: none;">
+              
+              <div style="display:flex;align-items:center;gap:8px;margin-top:10px;">
+                <span style="font-size:12px;color:var(--text-secondary);">Or PDB ID:</span>
+                <div class="tooltip-container" onclick="event.stopPropagation()" style="margin-left:-4px;">
+                  <span class="info-icon">?</span>
+                  <span class="tooltip-text">4-character RCSB PDB accession code (e.g. 1AKI, 2KHO). For membrane proteins, prefer pre-oriented structures from the OPM database to ensure correct transmembrane insertion.</span>
+                </div>
+                <input type="text" id="mb-pdb-id" placeholder="e.g. 1AKI" maxlength="4"
+                  style="width:72px;background:var(--bg-input);border:1px solid var(--border-color);
+                         color:var(--text-primary);padding:5px 8px;border-radius:4px;
+                         text-transform:uppercase;font-size:12px;">
+                <button type="button" onclick="mbFetchPDB()"
+                  style="padding:5px 12px;background:var(--accent-secondary);color:var(--text-primary);
+                         border:none;border-radius:4px;cursor:pointer;font-size:12px;">Fetch</button>
+              </div>
+              <div id="mb-protein-info" style="display:none; font-size:11px; color:var(--accent-green); margin-top:10px; font-weight: 600;"></div>
+              
+              <div class="ff-container" style="margin-top: 14px;">
+                <div class="ff-row">
+                  <div class="ff-label-col">
+                    <span class="ff-title">Protein orientation</span>
+                    <div class="tooltip-container" onclick="event.stopPropagation()">
+                      <span class="info-icon">?</span>
+                      <span class="tooltip-text">Method for orienting the protein in the bilayer. Pre-oriented: uses OPM DB coordinates. Auto-orient: packmol-memgen --orient calculates the tilt angle. Manual: preserves the input coordinates as-is.</span>
+                    </div>
+                  </div>
+                  <div class="ff-select-col">
+                    <select id="mb-orientation">
+                      <option value="opm">Pre-oriented (OPM DB)</option>
+                      <option value="auto">Auto-orient (packmol-memgen --orient)</option>
+                      <option value="manual">Manual (no reorientation)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+          <div id="mb-section-2" class="wiz-section">
+            <div style="display:flex; flex-direction:row; gap:16px; flex-wrap:wrap; width:100%;">
+              <!-- Upper Leaflet Card -->
+              <div class="leaflet-card">
+                <div style="font-size:13px; font-weight:700; color:var(--text-primary); border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+                  <span style="display:flex; align-items:center; gap:6px;">
+                    Upper Leaflet
+                    <div class="tooltip-container" onclick="event.stopPropagation()">
+                      <span class="info-icon">?</span>
+                      <span class="tooltip-text">Extracellular-facing lipid monolayer. Enter mole fractions (%) for each lipid species; values must sum to 100%. A POPC/POPE/CHL1 mixture is a common starting point.</span>
+                    </div>
+                  </span>
+                  <span id="mb-upper-total" style="font-size:12px; font-weight:700; color:var(--text-muted);">Total: 0%</span>
+                </div>
+                <div id="mb-upper-rows" style="display:flex; flex-direction:column; gap:8px;"></div>
+                <div style="display:flex; justify-content:flex-start; margin-top:8px; border-top:1px solid rgba(255,255,255,0.05); padding-top:10px;">
+                  <button type="button" onclick="mbAddLipid('upper')" style="padding:4px 12px; border-radius:6px; border:1px dashed var(--border-color); background:transparent; color:var(--text-muted); font-size:11px; cursor:pointer; font-weight:600; transition:all 0.2s;" onmouseover="this.style.borderColor='var(--accent-cyan)'; this.style.color='var(--accent-cyan)';" onmouseout="this.style.borderColor='var(--border-color)'; this.style.color='var(--text-muted)';">+ Add lipid</button>
+                </div>
+              </div>
+
+              <!-- Lower Leaflet Card -->
+              <div class="leaflet-card">
+                <div style="font-size:13px; font-weight:700; color:var(--text-primary); border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+                  <span style="display:flex; align-items:center; gap:6px;">
+                    Lower Leaflet
+                    <div class="tooltip-container" onclick="event.stopPropagation()">
+                      <span class="info-icon">?</span>
+                      <span class="tooltip-text">Cytoplasmic-facing lipid monolayer. Biological membranes are asymmetric: anionic lipids (POPS, POPE) are enriched in the inner leaflet. Use "Copy Upper" to quickly set a symmetric bilayer.</span>
+                    </div>
+                  </span>
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <button type="button" onclick="mbCopyUpperToLower()" style="padding:3px 10px; border-radius:4px; border:1px solid var(--border-color); background:transparent; color:var(--text-muted); font-size:10px; cursor:pointer; font-weight:600; transition:all 0.2s;" onmouseover="this.style.borderColor='var(--accent-cyan)'; this.style.color='var(--accent-cyan)';" onmouseout="this.style.borderColor='var(--border-color)'; this.style.color='var(--text-muted)';">Copy Upper</button>
+                    <span id="mb-lower-total" style="font-size:12px; font-weight:700; color:var(--text-muted);">Total: 0%</span>
+                  </div>
+                </div>
+                <div id="mb-lower-rows" style="display:flex; flex-direction:column; gap:8px;"></div>
+                <div style="display:flex; justify-content:flex-start; margin-top:8px; border-top:1px solid rgba(255,255,255,0.05); padding-top:10px;">
+                  <button type="button" onclick="mbAddLipid('lower')" style="padding:4px 12px; border-radius:6px; border:1px dashed var(--border-color); background:transparent; color:var(--text-muted); font-size:11px; cursor:pointer; font-weight:600; transition:all 0.2s;" onmouseover="this.style.borderColor='var(--accent-cyan)'; this.style.color='var(--accent-cyan)';" onmouseout="this.style.borderColor='var(--border-color)'; this.style.color='var(--text-muted)';">+ Add lipid</button>
+                </div>
+              </div>
+            </div>
+            <div id="mb-comp-error" style="display:none; color:var(--accent-red, #ff4444); font-size:11px; margin-top:8px;"></div>
+
+          </div>
+          <div id="mb-section-3" class="wiz-section">
+            <div class="ff-container">
+              <div class="ff-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">Protein–membrane distance (nm)</span>
+                  <div class="tooltip-container" onclick="event.stopPropagation()">
+                    <span class="info-icon">?</span>
+                    <span class="tooltip-text">Minimum distance (nm) between the protein surface and the lipid headgroup plane. 1.0 nm is standard. Too small causes steric clashes; too large inflates the simulation box unnecessarily.</span>
+                  </div>
+                </div>
+                <div class="ff-select-col">
+                  <input type="number" id="mb-dist" value="1.0" min="0.5" max="3.0" step="0.1">
+                </div>
+              </div>
+              <div class="ff-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">Water layer thickness z (nm)</span>
+                  <div class="tooltip-container" onclick="event.stopPropagation()">
+                    <span class="info-icon">?</span>
+                    <span class="tooltip-text">Thickness of the aqueous slab above and below the bilayer (nm). ≥2.0 nm recommended. An adequate water layer prevents spurious interactions between periodic images of the membrane.</span>
+                  </div>
+                </div>
+                <div class="ff-select-col">
+                  <input type="number" id="mb-water-z" value="2.0" min="0.5" max="5.0" step="0.5">
+                </div>
+              </div>
+              <div class="ff-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">Ion concentration (M NaCl)</span>
+                  <div class="tooltip-container" onclick="event.stopPropagation()">
+                    <span class="info-icon">?</span>
+                    <span class="tooltip-text">NaCl concentration (M) to add to the solvent. Physiological ionic strength is 0.15 M. Counter-ions are also placed to neutralize the net charge of the system.</span>
+                  </div>
+                </div>
+                <div class="ff-select-col">
+                  <input type="number" id="mb-salt" value="0.15" min="0.0" max="2.0" step="0.05">
+                </div>
+              </div>
+            </div>
+
+          </div>
+          <div id="mb-section-4" class="wiz-section">
+            <div class="ff-container" style="margin-bottom:16px;">
+              <div class="ff-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">Temperature (K)</span>
+                  <div class="tooltip-container" onclick="event.stopPropagation()">
+                    <span class="info-icon">?</span>
+                    <span class="tooltip-text">Target temperature (K) for the MD simulation. 310 K (37°C) is the physiological reference for membrane simulations. For saturated lipids like DPPC, consider the gel-to-liquid phase transition temperature (~323 K).</span>
+                  </div>
+                </div>
+                <div class="ff-select-col">
+                  <input type="number" id="mb-temp" value="310" min="200" max="500">
+                </div>
+              </div>
+              <div class="ff-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">Simulation time (ns)</span>
+                  <div class="tooltip-container" onclick="event.stopPropagation()">
+                    <span class="info-icon">?</span>
+                    <span class="tooltip-text">Total simulation length (ns). Membrane equilibration typically requires ≥100 ns. Calculations of lateral diffusion coefficients via MSD analysis may require ≥500 ns for convergence.</span>
+                  </div>
+                </div>
+                <div class="ff-select-col">
+                  <input type="number" id="mb-simtime" value="100" min="1" max="1000">
+                </div>
+              </div>
+            </div>
+          </div>
+          <div id="mb-section-5" class="wiz-section">
+            <div id="mb-summary" style="margin-bottom: 14px;"></div>
+            <div id="mb-build-status" style="display:none; margin-bottom:12px; font-size:12px; padding:10px; border-radius:6px; background:var(--bg-tertiary);"></div>
+            <div style="display:flex; justify-content:flex-end; margin-top:12px;">
+              <button type="button" id="mb-build-btn" onclick="mbBuild()" style="padding:10px 28px; border-radius:6px; background:var(--accent-green); color:#000; border:none; font-size:14px; font-weight:700; cursor:pointer;">Build Membrane System</button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <!-- ── Ligand Builder Wizard ──────────────────────────────────────── -->
+      <div id="ligand-builder-view">
+        <form id="ligand-builder-form" onsubmit="event.preventDefault();" aria-label="Protein-Ligand Builder 설정">
+          <h2>Protein-Ligand Builder</h2>
+          <div id="lb-wizard-nav">
+            <button type="button" class="wiz-tab active" id="lb-step-1-label" onclick="lbGoStep(1)">Input</button>
+            <button type="button" class="wiz-tab" id="lb-step-2-label" onclick="lbGoStep(2)">Parameterize</button>
+            <button type="button" class="wiz-tab" id="lb-step-3-label" onclick="lbGoStep(3)">Assemble</button>
+          </div>
+          
+          <!-- Section 1 -->
+          <div id="lb-section-1" class="wiz-section active">
+            <div style="display:flex; flex-direction:column; gap:20px;">
+              <div>
+                <div style="font-size:12px; font-weight:700; margin-bottom:8px; color:var(--text-primary); border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:4px; display:flex; align-items:center; gap:6px;">
+                  Protein Input
+                  <div class="tooltip-container" onclick="event.stopPropagation()">
+                    <span class="info-icon">?</span>
+                    <span class="tooltip-text">Upload a GROMACS-ready protein structure (.pdb) or fetch one via PDB ID. Files containing explicit hydrogen atoms and crystal waters are recommended for accurate parameterization.</span>
+                  </div>
+                </div>
+
+                <div id="lb-protein-drop-zone"
+                  onclick="document.getElementById('lb-protein-file').click()"
+                  ondragover="event.preventDefault(); this.style.borderColor='var(--accent-primary)'"
+                  ondragleave="this.style.borderColor=''"
+                  ondrop="event.preventDefault(); this.style.borderColor=''; lbHandleProtein(event.dataTransfer.files[0])">
+                  <div class="upload-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                  </div>
+                  <p>Protein Input</p>
+                  <small>Support: .pdb (Click to browse)</small>
+                </div>
+                <input type="file" id="lb-protein-file" accept=".pdb" onchange="lbHandleProtein(this.files ? this.files[0] : null)" style="display:none;">
+                <div id="lb-protein-info" style="display:none; font-size:11px; color:var(--accent-green); margin-top:8px; font-weight:600;"></div>
+                
+                <div style="display:flex;align-items:center;gap:8px;margin-top:10px;">
+                  <span style="font-size:12px;color:var(--text-secondary);">Or PDB ID:</span>
+                  <div class="tooltip-container" onclick="event.stopPropagation()" style="margin-left:-4px;">
+                    <span class="info-icon">?</span>
+                    <span class="tooltip-text">Enter a 4-character RCSB Protein Data Bank accession code (e.g. 1HSG, 6LU7) to automatically download the structure.</span>
+                  </div>
+                  <input type="text" id="lb-pdb-id" maxlength="4" placeholder="e.g. 1HSG"
+                    style="width:72px;background:var(--bg-input);border:1px solid var(--border-color);
+                           color:var(--text-primary);padding:5px 8px;border-radius:4px;
+                           text-transform:uppercase;font-size:12px;outline:none;">
+                  <button type="button" onclick="lbFetchPDB()"
+                    style="padding:5px 12px;background:var(--accent-secondary);color:var(--text-primary);
+                           border:none;border-radius:4px;cursor:pointer;font-size:12px;">Fetch</button>
+                </div>
+              </div>
+              
+              <hr style="border: none; border-top: 1px solid var(--border-color); margin: 4px 0;">
+  
+              <div>
+                <div style="font-size:12px; font-weight:700; margin-bottom:8px; color:var(--text-primary); border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:4px; display:flex; align-items:center; gap:6px;">
+                  Ligand Input
+                  <div class="tooltip-container" onclick="event.stopPropagation()">
+                    <span class="info-icon">?</span>
+                    <span class="tooltip-text">Upload the small-molecule ligand structure. PDB, MOL2, and SDF formats are accepted. ACPYPE (GAFF2) will automatically generate GROMACS-compatible force field parameters (.itp, .gro, posre).</span>
+                  </div>
+                </div>
+                <div id="lb-ligand-drop-zone"
+                  onclick="document.getElementById('lb-ligand-file').click()"
+                  ondragover="event.preventDefault(); this.style.borderColor='var(--accent-primary)'"
+                  ondragleave="this.style.borderColor=''"
+                  ondrop="event.preventDefault(); this.style.borderColor=''; lbHandleLigand(event.dataTransfer.files[0])"
+                  style="margin-bottom:12px;">
+                  <div class="upload-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                  </div>
+                  <p>Ligand Input</p>
+                  <small>Support: .pdb, .mol2, .sdf (Click to browse)</small>
+                </div>
+                <input type="file" id="lb-ligand-file" accept=".pdb,.mol2,.sdf" onchange="lbHandleLigand(this.files ? this.files[0] : null)" style="display:none;">
+                <div id="lb-ligand-info" style="display:none; font-size:11px; color:var(--accent-green); margin-bottom:12px; font-weight:600;"></div>
+                
+                <div class="ff-container" style="margin-top: 14px;">
+                  <div class="ff-row">
+                    <div class="ff-label-col">
+                      <span class="ff-title">Net charge</span>
+                      <div class="tooltip-container" onclick="event.stopPropagation()">
+                        <span class="info-icon">?</span>
+                        <span class="tooltip-text">Formal (net) charge of the ligand. Required for ACPYPE to assign correct AM1-BCC partial charges. Use 0 for neutral molecules; e.g. +1 for protonated amines, −1 for carboxylates.</span>
+                      </div>
+                    </div>
+                    <div class="ff-select-col">
+                      <input type="number" id="lb-charge" value="0" min="-10" max="10" step="1">
+                    </div>
+                  </div>
+                  <div class="ff-row">
+                    <div class="ff-label-col">
+                      <span class="ff-title">Residue name</span>
+                      <div class="tooltip-container" onclick="event.stopPropagation()">
+                        <span class="info-icon">?</span>
+                        <span class="tooltip-text">Residue name used in the GROMACS topology and .gro file. Up to 3 alphanumeric characters (e.g. LIG, MOL, INH). Must not clash with standard amino acid residue names (GLY, ALA, etc.).</span>
+                      </div>
+                    </div>
+                    <div class="ff-select-col">
+                      <input type="text" id="lb-resname" value="LIG" maxlength="3" style="text-transform:uppercase;">
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Section 2 -->
+          <div id="lb-section-2" class="wiz-section">
+            <div class="ff-container" style="margin-bottom:16px;">
+              <div class="ff-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">Force field</span>
+                  <div class="tooltip-container" onclick="event.stopPropagation()">
+                    <span class="info-icon">?</span>
+                    <span class="tooltip-text">GAFF2: General Amber Force Field v2 — improved torsion parameters and atom types; recommended for most small molecules. GAFF: original version, retained for compatibility with legacy pipelines.</span>
+                  </div>
+                </div>
+                <div class="ff-select-col">
+                  <select id="lb-atomtype">
+                    <option value="gaff2">GAFF2 (recommended)</option>
+                    <option value="gaff">GAFF</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <button type="button" id="lb-param-btn" onclick="lbRunAcpype()" style="padding:9px 22px; border-radius:6px; background:var(--accent-cyan); color:#000; border:none; font-size:13px; font-weight:600; cursor:pointer;">Run ACPYPE</button>
+            <div id="lb-param-status" style="display:none; margin-top:12px; font-size:12px; padding:10px; border-radius:6px; background:var(--bg-tertiary);"></div>
+            <div id="lb-param-files" style="display:none; margin-top:10px; font-size:11px; color:var(--text-secondary);"></div>
+          </div>
+          
+          <!-- Section 3 -->
+          <div id="lb-section-3" class="wiz-section">
+            <div id="lb-complex-summary" style="font-size:12px; color:var(--text-secondary); margin-bottom:14px;"></div>
+            <div class="ff-container" style="margin-bottom:16px;">
+              <div class="ff-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">Temperature (K)</span>
+                  <div class="tooltip-container" onclick="event.stopPropagation()">
+                    <span class="info-icon">?</span>
+                    <span class="tooltip-text">Target thermostat temperature (K) for the MD simulation. 310 K (37°C) for physiological conditions; 300 K (27°C) for room-temperature in vitro comparison.</span>
+                  </div>
+                </div>
+                <div class="ff-select-col">
+                  <input type="number" id="lb-temp" value="300" min="200" max="500">
+                </div>
+              </div>
+              <div class="ff-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">Ion concentration (M NaCl)</span>
+                  <div class="tooltip-container" onclick="event.stopPropagation()">
+                    <span class="info-icon">?</span>
+                    <span class="tooltip-text">NaCl concentration (M) to add to the solvent. Physiological ionic strength is 0.15 M. Counter-ions are also added to neutralize the net charge of the system.</span>
+                  </div>
+                </div>
+                <div class="ff-select-col">
+                  <input type="number" id="lb-salt" value="0.15" min="0" max="2" step="0.05">
+                </div>
+              </div>
+            </div>
+            <div id="lb-assemble-status" style="display:none; margin-bottom:12px; font-size:12px; padding:10px; border-radius:6px; background:var(--bg-tertiary);"></div>
+            <div style="display:flex; justify-content:flex-end;">
+              <button type="button" id="lb-assemble-btn" onclick="lbAssemble()" style="padding:10px 28px; border-radius:6px; background:var(--accent-green); color:#000; border:none; font-size:14px; font-weight:700; cursor:pointer;">Assemble Complex</button>
+            </div>
+          </div>
+        </form>
       </div>
 
       <!-- [분석/시각화 화면] XVG 차트 생성 및 Gro/Pdb/Xtc 파일을 이용한 3D 시뮬레이션 분석 페이지 -->
@@ -2591,8 +3069,8 @@ body.resizing * {
               <div class="upload-icon">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
               </div>
-              <p style="font-size: 13px; font-weight: 600; color: var(--text-primary);">Drop XVG files here</p>
-              <small style="color: var(--text-secondary); font-size: 11px;">or click to browse — multiple files supported</small>
+              <p style="font-size: 13px; font-weight: 600; color: var(--text-primary);">Visualization Data</p>
+              <small style="color: var(--text-secondary); font-size: 11px;">Support: .xvg (Click to browse)</small>
               <div id="selected-xvg-file" style="margin-top: 8px; font-size: 12px; font-weight: 500; color: var(--accent-primary);"></div>
             </div>
             <input type="file" id="xvg-input" accept=".xvg" multiple style="display: none;" onchange="handleXvgFileSelect(this.files)">
@@ -2612,8 +3090,8 @@ body.resizing * {
                   <div class="upload-icon">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
                   </div>
-                  <p style="font-size: 13px; font-weight: 600; color: var(--text-primary);">Drop Structure File</p>
-                  <small style="color: var(--text-secondary); font-size: 11px;">or Click to upload .gro or .pdb</small>
+                  <p style="font-size: 13px; font-weight: 600; color: var(--text-primary);">Structure Configuration</p>
+                  <small style="color: var(--text-secondary); font-size: 11px;">Support: .gro, .pdb (Click to browse)</small>
                 </div>
                 <input type="file" id="mol-struct-input" accept=".gro,.pdb" style="display:none;"
                        onchange="handleMolStructFile(this.files[0])">
@@ -2629,8 +3107,8 @@ body.resizing * {
                   <div class="upload-icon">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
                   </div>
-                  <p style="font-size: 13px; font-weight: 600; color: var(--text-primary);">Drop Trajectory File</p>
-                  <small style="color: var(--text-secondary); font-size: 11px;">or Click to upload .xtc</small>
+                  <p style="font-size: 13px; font-weight: 600; color: var(--text-primary);">Trajectory Configuration</p>
+                  <small style="color: var(--text-secondary); font-size: 11px;">Support: .xtc (Click to browse)</small>
                 </div>
                 <input type="file" id="mol-traj-input" accept=".xtc" style="display:none;"
                        onchange="handleMolTrajFile(this.files[0])">
@@ -3399,6 +3877,8 @@ function showNewRunForm() {
   document.getElementById('run-view').style.display = 'none';
   document.getElementById('new-run-view').style.display = 'none';
   document.getElementById('new-visualization-view').style.display = 'none';
+  document.getElementById('membrane-builder-view').style.display = 'none';
+  document.getElementById('ligand-builder-view').style.display = 'none';
   document.getElementById('new-run-select-view').style.display = 'flex';
   document.getElementById('view-title').textContent = 'New Run Type';
   document.getElementById('btn-continue').style.display = 'none';
@@ -3435,6 +3915,8 @@ function switchVizTab(tab) {
 
 function selectRunType(type) {
   document.getElementById('new-run-select-view').style.display = 'none';
+  document.getElementById('membrane-builder-view').style.display = 'none';
+  document.getElementById('ligand-builder-view').style.display = 'none';
   if (type === 'simulation') {
     document.getElementById('new-visualization-view').style.display = 'none';
     document.getElementById('new-run-view').style.display = 'flex';
@@ -3560,6 +4042,23 @@ if (savedTheme === 'light') {
     if (chatContent) chatContent.style.color = '#ffffff';
   });
 }
+
+// Tool availability badges for Membrane Builder and Ligand Builder cards
+fetch('/api/membrane/status').then(r => r.json()).then(data => {
+  const badge = document.getElementById('membrane-tool-badge');
+  if (badge) {
+    badge.textContent = data.available ? `✓ packmol-memgen available` : '⚠ packmol-memgen not installed';
+    badge.style.color = data.available ? 'var(--accent-green)' : 'var(--accent-yellow, #f5a623)';
+  }
+}).catch(() => {});
+
+fetch('/api/ligand/status').then(r => r.json()).then(data => {
+  const badge = document.getElementById('ligand-tool-badge');
+  if (badge) {
+    badge.textContent = data.available ? `✓ acpype available` : '⚠ acpype not installed';
+    badge.style.color = data.available ? 'var(--accent-green)' : 'var(--accent-yellow, #f5a623)';
+  }
+}).catch(() => {});
 
 function updateStepper(info) {
   const stage = info.last_completed_stage;
@@ -3760,6 +4259,8 @@ async function selectRun(runId, reconnectWs = true) {
   document.getElementById('new-run-view').style.display = 'none';
   document.getElementById('new-run-select-view').style.display = 'none';
   document.getElementById('new-visualization-view').style.display = 'none';
+  document.getElementById('membrane-builder-view').style.display = 'none';
+  document.getElementById('ligand-builder-view').style.display = 'none';
   document.getElementById('run-view').style.display = 'flex';
 
   try {
@@ -4639,7 +5140,14 @@ function toggleTerminalMode() {
     btn.textContent = 'TERMINAL';
     btn.style.color = 'var(--accent-green)';
     termPanel.style.display = 'none';
-    chatPanel.style.display = 'block';
+    chatPanel.style.display = 'flex';
+    chatPanel.style.flexDirection = 'column';
+    // Only reset bubbles for real runs (virtual run builds incrementally)
+    if (currentRunId && currentRunId !== 'virtual_sandbox') {
+      _lastChatText = '';
+      const msgs = document.getElementById('chat-messages');
+      if (msgs) msgs.innerHTML = '';
+    }
     clearTimeout(chatPollTimer);
     chatPollTimer = null;
     if (currentRunId) pollChatLog();
@@ -4647,27 +5155,61 @@ function toggleTerminalMode() {
     btn.textContent = 'CHAT';
     btn.style.color = 'var(--accent-cyan)';
     termPanel.style.display = '';
+    // Keep chatPanel hidden but preserve its content
     chatPanel.style.display = 'none';
     clearTimeout(chatPollTimer);
     chatPollTimer = null;
   }
 }
 
+let _lastChatText = '';
+
+function _makeBubble(text) {
+  const bubble = document.createElement('div');
+  bubble.className = 'chat-bubble';
+  const icon = document.createElement('div');
+  icon.className = 'chat-bubble-icon';
+  icon.textContent = 'G';
+  const body = document.createElement('div');
+  body.className = 'chat-bubble-body';
+  body.textContent = text;
+  bubble.appendChild(icon);
+  bubble.appendChild(body);
+  return bubble;
+}
+
+function _addChatBubble(text) {
+  const container = document.getElementById('chat-messages');
+  if (!container) return;
+  container.appendChild(_makeBubble(text));
+  const panel = document.getElementById('chat-panel');
+  if (panel) panel.scrollTop = panel.scrollHeight;
+}
+
+function _renderChatBubbles(text) {
+  const container = document.getElementById('chat-messages');
+  if (!container || text === _lastChatText) return;
+  _lastChatText = text;
+
+  const paragraphs = text.split(/\n{2,}/).map(p => p.trim()).filter(p => p.length > 0);
+  container.innerHTML = '';
+  for (const para of paragraphs) {
+    container.appendChild(_makeBubble(para));
+  }
+  const panel = document.getElementById('chat-panel');
+  if (panel) panel.scrollTop = panel.scrollHeight;
+}
+
 async function pollChatLog() {
   if (!currentRunId || terminalMode !== 'chat') return;
+  if (currentRunId === 'virtual_sandbox') return; // virtual run uses direct injection
   try {
     const resp = await fetch(`/api/runs/${currentRunId}/chat_log`);
     if (resp.ok && terminalMode === 'chat') {
       const text = await resp.text();
-      const el = document.getElementById('chat-content');
-      if (el) {
-        el.textContent = text;
-        const panel = document.getElementById('chat-panel');
-        if (panel) panel.scrollTop = panel.scrollHeight;
-      }
+      _renderChatBubbles(text);
     }
   } catch (_) {}
-  // Only re-schedule if still in chat mode
   if (terminalMode === 'chat') {
     chatPollTimer = setTimeout(pollChatLog, 3000);
   }
@@ -4864,6 +5406,9 @@ function startVirtualRun() {
   if (_virtualRunInterval) { clearInterval(_virtualRunInterval); _virtualRunInterval = null; }
   _virtualRunTimeouts.forEach(t => clearTimeout(t));
   _virtualRunTimeouts = [];
+  _lastChatText = '';
+  const _chatMsgs = document.getElementById('chat-messages');
+  if (_chatMsgs) _chatMsgs.innerHTML = '';
 
   currentRunId = 'virtual_sandbox';
   document.getElementById('new-run-view').style.display = 'none';
@@ -5027,6 +5572,454 @@ function startVirtualRun() {
     _virtualRunTimeouts.push(t);
     cumulativeDelay += st.delay;
   });
+
+  // Mock AI dialogue — injected into chat panel at realistic intervals
+  const mockDialogue = [
+    { delay: 400,   text: "Starting simulation for 1AKI (Lysozyme) using OPLS-AA force field and SPC/E water model at 300 K, 1 bar." },
+    { delay: 2200,  text: "Topology generated with pdb2gmx. Read 1960 ATOM records; C-terminus processed in standard form. 4 disulfide bonds detected and applied automatically (Cys6–Cys127, Cys30–Cys115, Cys64–Cys80, Cys76–Cys94)." },
+    { delay: 4000,  text: "Cubic simulation box defined with editconf. A minimum 1.0 nm clearance from the protein surface ensures no periodic boundary artifacts." },
+    { delay: 5700,  text: "Solvation complete. 8,501 SPC/E water molecules added to the system." },
+    { delay: 7400,  text: "Preparing ions. The system carries a net charge of +8e; genion will replace 8 solvent molecules with Cl⁻ to neutralize." },
+    { delay: 9200,  text: "Ionization complete. 8 Cl⁻ ions added. System is now electroneutral. Total atom count: ~26,000." },
+    { delay: 11200, text: "Running energy minimization with the steepest-descent algorithm (convergence criterion: Fmax < 1000 kJ/mol·nm).\n\nConverged in ~150 steps (Fmax ≈ 952 kJ/mol·nm). Structure is stable and ready for equilibration." },
+    { delay: 14500, text: "Launching production MD under NPT ensemble. Using V-rescale thermostat (τ = 0.1 ps) and Parrinello–Rahman barostat (τ = 2.0 ps). Running 5,000 steps (10 ps)." },
+    { delay: 19000, text: "Simulation complete! Average temperature 300.0 K and pressure 1.0 bar match target values well.\n\nRMSD vs. initial structure: 0.25 nm — the protein maintains a stable fold throughout. Output files (trajectory, energy, XVG plots) are ready." },
+  ];
+
+  mockDialogue.forEach(({ delay, text }) => {
+    const t = setTimeout(() => {
+      if (terminalMode === 'chat') {
+        _addChatBubble(text);
+      } else {
+        // Store for when user switches to chat mode
+        const container = document.getElementById('chat-messages');
+        if (container) container.appendChild(_makeBubble(text));
+      }
+    }, delay);
+    _virtualRunTimeouts.push(t);
+  });
+}
+
+// ── Membrane Builder ───────────────────────────────────────────────────────
+const _MB_LIPIDS = ["POPC","POPE","POPS","DPPC","DPPE","DPPS","CHL1","PSM"];
+let _mbPdbContent = null;
+let _mbPdbFilename = null;
+
+function showMembraneBuilder() {
+  document.getElementById('new-run-select-view').style.display = 'none';
+  document.getElementById('membrane-builder-view').style.display = 'flex';
+  mbGoStep(1);
+  if (!document.getElementById('mb-upper-rows').children.length) {
+    mbAddLipid('upper');
+    mbAddLipid('lower');
+  }
+}
+
+function mbGoStep(n) {
+  for (let i = 1; i <= 5; i++) {
+    const sec = document.getElementById(`mb-section-${i}`);
+    const lbl = document.getElementById(`mb-step-${i}-label`);
+    if (sec) sec.classList.toggle('active', i === n);
+    if (lbl) {
+      lbl.classList.toggle('active', i === n);
+      lbl.style.background = '';
+      lbl.style.color = '';
+    }
+  }
+  if (n === 5) {
+    _mbRenderSummary();
+  }
+}
+
+function _mbRenderSummary() {
+  const memOnly = document.getElementById('mb-membrane-only').checked;
+  const proteinVal = memOnly ? 'Membrane only (no protein)' : (_mbPdbFilename || 'Not set');
+  const orientationMap = {
+    opm: 'Pre-oriented (OPM DB)',
+    auto: 'Auto-orient (packmol-memgen)',
+    manual: 'Manual'
+  };
+  const orientVal = memOnly ? 'N/A' : (orientationMap[document.getElementById('mb-orientation').value] || 'Not set');
+
+  const upper = _mbGetLeaflet('upper');
+  const lower = _mbGetLeaflet('lower');
+  const upperText = upper.map(l => `${l.name}: ${Math.round(l.fraction * 100)}%`).join(', ') || 'None';
+  const lowerText = lower.map(l => `${l.name}: ${Math.round(l.fraction * 100)}%`).join(', ') || 'None';
+
+  const distVal = document.getElementById('mb-dist').value;
+  const waterZVal = document.getElementById('mb-water-z').value;
+  const saltVal = document.getElementById('mb-salt').value;
+
+  const tempVal = document.getElementById('mb-temp').value;
+  const simtimeVal = document.getElementById('mb-simtime').value;
+
+  const html = `
+    <div class="summary-grid">
+      <div class="summary-card">
+        <div class="summary-card-header" onclick="mbGoStep(1)" title="Protein 설정 탭으로 바로가기">
+          <span>Protein & Orientation</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Target</span>
+          <span class="summary-value" style="max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${proteinVal}">${proteinVal}</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Orientation</span>
+          <span class="summary-badge badge-cyan">${orientVal}</span>
+        </div>
+      </div>
+
+      <div class="summary-card">
+        <div class="summary-card-header" onclick="mbGoStep(2)" title="Composition 설정 탭으로 바로가기">
+          <span>Lipid Composition</span>
+        </div>
+        <div class="summary-item" style="flex-direction:column; align-items:flex-start; gap:4px;">
+          <span class="summary-label">Upper Leaflet</span>
+          <span class="summary-value" style="font-size:11px; white-space:normal; word-break:break-all;">${upperText}</span>
+        </div>
+        <div class="summary-item" style="flex-direction:column; align-items:flex-start; gap:4px; margin-top:8px;">
+          <span class="summary-label">Lower Leaflet</span>
+          <span class="summary-value" style="font-size:11px; white-space:normal; word-break:break-all;">${lowerText}</span>
+        </div>
+      </div>
+
+      <div class="summary-card">
+        <div class="summary-card-header" onclick="mbGoStep(3)" title="Box & Solvent 설정 탭으로 바로가기">
+          <span>Box & Solvent</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Protein-Membrane Dist</span>
+          <span class="summary-badge badge-cyan">${distVal} nm</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Water Thickness</span>
+          <span class="summary-badge badge-indigo">${waterZVal} nm</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Ion Conc.</span>
+          <span class="summary-badge badge-yellow">${saltVal} M NaCl</span>
+        </div>
+      </div>
+
+      <div class="summary-card">
+        <div class="summary-card-header" onclick="mbGoStep(4)" title="Simulation 설정 탭으로 바로가기">
+          <span>Simulation</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Temperature</span>
+          <span class="summary-value">${tempVal} K</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Sim Time</span>
+          <span class="summary-badge badge-cyan">${simtimeVal} ns</span>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('mb-summary').innerHTML = html;
+}
+
+function toggleMbProtein() {
+  const memOnly = document.getElementById('mb-membrane-only').checked;
+  document.getElementById('mb-protein-inputs').style.display = memOnly ? 'none' : '';
+}
+
+async function mbFetchPDB() {
+  const id = document.getElementById('mb-pdb-id').value.trim().toUpperCase();
+  if (!/^[A-Z0-9]{4}$/.test(id)) { showToast('Enter a valid 4-character PDB ID', 'error'); return; }
+  try {
+    const resp = await fetch(`/api/pdb/fetch?pdb_id=${id}`);
+    if (!resp.ok) { showToast('PDB not found', 'error'); return; }
+    const data = await resp.json();
+    _mbPdbContent = data.content;
+    _mbPdbFilename = `${id}.pdb`;
+    document.getElementById('mb-protein-info').style.display = '';
+    document.getElementById('mb-protein-info').textContent = `✓ Loaded ${id}.pdb`;
+  } catch { showToast('Fetch failed', 'error'); }
+}
+
+function mbHandleFile(fileOrInput) {
+  let file = null;
+  if (fileOrInput instanceof File) {
+    file = fileOrInput;
+  } else if (fileOrInput && fileOrInput.files) {
+    file = fileOrInput.files[0];
+  }
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    _mbPdbContent = e.target.result;
+    _mbPdbFilename = file.name;
+    document.getElementById('mb-protein-info').style.display = '';
+    document.getElementById('mb-protein-info').textContent = `✓ Loaded ${file.name}`;
+    const sf = document.getElementById('mb-selected-file-name');
+    if (sf) sf.textContent = `Selected: ${file.name}`;
+  };
+  reader.readAsText(file);
+}
+
+function mbAddLipid(leaflet) {
+  const container = document.getElementById(`mb-${leaflet}-rows`);
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex; gap:6px; margin-bottom:6px; align-items:center; max-width:240px; width:100%;';
+  row.innerHTML = `
+    <div class="ff-select-col" style="flex:1;">
+      <select>
+        ${_MB_LIPIDS.map(l => `<option value="${l}">${l}</option>`).join('')}
+      </select>
+    </div>
+    <div class="ff-select-col" style="width:70px; flex:none;">
+      <input type="number" value="50" min="1" max="100" step="1" onchange="mbUpdateTotal('${leaflet}')">
+    </div>
+    <span style="font-size:11px; color:var(--text-muted);">%</span>
+    <button type="button" onclick="this.parentElement.remove(); mbUpdateTotal('${leaflet}')"
+      style="padding:0 8px; height:38px; border-radius:var(--radius-sm); border:1px solid var(--border-color); background:transparent; color:var(--text-muted); cursor:pointer; font-size:12px; transition: all 0.2s; display:flex; align-items:center; justify-content:center;"
+      onmouseover="this.style.color='var(--accent-red)'; this.style.borderColor='var(--accent-red)';"
+      onmouseout="this.style.color='var(--text-muted)'; this.style.borderColor='var(--border-color)';">✕</button>
+  `;
+  container.appendChild(row);
+  mbUpdateTotal(leaflet);
+}
+
+function mbUpdateTotal(leaflet) {
+  const rows = document.getElementById(`mb-${leaflet}-rows`).querySelectorAll('input[type=number]');
+  const total = Array.from(rows).reduce((s, el) => s + Number(el.value), 0);
+  const el = document.getElementById(`mb-${leaflet}-total`);
+  el.textContent = `Total: ${total}%`;
+  el.style.color = Math.abs(total - 100) < 1 ? 'var(--accent-green)' : 'var(--accent-red, #ff4444)';
+}
+
+function mbCopyUpperToLower() {
+  const upper = document.getElementById('mb-upper-rows');
+  const lower = document.getElementById('mb-lower-rows');
+  lower.innerHTML = upper.innerHTML;
+  lower.querySelectorAll('button').forEach(btn => {
+    btn.onclick = () => { btn.parentElement.remove(); mbUpdateTotal('lower'); };
+  });
+  lower.querySelectorAll('input[type=number]').forEach(inp => {
+    inp.onchange = () => mbUpdateTotal('lower');
+  });
+  mbUpdateTotal('lower');
+}
+
+function _mbGetLeaflet(leaflet) {
+  const rows = document.getElementById(`mb-${leaflet}-rows`).children;
+  return Array.from(rows).map(row => {
+    const sel = row.querySelector('select');
+    const inp = row.querySelector('input[type=number]');
+    return { name: sel.value, fraction: Number(inp.value) / 100 };
+  });
+}
+
+async function mbBuild() {
+  const upper = _mbGetLeaflet('upper');
+  const lower = _mbGetLeaflet('lower');
+  const upperSum = upper.reduce((s, e) => s + e.fraction, 0);
+  const lowerSum = lower.reduce((s, e) => s + e.fraction, 0);
+  const errEl = document.getElementById('mb-comp-error');
+  if (Math.abs(upperSum - 1.0) > 0.01 || Math.abs(lowerSum - 1.0) > 0.01) {
+    mbGoStep(2);
+    errEl.style.display = '';
+    errEl.textContent = 'Leaflet fractions must sum to 100%. Please adjust.';
+    return;
+  }
+  errEl.style.display = 'none';
+
+  const config = {
+    lipids_upper: upper,
+    lipids_lower: lower,
+    protein_orientation: document.getElementById('mb-orientation').value,
+    dist_nm: parseFloat(document.getElementById('mb-dist').value),
+    water_z_nm: parseFloat(document.getElementById('mb-water-z').value),
+    salt_M: parseFloat(document.getElementById('mb-salt').value),
+  };
+
+  const formData = new FormData();
+  formData.append('config_json', JSON.stringify(config));
+  const memOnly = document.getElementById('mb-membrane-only').checked;
+  if (!memOnly && _mbPdbContent) {
+    formData.append('protein_pdb', new Blob([_mbPdbContent], { type: 'text/plain' }), _mbPdbFilename || 'protein.pdb');
+  }
+
+  const statusEl = document.getElementById('mb-build-status');
+  const buildBtn = document.getElementById('mb-build-btn');
+  statusEl.style.display = '';
+  statusEl.textContent = 'Building membrane system... this may take a few minutes.';
+  buildBtn.disabled = true;
+
+  try {
+    const resp = await fetch('/api/membrane/build', { method: 'POST', body: formData });
+    const data = await resp.json();
+    if (!resp.ok) {
+      statusEl.textContent = `Error: ${data.detail || 'Build failed'}`;
+      statusEl.style.color = 'var(--accent-red, #ff4444)';
+    } else {
+      statusEl.textContent = '✓ Membrane system built. Files saved to workspace.';
+      statusEl.style.color = 'var(--accent-green)';
+    }
+  } catch {
+    statusEl.textContent = 'Network error.';
+  } finally {
+    buildBtn.disabled = false;
+  }
+}
+
+// ── Ligand Builder ─────────────────────────────────────────────────────────
+let _lbProteinContent = null;
+let _lbProteinFilename = null;
+let _lbLigandFile = null;
+let _lbItp = null;
+let _lbLigandGro = null;
+let _lbResname = "LIG";
+
+function showLigandBuilder() {
+  document.getElementById('new-run-select-view').style.display = 'none';
+  document.getElementById('ligand-builder-view').style.display = 'flex';
+  lbGoStep(1);
+}
+
+function lbGoStep(n) {
+  for (let i = 1; i <= 3; i++) {
+    const sec = document.getElementById(`lb-section-${i}`);
+    const lbl = document.getElementById(`lb-step-${i}-label`);
+    if (sec) sec.classList.toggle('active', i === n);
+    if (lbl) {
+      lbl.classList.toggle('active', i === n);
+      lbl.style.background = '';
+      lbl.style.color = '';
+    }
+  }
+}
+
+async function lbFetchPDB() {
+  const id = document.getElementById('lb-pdb-id').value.trim().toUpperCase();
+  if (!/^[A-Z0-9]{4}$/.test(id)) { showToast('Enter a valid 4-character PDB ID', 'error'); return; }
+  try {
+    const resp = await fetch(`/api/pdb/fetch?pdb_id=${id}`);
+    if (!resp.ok) { showToast('PDB not found', 'error'); return; }
+    const data = await resp.json();
+    _lbProteinContent = data.content;
+    _lbProteinFilename = `${id}.pdb`;
+    const info = document.getElementById('lb-protein-info');
+    info.style.display = '';
+    info.textContent = `✓ Loaded ${id}.pdb`;
+  } catch { showToast('Fetch failed', 'error'); }
+}
+
+function lbHandleProtein(fileOrInput) {
+  let file = null;
+  if (fileOrInput instanceof File) {
+    file = fileOrInput;
+  } else if (fileOrInput && fileOrInput.files) {
+    file = fileOrInput.files[0];
+  }
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    _lbProteinContent = e.target.result;
+    _lbProteinFilename = file.name;
+    const info = document.getElementById('lb-protein-info');
+    info.style.display = '';
+    info.textContent = `✓ Loaded ${file.name}`;
+  };
+  reader.readAsText(file);
+}
+
+function lbHandleLigand(fileOrInput) {
+  let file = null;
+  if (fileOrInput instanceof File) {
+    file = fileOrInput;
+  } else if (fileOrInput && fileOrInput.files) {
+    file = fileOrInput.files[0];
+  }
+  _lbLigandFile = file || null;
+  const info = document.getElementById('lb-ligand-info');
+  if (_lbLigandFile) {
+    info.style.display = '';
+    info.textContent = `✓ ${_lbLigandFile.name}`;
+  }
+}
+
+async function lbRunAcpype() {
+  if (!_lbLigandFile) { showToast('Upload a ligand file first', 'error'); return; }
+  const btn = document.getElementById('lb-param-btn');
+  const statusEl = document.getElementById('lb-param-status');
+  const filesEl = document.getElementById('lb-param-files');
+  btn.disabled = true;
+  statusEl.style.display = '';
+  statusEl.textContent = 'Running ACPYPE...';
+  statusEl.style.color = 'var(--text-secondary)';
+
+  _lbResname = (document.getElementById('lb-resname').value || 'LIG').toUpperCase().slice(0, 3);
+  const formData = new FormData();
+  formData.append('ligand', _lbLigandFile);
+  formData.append('charge', document.getElementById('lb-charge').value);
+  formData.append('atom_type', document.getElementById('lb-atomtype').value);
+  formData.append('residue_name', _lbResname);
+
+  try {
+    const resp = await fetch('/api/ligand/parameterize', { method: 'POST', body: formData });
+    const data = await resp.json();
+    if (!resp.ok) {
+      statusEl.textContent = `Error: ${data.detail || 'Parameterization failed'}`;
+      statusEl.style.color = 'var(--accent-red, #ff4444)';
+    } else if (!data.available) {
+      statusEl.textContent = 'acpype is not installed on this server.';
+    } else {
+      _lbItp = data.itp;
+      _lbLigandGro = data.gro;
+      const penalty = data.penalty || 0;
+      let msg = `✓ Parameterization complete. Penalty score: ${penalty.toFixed(1)}`;
+      if (penalty > 10) msg += ' ⚠ (review recommended)';
+      statusEl.textContent = msg;
+      statusEl.style.color = penalty > 10 ? 'var(--accent-yellow, #f5a623)' : 'var(--accent-green)';
+      filesEl.style.display = '';
+      filesEl.textContent = `Files generated: ${_lbResname}.itp, ${_lbResname}.gro, posre_${_lbResname}.itp`;
+      document.getElementById('lb-next-3-btn').disabled = false;
+      document.getElementById('lb-next-3-btn').style.opacity = '1';
+    }
+  } catch {
+    statusEl.textContent = 'Network error.';
+    statusEl.style.color = 'var(--accent-red, #ff4444)';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function lbAssemble() {
+  if (!_lbProteinContent || !_lbItp || !_lbLigandGro) {
+    showToast('Complete Steps 1 and 2 first', 'error');
+    return;
+  }
+  const statusEl = document.getElementById('lb-assemble-status');
+  const btn = document.getElementById('lb-assemble-btn');
+  statusEl.style.display = '';
+  statusEl.textContent = 'Assembling protein-ligand complex...';
+  btn.disabled = true;
+
+  const minimalTop = '#include "amber99sb-ildn.ff/forcefield.itp"\n[ system ]\nProtein in water\n[ molecules ]\nProtein_chain_A  1\n';
+  const formData = new FormData();
+  formData.append('protein_gro', new Blob([_lbProteinContent], {type:'text/plain'}), _lbProteinFilename || 'protein.pdb');
+  formData.append('ligand_gro', new Blob([_lbLigandGro], {type:'text/plain'}), `${_lbResname}.gro`);
+  formData.append('ligand_itp', new Blob([_lbItp], {type:'text/plain'}), `${_lbResname}.itp`);
+  formData.append('topol_top', new Blob([minimalTop], {type:'text/plain'}), 'topol.top');
+
+  try {
+    const resp = await fetch('/api/ligand/assemble', { method: 'POST', body: formData });
+    const data = await resp.json();
+    if (!resp.ok) {
+      statusEl.textContent = `Error: ${data.detail || 'Assembly failed'}`;
+      statusEl.style.color = 'var(--accent-red, #ff4444)';
+    } else {
+      statusEl.textContent = '✓ Complex assembled. Files: complex.gro, topol_complex.top';
+      statusEl.style.color = 'var(--accent-green)';
+    }
+  } catch {
+    statusEl.textContent = 'Network error.';
+    statusEl.style.color = 'var(--accent-red, #ff4444)';
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 </script>
