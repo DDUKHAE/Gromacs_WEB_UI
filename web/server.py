@@ -464,6 +464,14 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
                 raise HTTPException(status_code=400, detail="; ".join(errors))
             (ws / "system_config.json").write_text(json.dumps(config_data, indent=2))
 
+            # Apply protonation preprocessing if HIS states are specified
+            prot = config_data.get("protonation", {})
+            his_states = prot.get("his_states", {})
+            if his_states:
+                from lib.pdb_preprocessor import apply_his_states
+                original = pdb_path.read_text(encoding="utf-8", errors="replace")
+                pdb_path.write_text(apply_his_states(original, his_states), encoding="utf-8")
+
         if llm and llm in ADAPTERS:
             if not llm_runner.check_cli(ADAPTERS[llm]):
                 raise HTTPException(status_code=400, detail=f"'{ADAPTERS[llm].cli}' CLI not found. Install and log in first.")
