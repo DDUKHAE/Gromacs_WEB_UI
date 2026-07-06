@@ -1347,6 +1347,55 @@ body.light-theme .summary-card {
   box-shadow: 0 0 12px rgba(6, 182, 212, 0.2);
 }
 
+/* ── Type Switcher Bar (lives inside #main-header) ─────────── */
+#type-switcher-bar {
+  display: none;
+  align-items: center;
+  gap: 3px;
+  flex: 1;
+  overflow-x: auto;
+  min-width: 0;
+}
+#type-switcher-bar.visible { display: flex; }
+#type-switcher-bar::-webkit-scrollbar { height: 0; }
+/* When switcher is visible, hide the plain title */
+#main.builder-mode #view-title { display: none; }
+
+.type-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.04);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+  letter-spacing: 0.01em;
+}
+.type-chip:hover {
+  color: var(--text-primary);
+  border-color: var(--border-color-hover, rgba(255,255,255,0.18));
+  background: rgba(255, 255, 255, 0.04);
+}
+.type-chip.active { font-weight: 700; }
+.type-chip.active.chip-sim  { background: rgba(99,102,241,0.45);  border-color: rgba(99,102,241,0.8);  color: #fff; box-shadow: 0 0 8px rgba(99,102,241,0.3); }
+.type-chip.active.chip-viz  { background: rgba(6,182,212,0.38);   border-color: rgba(6,182,212,0.75);  color: #fff; box-shadow: 0 0 8px rgba(6,182,212,0.25); }
+.type-chip.active.chip-mem  { background: rgba(6,182,212,0.38);   border-color: rgba(6,182,212,0.75);  color: #fff; box-shadow: 0 0 8px rgba(6,182,212,0.25); }
+.type-chip.active.chip-lig  { background: rgba(99,102,241,0.45);  border-color: rgba(99,102,241,0.8);  color: #fff; box-shadow: 0 0 8px rgba(99,102,241,0.3); }
+.type-chip.active.chip-virt { background: rgba(16,185,129,0.38);  border-color: rgba(16,185,129,0.75); color: #fff; box-shadow: 0 0 8px rgba(16,185,129,0.25); }
+.type-chip-divider {
+  width: 1px; height: 13px;
+  background: var(--border-color);
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+
 #run-view {
   flex: 1;
   display: flex; /* Controlled explicitly via JS style.display */
@@ -1884,6 +1933,45 @@ body.resizing * {
   user-select: none !important;
 }
 
+/* Sidebar search */
+#run-search-row {
+  padding: 0 10px 10px;
+}
+.run-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.run-search-icon {
+  position: absolute;
+  left: 9px;
+  color: var(--text-muted);
+  pointer-events: none;
+  flex-shrink: 0;
+}
+#run-search {
+  width: 100%;
+  padding: 7px 10px 7px 28px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s, background 0.2s;
+}
+body.light-theme #run-search {
+  background: rgba(0, 0, 0, 0.03);
+}
+#run-search::placeholder {
+  color: var(--text-muted);
+}
+#run-search:focus {
+  border-color: var(--accent-primary);
+  background: rgba(99, 102, 241, 0.04);
+}
+
 #ff-manager-btn {
   transition: transform 0.2s ease, color 0.2s ease;
 }
@@ -1909,7 +1997,7 @@ body.resizing * {
 <div style="display:flex; flex-direction:column; width:100%; height:100vh;">
   <div style="display:flex; flex:1; overflow:hidden;">
     <!-- [사이드바] 최근 실행된 시뮬레이션 목록 및 새 실행 추가 버튼 영역 -->
-    <nav id="sidebar" aria-label="시뮬레이션 실행 목록">
+    <nav id="sidebar" aria-label="Simulation run list">
       <div id="sidebar-header">
         <div id="sidebar-title-wrapper">
           <div class="logo-icon" aria-hidden="true"></div>
@@ -1921,19 +2009,52 @@ body.resizing * {
             New Run
           </button>
         </div>
+        <div id="run-search-row">
+          <div class="run-search-wrap">
+            <svg class="run-search-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <input id="run-search" type="text" placeholder="Search runs..." autocomplete="off" oninput="onRunSearchInput(this.value)">
+          </div>
+        </div>
       </div>
 
 
-      <div id="run-list" role="list" aria-label="최근 실행 목록"></div>
+      <div id="run-list" role="list" aria-label="Recent runs"></div>
     </nav>
-    <div id="sidebar-resizer" role="separator" aria-label="사이드바 크기 조절선"></div>
+    <div id="sidebar-resizer" role="separator" aria-label="Resize sidebar"></div>
 
     <!-- Sidebar collapsed: external toggle btn (outside sidebar to avoid stacking-context clipping) -->
-    <div id="sidebar-toggle-btn" onclick="toggleSidebar()" title="사이드바 펼치기" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' ')toggleSidebar()">G</div>
+    <div id="sidebar-toggle-btn" onclick="toggleSidebar()" title="Expand sidebar" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' ')toggleSidebar()">G</div>
     <!-- [메인 콘텐츠] 대시보드 화면 및 각종 모달, 폼 등이 렌더링되는 메인 컨테이너 -->
     <main id="main">
       <header id="main-header">
         <h1 id="view-title">Simulation Dashboard</h1>
+        <!-- Type Switcher Bar: replaces view-title when a builder view is active -->
+        <div id="type-switcher-bar">
+          <button class="type-chip chip-sim" id="chip-sim" onclick="selectRunType('simulation')">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+            Simulation
+          </button>
+          <div class="type-chip-divider"></div>
+          <button class="type-chip chip-viz" id="chip-viz" onclick="selectRunType('visualization')">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            Visualization
+          </button>
+          <div class="type-chip-divider"></div>
+          <button class="type-chip chip-mem" id="chip-mem" onclick="showMembraneBuilder()">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8c-2.2 0-4 1.8-4 4s1.8 4 4 4"/><path d="M12 8c2.2 0 4 1.8 4 4s-1.8 4-4 4"/></svg>
+            Membrane
+          </button>
+          <div class="type-chip-divider"></div>
+          <button class="type-chip chip-lig" id="chip-lig" onclick="showLigandBuilder()">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 2h4"/><path d="M12 2v4"/><circle cx="12" cy="10" r="4"/><path d="M8 18l-4 3"/><path d="M16 18l4 3"/><path d="M12 14v4"/></svg>
+            Ligand
+          </button>
+          <div class="type-chip-divider"></div>
+          <button class="type-chip chip-virt" id="chip-virt" onclick="selectRunType('virtual')">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Virtual Run
+          </button>
+        </div>
         <div class="header-actions" style="display: flex !important; flex-direction: row !important; align-items: center !important; gap: 12px !important; flex-wrap: nowrap !important; flex-shrink: 0 !important; width: auto !important;">
           <!-- Cyber Theme Toggle Switch -->
           <div class="cyber-toggle-wrapper" style="flex-shrink: 0 !important;">
@@ -1987,7 +2108,7 @@ body.resizing * {
       <!-- [실행 상세정보] 진행 중이거나 완료된 시뮬레이션의 파이프라인 단계, 실시간 터미널 출력, 분석 차트 등을 모아보는 패널 -->
       <div id="run-view">
         <!-- Stepper -->
-        <div id="stepper" class="card" role="progressbar" aria-label="파이프라인 진행 상태">
+        <div id="stepper" class="card" role="progressbar" aria-label="Pipeline progress">
           <div class="step-node done">
             <div class="step-circle">✓</div>
             <span class="step-label">Topology</span>
@@ -2039,14 +2160,14 @@ body.resizing * {
             </button>
             <div id="md-progress-badge" style="display:none; align-items:center; gap:6px; font-size:11px; font-weight:600; color:var(--accent-cyan); padding:4px 10px; border:1px solid rgba(6,182,212,0.3); border-radius:20px; background:rgba(6,182,212,0.08);">
               <span style="width:7px;height:7px;border-radius:50%;background:var(--accent-cyan);animation:pulse-dot 1.2s ease-in-out infinite;display:inline-block;"></span>
-              <span id="md-progress-text">MD 실행 중...</span>
+              <span id="md-progress-text">MD Running...</span>
             </div>
             <span id="term-status" class="run-item-badge badge-running" style="margin-top:0;">running</span>
           </div>
         </div>
 
         <!-- Terminal panel -->
-        <div id="terminal-panel" class="card" role="region" aria-label="실행 터미널">
+        <div id="terminal-panel" class="card" role="region" aria-label="Run terminal">
           <div id="terminal-container">
             <pre id="fallback-terminal-text" style="font-size:11px; line-height: 1.4; padding: 6px; overflow-y: auto; height: 100%; white-space: pre-wrap; word-break: break-all; margin: 0;"></pre>
           </div>
@@ -2055,7 +2176,7 @@ body.resizing * {
         <!-- Chat log panel (shown when terminal mode = chat) -->
         <div id="chat-panel" style="display: none; height: 450px; flex: none; background: var(--bg-secondary, #0d1117); border-radius: var(--radius-md); overflow-y: auto; padding: 12px 14px; display: none;">
           <div id="chat-messages" style="display: flex; flex-direction: column; gap: 10px;"></div>
-          <div id="chat-typing" style="display:none; padding: 8px 12px; font-size: 11px; color: var(--text-muted); font-style: italic;">LLM이 응답 중...</div>
+          <div id="chat-typing" style="display:none; padding: 8px 12px; font-size: 11px; color: var(--text-muted); font-style: italic;">AI is responding...</div>
         </div>
 
         <!-- Results Gallery -->
@@ -2083,8 +2204,7 @@ body.resizing * {
 
       <!-- [새 시뮬레이션 생성] System Builder 마법사 탭(PDB 업로드, FF 지정, 박스 설정, 이온 등) 설정 폼 영역 -->
       <div id="new-run-view">
-        <form id="new-run-form" onsubmit="event.preventDefault(); startRun();" aria-label="새 시뮬레이션 실행 설정">
-          <h2>System Builder</h2>
+        <form id="new-run-form" onsubmit="event.preventDefault(); startRun();" aria-label="New simulation run settings">
 
           <!-- Wizard nav tabs -->
           <div id="wizard-nav">
@@ -2140,7 +2260,7 @@ body.resizing * {
                     <span class="info-icon">?</span>
                     <span class="tooltip-text">A set of physical parameters used to calculate interatomic forces and potential energy during the simulation.</span>
                   </div>
-                  <button type="button" id="ff-manager-btn" title="Force Field 추가" class="ff-add-btn">+</button>
+                  <button type="button" id="ff-manager-btn" title="Add Force Field" class="ff-add-btn">+</button>
                 </div>
                 <div class="ff-select-col">
                   <select name="forcefield" id="forcefield-select" onchange="checkFFWaterCompat()">
@@ -2617,10 +2737,6 @@ body.resizing * {
 
 
         </form>
-        <!-- Right Arrow Navigation Button to Visualization -->
-        <button type="button" class="nav-arrow-btn" onclick="selectRunType('visualization')" style="right: 24px;" title="Go to Visualization">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
-        </button>
       </div>
 
       <!-- [작업 선택 화면] 처음 New Run 선택 시 Simulation(새 시뮬레이션 시작), Visualization(기존 결과 업로드 시각화), Virtual Run 중 선택하는 메뉴 -->
@@ -2677,8 +2793,7 @@ body.resizing * {
 
       <!-- ── Membrane Builder Wizard ─────────────────────────────────────── -->
       <div id="membrane-builder-view">
-        <form id="membrane-builder-form" onsubmit="event.preventDefault();" aria-label="Membrane Builder 설정">
-          <h2>Membrane Builder</h2>
+        <form id="membrane-builder-form" onsubmit="event.preventDefault();" aria-label="Membrane Builder settings">
           <div id="mb-wizard-nav">
             <button type="button" class="wiz-tab active" id="mb-step-1-label" onclick="mbGoStep(1)">Protein</button>
             <button type="button" class="wiz-tab" id="mb-step-2-label" onclick="mbGoStep(2)">Composition</button>
@@ -2872,8 +2987,7 @@ body.resizing * {
 
       <!-- ── Ligand Builder Wizard ──────────────────────────────────────── -->
       <div id="ligand-builder-view">
-        <form id="ligand-builder-form" onsubmit="event.preventDefault();" aria-label="Protein-Ligand Builder 설정">
-          <h2>Protein-Ligand Builder</h2>
+        <form id="ligand-builder-form" onsubmit="event.preventDefault();" aria-label="Protein-Ligand Builder settings">
           <div id="lb-wizard-nav">
             <button type="button" class="wiz-tab active" id="lb-step-1-label" onclick="lbGoStep(1)">Input</button>
             <button type="button" class="wiz-tab" id="lb-step-2-label" onclick="lbGoStep(2)">Parameterize</button>
@@ -3040,14 +3154,7 @@ body.resizing * {
 
       <!-- [분석/시각화 화면] XVG 차트 생성 및 Gro/Pdb/Xtc 파일을 이용한 3D 시뮬레이션 분석 페이지 -->
       <div id="new-visualization-view">
-        <!-- Left Arrow Navigation Button to Simulation -->
-        <button type="button" class="nav-arrow-btn" onclick="selectRunType('simulation')" style="left: 24px;" title="Go to Simulation">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
-        </button>
-
         <div id="new-visualization-container">
-          <h2>Visualization</h2>
-
           <!-- Visualization tabs -->
           <div id="viz-tab-header" style="display:flex;gap:0;border-bottom:1px solid var(--border-color);margin-bottom:16px;flex-shrink:0;">
             <button class="viz-tab active" id="viz-tab-xvg" onclick="switchVizTab('xvg')"
@@ -3118,6 +3225,32 @@ body.resizing * {
         </div>
       </div>
 
+      <!-- Delete Confirmation Modal -->
+      <div id="delete-confirm-modal" style="display:none;position:fixed;inset:0;background:rgba(6,8,19,0.8);backdrop-filter:blur(8px);z-index:1070;align-items:center;justify-content:center;padding:16px;">
+        <div style="background:var(--bg-surface,#0b0f24);border:1px solid var(--border-color);border-radius:14px;width:100%;max-width:400px;overflow:hidden;box-shadow:var(--shadow-lg);pointer-events:auto;margin:auto;">
+          <div style="display:flex;align-items:center;gap:10px;padding:18px 24px 14px;">
+            <div style="width:36px;height:36px;border-radius:50%;background:rgba(239,68,68,0.12);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent-red,#ef4444)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            </div>
+            <div>
+              <div style="font-weight:700;font-size:15px;color:var(--text-primary);">Delete Run?</div>
+              <div id="delete-confirm-name" style="font-size:12px;color:var(--text-secondary);margin-top:2px;"></div>
+            </div>
+          </div>
+          <div style="padding:0 24px 16px;font-size:12px;color:var(--text-muted);line-height:1.5;">This action cannot be undone. All run data and outputs will be permanently removed.</div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;padding:12px 20px;border-top:1px solid var(--border-color);">
+            <button id="delete-cancel-btn" onclick="closeDeleteModal()"
+              style="padding:7px 18px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-secondary);font-size:12px;font-weight:600;cursor:pointer;transition:all 0.2s;"
+              onmouseover="this.style.borderColor='var(--border-color-hover)';this.style.color='var(--text-primary)'"
+              onmouseout="this.style.borderColor='var(--border-color)';this.style.color='var(--text-secondary)'">Cancel</button>
+            <button id="delete-confirm-btn"
+              style="padding:7px 18px;border-radius:8px;border:none;background:var(--accent-red,#ef4444);color:#fff;font-size:12px;font-weight:600;cursor:pointer;transition:all 0.2s;box-shadow:0 0 0 0 rgba(239,68,68,0);"
+              onmouseover="this.style.boxShadow='0 0 12px rgba(239,68,68,0.4)'"
+              onmouseout="this.style.boxShadow='0 0 0 0 rgba(239,68,68,0)'">Delete</button>
+          </div>
+        </div>
+      </div>
+
       <!-- [XVG 분석 결과 모달] 업로드된 XVG 플롯 결과 데이터와 러닝 에버리지(Smooth) 조정 차트를 띄우는 팝업창 -->
       <div id="xvg-result-modal" style="display:none;position:fixed;inset:0;background:rgba(6, 8, 19, 0.8);backdrop-filter:blur(8px);z-index:1050;align-items:center;justify-content:center;overflow-y:auto;padding:40px 16px;">
         <div style="background:var(--bg-surface,#0b0f24);border:1px solid var(--border-color);border-radius:14px;width:100%;max-width:860px;overflow:hidden;box-shadow:var(--shadow-lg);pointer-events:auto;margin:auto;">
@@ -3148,7 +3281,7 @@ body.resizing * {
           <div style="position:relative;flex:1;background:#04060f;min-height:0;">
             <div id="ngl-viewport" style="width:100%;height:100%;"></div>
             <div id="ngl-placeholder" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--text-muted);pointer-events:none;">
-              구조 파일을 업로드하면 3D 모델이 표시됩니다
+              Upload a structure file to view the 3D model
             </div>
           </div>
           <!-- Trajectory playback controls -->
@@ -3271,7 +3404,7 @@ async function handleMolStructFile(file) {
     _nglStage.autoView();
     setTimeout(() => { if (_nglStage) _nglStage.handleResize(); }, 150);
   } catch (e) {
-    alert('구조 파일 로드 실패: ' + e.message);
+    showToast('Failed to load structure file: ' + e.message, 'error');
   } finally {
     URL.revokeObjectURL(url);
   }
@@ -3279,7 +3412,7 @@ async function handleMolStructFile(file) {
 
 async function handleMolTrajFile(file) {
   if (!file) return;
-  if (!_nglComp) { alert('먼저 구조 파일(.gro/.pdb)을 로드하세요.'); return; }
+  if (!_nglComp) { showToast('Please load a structure file (.gro/.pdb) first.', 'error'); return; }
   document.getElementById('ngl-viewer-modal').style.display = 'flex';
   document.getElementById('mol-traj-drop').textContent = file.name;
   const buf = await file.arrayBuffer();
@@ -3302,7 +3435,7 @@ async function handleMolTrajFile(file) {
     document.getElementById('traj-controls').style.display = 'flex';
     setTimeout(() => { if (_nglStage) _nglStage.handleResize(); }, 150);
   } catch (e) {
-    alert('궤적 파일 로드 실패: ' + e.message);
+    showToast('Failed to load trajectory file: ' + e.message, 'error');
   }
 }
 
@@ -3673,7 +3806,7 @@ function _wizardBuildSummary() {
     <div class="summary-grid">
       <!-- 카드 1: 구조 및 포스필드 -->
       <div class="summary-card">
-        <div class="summary-card-header" onclick="wizardGoToStep(2)" title="Force Field 설정 탭으로 바로가기">
+        <div class="summary-card-header" onclick="wizardGoToStep(2)" title="Go to Force Field tab">
           <span>Structure & Force Field</span>
         </div>
         <div class="summary-item">
@@ -3692,7 +3825,7 @@ function _wizardBuildSummary() {
 
       <!-- 카드 2: 공간 상자 설정 -->
       <div class="summary-card">
-        <div class="summary-card-header" onclick="wizardGoToStep(3)" title="Box 설정 탭으로 바로가기">
+        <div class="summary-card-header" onclick="wizardGoToStep(3)" title="Go to Box tab">
           <span>Simulation Box</span>
         </div>
         <div class="summary-item">
@@ -3707,7 +3840,7 @@ function _wizardBuildSummary() {
 
       <!-- 카드 3: 이온 및 용액 환경 -->
       <div class="summary-card">
-        <div class="summary-card-header" onclick="wizardGoToStep(4)" title="Ions 설정 탭으로 바로가기">
+        <div class="summary-card-header" onclick="wizardGoToStep(4)" title="Go to Ions tab">
           <span>Solvation & Ions</span>
         </div>
         <div class="summary-item">
@@ -3726,7 +3859,7 @@ function _wizardBuildSummary() {
 
       <!-- 카드 4: 시뮬레이션 제어 변수 -->
       <div class="summary-card">
-        <div class="summary-card-header" onclick="wizardGoToStep(5)" title="Simulation 설정 탭으로 바로가기">
+        <div class="summary-card-header" onclick="wizardGoToStep(5)" title="Go to Simulation tab">
           <span>Simulation</span>
         </div>
         <div class="summary-item">
@@ -3843,7 +3976,7 @@ async function startRun() {
     const resp = await fetch('/api/runs', { method: 'POST', body: data });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
-      showToast(err.detail || '런 시작에 실패했습니다.', 'error');
+      showToast(err.detail || 'Failed to start run.', 'error');
       btnStart.disabled = false;
       btnStart.textContent = 'Start Simulation Run';
       return;
@@ -3857,7 +3990,7 @@ async function startRun() {
     await loadRuns();
     selectRun(run_id);
   } catch (e) {
-    showToast('서버 연결 오류', 'error');
+    showToast('Server connection error', 'error');
     btnStart.disabled = false;
     btnStart.textContent = 'Start Simulation Run';
   }
@@ -3879,6 +4012,7 @@ function showNewRunForm() {
   document.getElementById('new-visualization-view').style.display = 'none';
   document.getElementById('membrane-builder-view').style.display = 'none';
   document.getElementById('ligand-builder-view').style.display = 'none';
+  _setTypeSwitcher(null);
   document.getElementById('new-run-select-view').style.display = 'flex';
   document.getElementById('view-title').textContent = 'New Run Type';
   document.getElementById('btn-continue').style.display = 'none';
@@ -3913,6 +4047,23 @@ function switchVizTab(tab) {
   }
 }
 
+function _setTypeSwitcher(activeType) {
+  const bar = document.getElementById('type-switcher-bar');
+  const main = document.getElementById('main');
+  if (!activeType) {
+    bar.classList.remove('visible');
+    main.classList.remove('builder-mode');
+    return;
+  }
+  bar.classList.add('visible');
+  main.classList.add('builder-mode');
+  ['sim','viz','mem','lig','virt'].forEach(t => {
+    const chip = document.getElementById('chip-' + t);
+    if (!chip) return;
+    chip.classList.toggle('active', t === activeType);
+  });
+}
+
 function selectRunType(type) {
   document.getElementById('new-run-select-view').style.display = 'none';
   document.getElementById('membrane-builder-view').style.display = 'none';
@@ -3921,6 +4072,7 @@ function selectRunType(type) {
     document.getElementById('new-visualization-view').style.display = 'none';
     document.getElementById('new-run-view').style.display = 'flex';
     document.getElementById('view-title').textContent = 'Configure Simulation';
+    _setTypeSwitcher('sim');
   } else if (type === 'visualization') {
     document.getElementById('new-run-view').style.display = 'none';
     document.getElementById('new-visualization-view').style.display = 'flex';
@@ -3928,9 +4080,11 @@ function selectRunType(type) {
     document.getElementById('view-title').textContent = 'Visualization';
     // Clear drop zone state
     document.getElementById('selected-xvg-file').textContent = '';
+    _setTypeSwitcher('viz');
   } else if (type === 'virtual') {
     document.getElementById('new-run-view').style.display = 'none';
     document.getElementById('new-visualization-view').style.display = 'none';
+    _setTypeSwitcher(null);
     startVirtualRun();
   }
 }
@@ -4142,8 +4296,8 @@ function updateMdProgressBadge(status, currentStep) {
     const elapsed = Math.floor((Date.now() - _mdProgressStart) / 1000);
     const mins = Math.floor(elapsed / 60);
     const secs = elapsed % 60;
-    const timeStr = mins > 0 ? `${mins}분 ${secs}초` : `${secs}초`;
-    textEl.textContent = `MD 시뮬레이션 실행 중... (${timeStr})`;
+    const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+    textEl.textContent = `MD Running... (${timeStr})`;
   } else {
     _mdProgressStart = null;
   }
@@ -4261,11 +4415,12 @@ async function selectRun(runId, reconnectWs = true) {
   document.getElementById('new-visualization-view').style.display = 'none';
   document.getElementById('membrane-builder-view').style.display = 'none';
   document.getElementById('ligand-builder-view').style.display = 'none';
+  _setTypeSwitcher(null);
   document.getElementById('run-view').style.display = 'flex';
 
   try {
     const resp = await fetch(`/api/runs/${runId}`);
-    if (!resp.ok) { showToast('런 정보를 가져오지 못했습니다.', 'error'); return; }
+    if (!resp.ok) { showToast('Failed to load run info.', 'error'); return; }
     const info = await resp.json();
 
     document.getElementById('view-title').textContent =
@@ -4287,7 +4442,7 @@ async function selectRun(runId, reconnectWs = true) {
       document.getElementById('audit-panel').style.display = 'none';
     }
   } catch (e) {
-    showToast('서버 연결 오류', 'error');
+    showToast('Server connection error', 'error');
   }
 }
 
@@ -4333,14 +4488,14 @@ function startRename(runId, evt) {
         if (currentRunId === runId) {
           document.getElementById('view-title').textContent = 'Simulation: ' + newName;
         }
-        showToast('이름이 변경되었습니다.', 'success');
+        showToast('Renamed successfully.', 'success');
       } else {
         const err = await resp.json().catch(() => ({}));
-        showToast(err.detail || '이름 변경 실패', 'error');
+        showToast(err.detail || 'Failed to rename', 'error');
         if (input.isConnected) input.replaceWith(span);
       }
     } catch (_) {
-      showToast('서버 연결 오류', 'error');
+      showToast('Server connection error', 'error');
       if (input.isConnected) input.replaceWith(span);
     }
   }
@@ -4381,11 +4536,11 @@ function renderRunList(runs) {
     el.innerHTML = `
       <div class="run-item-header">
         <span class="run-item-name" id="run-name-${run.run_id}"
-          title="더블클릭하여 이름 변경"
+          title="Double-click to rename"
           ondblclick="startRename('${run.run_id}', event)">
           ${escapeHtml(run.display_name || run.protein.toUpperCase())}
         </span>
-        <button class="delete-btn" title="삭제">
+        <button class="delete-btn" title="Delete">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
             stroke-linecap="round" stroke-linejoin="round">
             <polyline points="3 6 5 6 21 6"></polyline>
@@ -4404,6 +4559,21 @@ function renderRunList(runs) {
     };
     list.appendChild(el);
   });
+}
+
+let _runSearchTimer = null;
+function onRunSearchInput(value) {
+  clearTimeout(_runSearchTimer);
+  _runSearchTimer = setTimeout(() => {
+    const q = value.trim().toLowerCase();
+    const filtered = q
+      ? runsData.filter(r =>
+          (r.display_name || r.protein || '').toLowerCase().includes(q) ||
+          r.run_id.toLowerCase().includes(q)
+        )
+      : runsData;
+    renderRunList(filtered);
+  }, 180);
 }
 
 async function loadRuns() {
@@ -4807,7 +4977,7 @@ async function loadAudit(runId) {
     if (badge) badge.style.background = hasFail ? 'var(--accent-red)' : 'var(--accent-green)';
 
     if (!report.tutorial_id) {
-      content.innerHTML = '<span style="color:var(--text-muted);">튜토리얼이 선택되지 않았습니다.</span>';
+      content.innerHTML = '<span style="color:var(--text-muted);">No tutorial selected.</span>';
       return;
     }
 
@@ -4833,12 +5003,31 @@ async function loadAudit(runId) {
   }
 }
 
-async function deleteRun(runId, displayName) {
-  if (!confirm(`[ ${displayName} ] 실행 내역을 삭제하시겠습니까?`)) return;
+let _pendingDeleteId = null;
+
+function deleteRun(runId, displayName) {
+  _pendingDeleteId = runId;
+  const modal = document.getElementById('delete-confirm-modal');
+  document.getElementById('delete-confirm-name').textContent = displayName;
+  document.getElementById('delete-confirm-btn').onclick = _confirmDelete;
+  modal.style.display = 'flex';
+}
+
+function closeDeleteModal() {
+  _pendingDeleteId = null;
+  document.getElementById('delete-confirm-modal').style.display = 'none';
+}
+
+async function _confirmDelete() {
+  const runId = _pendingDeleteId;
+  if (!runId) return;
+  closeDeleteModal();
+  const run = runsData.find(r => r.run_id === runId);
+  const displayName = run ? (run.display_name || run.protein.toUpperCase()) : runId;
   try {
     const resp = await fetch(`/api/runs/${runId}`, { method: 'DELETE' });
     if (!resp.ok) {
-      showToast('삭제에 실패했습니다.', 'error');
+      showToast('Failed to delete run.', 'error');
       return;
     }
     if (currentRunId === runId) {
@@ -4851,9 +5040,9 @@ async function deleteRun(runId, displayName) {
     } else {
       showNewRunForm();
     }
-    showToast(`${displayName} 삭제 완료`, 'success');
+    showToast(`${displayName} deleted`, 'success');
   } catch (e) {
-    showToast('서버 연결 오류', 'error');
+    showToast('Server connection error', 'error');
   }
 }
 
@@ -4980,6 +5169,15 @@ window.addEventListener('load', async () => {
   document.getElementById('xvg-result-modal').addEventListener('click', e => {
     if (e.target === document.getElementById('xvg-result-modal'))
       document.getElementById('xvg-result-modal').style.display = 'none';
+  });
+
+  // Delete confirm modal: close on backdrop click or Escape
+  document.getElementById('delete-confirm-modal').addEventListener('click', e => {
+    if (e.target === document.getElementById('delete-confirm-modal')) closeDeleteModal();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && document.getElementById('delete-confirm-modal').style.display === 'flex')
+      closeDeleteModal();
   });
 
   // NGL viewer modal close
@@ -5120,13 +5318,13 @@ async function doAction(action) {
     });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
-      showToast(err.detail || `${action} 실패`, 'error');
+      showToast(err.detail || `${action} failed`, 'error');
       return;
     }
     // 즉시 상태 재조회
     await selectRun(currentRunId, action === 'continue');
   } catch (e) {
-    showToast('서버 연결 오류', 'error');
+    showToast('Server connection error', 'error');
   }
 }
 
@@ -5355,14 +5553,14 @@ async function openRunIn3dViewer() {
   if (!runId) return;
 
   const resp = await fetch('/api/runs/' + runId + '/mol_files');
-  if (!resp.ok) { alert('파일 목록 조회 실패'); return; }
+  if (!resp.ok) { showToast('Failed to load file list', 'error'); return; }
   const files = await resp.json();
 
   const structs = files.filter(f => f.endsWith('.gro') || f.endsWith('.pdb'));
   const trajs   = files.filter(f => f.endsWith('.xtc'));
 
   if (structs.length === 0) {
-    alert('로드 가능한 구조 파일(.gro/.pdb)이 없습니다.');
+    showToast('No structure files (.gro/.pdb) found in this run.', 'error');
     return;
   }
 
@@ -5387,7 +5585,7 @@ async function openRunIn3dViewer() {
 
 async function _loadRunFileIntoNgl(runId, filename, role) {
   const resp = await fetch('/api/runs/' + runId + '/file/' + encodeURIComponent(filename));
-  if (!resp.ok) { console.warn('파일 서빙 실패: ' + filename); return; }
+  if (!resp.ok) { console.warn('Failed to serve file: ' + filename); return; }
   const buf  = await resp.arrayBuffer();
   const file = new File([buf], filename);
   if (role === 'struct') {
@@ -5414,6 +5612,9 @@ function startVirtualRun() {
   document.getElementById('new-run-view').style.display = 'none';
   document.getElementById('new-run-select-view').style.display = 'none';
   document.getElementById('new-visualization-view').style.display = 'none';
+  document.getElementById('membrane-builder-view').style.display = 'none';
+  document.getElementById('ligand-builder-view').style.display = 'none';
+  _setTypeSwitcher(null);
   document.getElementById('run-view').style.display = 'flex';
   document.getElementById('view-title').textContent = 'Simulation: [VIRTUAL RUN] 1AKI (Lysozyme)';
 
@@ -5607,7 +5808,12 @@ let _mbPdbFilename = null;
 
 function showMembraneBuilder() {
   document.getElementById('new-run-select-view').style.display = 'none';
+  document.getElementById('new-run-view').style.display = 'none';
+  document.getElementById('new-visualization-view').style.display = 'none';
+  document.getElementById('ligand-builder-view').style.display = 'none';
   document.getElementById('membrane-builder-view').style.display = 'flex';
+  document.getElementById('view-title').textContent = 'Membrane Builder';
+  _setTypeSwitcher('mem');
   mbGoStep(1);
   if (!document.getElementById('mb-upper-rows').children.length) {
     mbAddLipid('upper');
@@ -5656,7 +5862,7 @@ function _mbRenderSummary() {
   const html = `
     <div class="summary-grid">
       <div class="summary-card">
-        <div class="summary-card-header" onclick="mbGoStep(1)" title="Protein 설정 탭으로 바로가기">
+        <div class="summary-card-header" onclick="mbGoStep(1)" title="Go to Protein tab">
           <span>Protein & Orientation</span>
         </div>
         <div class="summary-item">
@@ -5670,7 +5876,7 @@ function _mbRenderSummary() {
       </div>
 
       <div class="summary-card">
-        <div class="summary-card-header" onclick="mbGoStep(2)" title="Composition 설정 탭으로 바로가기">
+        <div class="summary-card-header" onclick="mbGoStep(2)" title="Go to Composition tab">
           <span>Lipid Composition</span>
         </div>
         <div class="summary-item" style="flex-direction:column; align-items:flex-start; gap:4px;">
@@ -5684,7 +5890,7 @@ function _mbRenderSummary() {
       </div>
 
       <div class="summary-card">
-        <div class="summary-card-header" onclick="mbGoStep(3)" title="Box & Solvent 설정 탭으로 바로가기">
+        <div class="summary-card-header" onclick="mbGoStep(3)" title="Go to Box & Solvent tab">
           <span>Box & Solvent</span>
         </div>
         <div class="summary-item">
@@ -5702,7 +5908,7 @@ function _mbRenderSummary() {
       </div>
 
       <div class="summary-card">
-        <div class="summary-card-header" onclick="mbGoStep(4)" title="Simulation 설정 탭으로 바로가기">
+        <div class="summary-card-header" onclick="mbGoStep(4)" title="Go to Simulation tab">
           <span>Simulation</span>
         </div>
         <div class="summary-item">
@@ -5874,7 +6080,12 @@ let _lbResname = "LIG";
 
 function showLigandBuilder() {
   document.getElementById('new-run-select-view').style.display = 'none';
+  document.getElementById('new-run-view').style.display = 'none';
+  document.getElementById('new-visualization-view').style.display = 'none';
+  document.getElementById('membrane-builder-view').style.display = 'none';
   document.getElementById('ligand-builder-view').style.display = 'flex';
+  document.getElementById('view-title').textContent = 'Protein-Ligand Builder';
+  _setTypeSwitcher('lig');
   lbGoStep(1);
 }
 
