@@ -382,13 +382,16 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail="invalid filename")
         workspace = _check_run_id(run_id, hd / "runs")
         ws_resolved = workspace.resolve()
-        candidate = workspace / filename
-        if not candidate.exists():
+        # Search recursively — files may be nested in stage subdirectories
+        candidate = None
+        for f in workspace.rglob(filename):
+            resolved = f.resolve()
+            if str(resolved).startswith(str(ws_resolved) + os.sep):
+                candidate = f
+                break
+        if candidate is None:
             raise HTTPException(status_code=404, detail="file not found")
-        resolved = candidate.resolve()
-        if not str(resolved).startswith(str(ws_resolved) + os.sep):
-            raise HTTPException(status_code=400, detail="invalid filename")
-        return FileResponse(str(resolved), filename=filename)
+        return FileResponse(str(candidate.resolve()), filename=filename)
 
     _EXCLUDE_DOWNLOAD = {'.xtc', '.trr', '.tpr', '.edr', '.cpt'}
 
