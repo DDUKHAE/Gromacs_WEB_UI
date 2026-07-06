@@ -52,7 +52,6 @@ simulation_state.json
 # Local development artifacts
 docs/superpowers/
 docs/prestudy.md
-tests/
 
 # Brainstorm session content (visual companion)
 .superpowers/

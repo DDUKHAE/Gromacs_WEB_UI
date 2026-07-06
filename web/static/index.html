@@ -2102,6 +2102,10 @@ body.light-theme #run-search {
                   style="display:none;padding:7px 16px;border-radius:var(--radius-sm);border:1px solid var(--accent-cyan);background:transparent;color:var(--accent-cyan);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;">
             3D Viewer
           </button>
+          <button id="download-run-btn" onclick="downloadRun()"
+                  style="display:none;padding:7px 16px;border-radius:var(--radius-sm);border:1px solid var(--accent-green);background:transparent;color:var(--accent-green);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;">
+            ↓ Download
+          </button>
         </div>
       </header>
 
@@ -4039,6 +4043,8 @@ function showNewRunForm() {
   document.getElementById('btn-abort').style.display = 'none';
   const _o3d = document.getElementById('open-3d-btn');
   if (_o3d) _o3d.style.display = 'none';
+  const _dl = document.getElementById('download-run-btn');
+  if (_dl) _dl.style.display = 'none';
   document.querySelectorAll('.run-item').forEach(el => el.classList.remove('active'));
   currentRunId = null;
   stopWs();
@@ -4299,6 +4305,10 @@ function updateButtons(status) {
   const open3dBtn = document.getElementById('open-3d-btn');
   if (open3dBtn) {
     open3dBtn.style.display = (status === 'done' || status === 'completed') ? 'inline-block' : 'none';
+  }
+  const dlBtn = document.getElementById('download-run-btn');
+  if (dlBtn) {
+    dlBtn.style.display = (status === 'done' || status === 'completed') ? 'inline-block' : 'none';
   }
 }
 
@@ -5601,6 +5611,11 @@ async function openRunIn3dViewer() {
     const trajName = trajs.includes('md_0_10.xtc') ? 'md_0_10.xtc' : trajs[trajs.length - 1];
     await _loadRunFileIntoNgl(runId, trajName, 'traj');
   }
+}
+
+function downloadRun() {
+  if (!currentRunId) return;
+  window.location.href = `/api/runs/${currentRunId}/download`;
 }
 
 async function _loadRunFileIntoNgl(runId, filename, role) {

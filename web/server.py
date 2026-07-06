@@ -1,4 +1,5 @@
 import asyncio
+import io
 import json
 import os
 import re
@@ -7,13 +8,14 @@ import signal
 import subprocess
 import sys
 import time
+import zipfile
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from lib import xvg_parser
@@ -387,6 +389,34 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         if not str(resolved).startswith(str(ws_resolved) + os.sep):
             raise HTTPException(status_code=400, detail="invalid filename")
         return FileResponse(str(resolved), filename=filename)
+
+    _EXCLUDE_DOWNLOAD = {'.xtc', '.trr', '.tpr', '.edr', '.cpt'}
+
+    @app.get("/api/runs/{run_id}/download")
+    def api_download_run(run_id: str, hd: HarnessDir):
+        workspace = _check_run_id(run_id, hd / "runs")
+        if not workspace.is_dir():
+            raise HTTPException(status_code=404, detail="run not found")
+        ws_resolved = workspace.resolve()
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for f in sorted(workspace.rglob("*")):
+                if not f.is_file():
+                    continue
+                if f.suffix.lower() in _EXCLUDE_DOWNLOAD:
+                    continue
+                resolved = f.resolve()
+                if not str(resolved).startswith(str(ws_resolved) + os.sep):
+                    continue
+                zf.write(f, str(f.relative_to(workspace)))
+        buf.seek(0)
+
+        return StreamingResponse(
+            iter([buf.read()]),
+            media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{run_id}.zip"'},
+        )
 
     @app.post("/api/runs", status_code=201)
     async def api_create_run(
