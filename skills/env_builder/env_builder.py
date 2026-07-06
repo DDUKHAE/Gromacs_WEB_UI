@@ -270,6 +270,13 @@ def build_environment(pdb_path: Path, prompt: str, workspace_dir: Path,
                                    prerequisites or {})
     manifest = TR.load_manifest(decision.tutorial_id) or {}
     defaults = manifest.get("defaults", {})
+    user_prefs: dict = {}
+    meta_file = Path(workspace_dir) / "meta.json"
+    if meta_file.exists():
+        try:
+            user_prefs = json.loads(meta_file.read_text()).get("user_preferences", {})
+        except Exception:
+            pass
     ff = _resolve_forcefield(
         user_prefs.get("forcefield") or defaults.get("forcefield", "charmm36")
     )

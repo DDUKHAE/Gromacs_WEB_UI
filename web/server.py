@@ -197,6 +197,7 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
     _MAX_FF_BYTES = 200 * 1024 * 1024  # 200 MB
 
     def _install_ff_dir(src: Path, gmxlib: str) -> str:
+        """Copy a .ff directory into gmxlib. Returns the installed FF name."""
         if not src.name.endswith(".ff"):
             raise ValueError(f"Expected a directory ending in .ff, got: {src.name}")
         if not (src / "forcefield.itp").exists():

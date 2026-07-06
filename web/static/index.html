@@ -3764,6 +3764,26 @@ function wizardBack() {
   if (prev !== _wizardStep) _wizardShowStep(prev);
 }
 
+#ff-manager-btn {
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+#ff-manager-btn:hover {
+  color: var(--accent-primary) !important;
+  transform: scale(1.15);
+}
+.ff-tab.active {
+  border-bottom-color: var(--accent-primary) !important;
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+#ff-drop-zone.dragover {
+  border-color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 8%, transparent);
+}
+</style>
+</head>
+<body>
+
 function _wizardCollectConfig() {
   const ff    = document.getElementById('forcefield-select')?.value || '';
   const water = document.getElementById('water-select')?.value || '';
