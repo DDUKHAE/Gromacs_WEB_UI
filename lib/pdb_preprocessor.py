@@ -24,7 +24,7 @@ def apply_his_states(pdb_text: str, his_states: dict[str, str]) -> str:
                 resseq = line[22:26].strip()
                 key = f"{chain}:{resseq}"
                 if key in his_states:
-                    new_name = his_states[key][:3]  # HSD, HSE, or HSP
+                    new_name = his_states[key][:3].ljust(3)  # HSD, HSE, or HSP — pad to 3 for PDB column alignment
                     line = line[:17] + new_name + line[20:]
         result.append(line)
     return "".join(result)

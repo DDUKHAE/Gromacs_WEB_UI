@@ -46,8 +46,7 @@ simulation_state.json
 !tutorial_data/
 !tutorial_data/**
 
-# Exclude CI directories from public repo
-.github/
+# (CI workflows are tracked — removed .github/ exclusion for journal submission)
 
 # Local development artifacts
 docs/superpowers/
