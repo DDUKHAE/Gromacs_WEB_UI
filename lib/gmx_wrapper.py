@@ -79,6 +79,25 @@ def get_gmxlib() -> str | None:
     return _resolve_gmxlib(_resolve_gmx_bin())
 
 
+def get_version() -> str | None:
+    """Return the `gmx --version` version string (e.g. "2023.3"), or None if
+    the `gmx` binary is unavailable/unresponsive. Never raises — provenance
+    capture must degrade gracefully when GROMACS isn't installed."""
+    gmx_bin = _resolve_gmx_bin()
+    try:
+        completed = subprocess.run(
+            [gmx_bin, "--version"], capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if completed.returncode != 0:
+        return None
+    for line in completed.stdout.splitlines():
+        if "GROMACS version" in line:
+            return line.split(":", 1)[-1].strip()
+    return None
+
+
 def _classify(returncode: int, stderr: str) -> str:
     if returncode == 0:
         return "success"

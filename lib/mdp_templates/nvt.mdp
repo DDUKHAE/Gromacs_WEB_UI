@@ -27,4 +27,4 @@ pbc                      = xyz
 DispCorr                 = EnerPres
 gen_vel                  = yes
 gen_temp                 = {ref_t}
-gen_seed                 = -1
+gen_seed                 = {gen_seed}

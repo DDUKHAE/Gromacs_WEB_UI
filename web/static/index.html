@@ -4725,14 +4725,34 @@ function onSmoothSliderChange(val) {
 
 // ── XVG multi-series chart ───────────────────────────────────────────────────
 const XVG_COLORS = ['#06b6d4','#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899'];
+// Export colors chosen to remain legible on the fixed white export background
+// used for print/figure output (independent of the on-screen UI theme).
+const XVG_EXPORT_COLORS = ['#0891b2','#4f46e5','#059669','#d97706','#dc2626','#7c3aed','#db2777'];
 
-function drawFullChart(canvas, xData, ySeriesArr, colors) {
-  const ctx = canvas.getContext('2d');
-  const w = canvas.width, h = canvas.height;
+// Reads current theme tokens so chart ink is legible in both dark and light UI themes.
+function getChartThemeColors() {
+  const cs = getComputedStyle(document.body);
+  const pick = (name, fallback) => {
+    const v = (cs.getPropertyValue(name) || '').trim();
+    return v || fallback;
+  };
+  return {
+    grid: pick('--border-color', 'rgba(128,128,128,0.15)'),
+    label: pick('--text-secondary', '#9ca3af'),
+    title: pick('--text-primary', '#e5e7eb'),
+  };
+}
+
+// Pure drawing routine operating in CSS-pixel coordinate space. The caller is
+// responsible for scaling/transforming `ctx` for the target output resolution
+// (screen devicePixelRatio, or a fixed high-res factor for exports) before
+// calling this — that keeps on-screen rendering and PNG/SVG export pixel-identical.
+function renderChartOnContext(ctx, w, h, xData, ySeriesArr, colors, xAxisTitle, yAxisTitle, theme) {
   ctx.clearRect(0, 0, w, h);
   if (!xData || xData.length < 2 || !ySeriesArr.length) return;
 
-  const pad = { t: 14, r: 20, b: 34, l: 56 };
+  const hasAxisTitle = !!(xAxisTitle || yAxisTitle);
+  const pad = { t: 14, r: 20, b: hasAxisTitle ? 46 : 34, l: yAxisTitle ? 66 : 56 };
   const pw = w - pad.l - pad.r, ph = h - pad.t - pad.b;
 
   const allY = ySeriesArr.flat();
@@ -4744,46 +4764,54 @@ function drawFullChart(canvas, xData, ySeriesArr, colors) {
   const toX = v => pad.l + ((v - minX) / rangeX) * pw;
   const toY = v => pad.t + ph - ((v - minY) / rangeY) * ph;
 
-  // Grid
-  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+  // Grid — theme-tokenized so it stays visible on both dark and light backgrounds.
+  ctx.strokeStyle = theme.grid;
   ctx.lineWidth = 1;
   for (let i = 0; i <= 4; i++) {
     const y = pad.t + (ph / 4) * i;
     ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + pw, y); ctx.stroke();
   }
 
-  // Y-axis labels
-  ctx.fillStyle = 'rgba(255,255,255,0.35)';
-  ctx.font = '9px monospace';
+  // Y-axis tick labels
+  ctx.fillStyle = theme.label;
+  ctx.font = '10px "JetBrains Mono", monospace';
   ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
   for (let i = 0; i <= 4; i++) {
     const val = maxY - (rangeY / 4) * i;
-    ctx.fillText(val.toFixed(3), pad.l - 4, pad.t + (ph / 4) * i + 3);
+    ctx.fillText(val.toFixed(3), pad.l - 6, pad.t + (ph / 4) * i);
   }
 
-  // X-axis labels
+  // X-axis tick labels
   ctx.textAlign = 'center';
-  ctx.fillStyle = 'rgba(255,255,255,0.3)';
-  ctx.fillText(minX.toFixed(1), pad.l, h - 6);
-  ctx.fillText(((minX + maxX) / 2).toFixed(1), pad.l + pw / 2, h - 6);
-  ctx.fillText(maxX.toFixed(1), pad.l + pw, h - 6);
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(minX.toFixed(1), pad.l, pad.t + ph + 14);
+  ctx.fillText(((minX + maxX) / 2).toFixed(1), pad.l + pw / 2, pad.t + ph + 14);
+  ctx.fillText(maxX.toFixed(1), pad.l + pw, pad.t + ph + 14);
 
-  // Series
+  // Axis titles (units come straight from the parsed xvg header, e.g. "Time (ps)")
+  ctx.fillStyle = theme.title;
+  ctx.font = '600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  if (xAxisTitle) {
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(xAxisTitle, pad.l + pw / 2, h - 4);
+  }
+  if (yAxisTitle) {
+    ctx.save();
+    ctx.translate(12, pad.t + ph / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(yAxisTitle, 0, 0);
+    ctx.restore();
+  }
+
+  // Series — plain stroke only. No shadowBlur glow or gradient fill: those are
+  // cosmetic and distort the visual shape of scientific data.
   ySeriesArr.forEach((yData, si) => {
     if (!yData || yData.length < 2) return;
     const color = colors[si % colors.length];
-
-    const grad = ctx.createLinearGradient(0, pad.t, 0, pad.t + ph);
-    grad.addColorStop(0, color + '28');
-    grad.addColorStop(1, color + '00');
-    ctx.beginPath();
-    ctx.moveTo(toX(xData[0]), pad.t + ph);
-    xData.forEach((x, i) => ctx.lineTo(toX(x), toY(yData[i])));
-    ctx.lineTo(toX(xData[xData.length - 1]), pad.t + ph);
-    ctx.closePath();
-    ctx.fillStyle = grad;
-    ctx.fill();
-
     ctx.beginPath();
     ctx.moveTo(toX(xData[0]), toY(yData[0]));
     for (let i = 1; i < xData.length; i++) {
@@ -4794,15 +4822,144 @@ function drawFullChart(canvas, xData, ySeriesArr, colors) {
     ctx.lineTo(toX(xData[xData.length - 1]), toY(yData[yData.length - 1]));
     ctx.strokeStyle = color;
     ctx.lineWidth = 1.8;
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 5;
     ctx.stroke();
-    ctx.shadowBlur = 0;
   });
+}
+
+// Draws into the on-screen <canvas>, scaling the backing store by
+// devicePixelRatio so the chart stays sharp on HiDPI displays while the CSS
+// (layout) size remains whatever the responsive container gives it.
+function drawFullChart(canvas, xData, ySeriesArr, colors, xAxisTitle, yAxisTitle) {
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = canvas.clientWidth || 800;
+  const cssH = canvas.clientHeight || 220;
+  const pxW = Math.max(1, Math.round(cssW * dpr));
+  const pxH = Math.max(1, Math.round(cssH * dpr));
+  if (canvas.width !== pxW) canvas.width = pxW;
+  if (canvas.height !== pxH) canvas.height = pxH;
+
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // reset (not accumulate) then scale for this draw
+  renderChartOnContext(ctx, cssW, cssH, xData, ySeriesArr, colors, xAxisTitle, yAxisTitle, getChartThemeColors());
+}
+
+// ── Per-plot export (PNG / SVG / CSV) ────────────────────────────────────────
+// Fixed render scale for exports, independent of the viewing screen's DPI, so
+// PNG figures are print-quality (>=300 dpi at typical single-column widths)
+// even when captured on a low-DPI display.
+const CHART_EXPORT_SCALE = 4;
+const CHART_EXPORT_THEME = { grid: 'rgba(0,0,0,0.12)', label: '#4b5563', title: '#111827' };
+
+function sanitizeFilename(s) {
+  return String(s || 'plot').replace(/[^a-z0-9_\-.]+/gi, '_').replace(/^_+|_+$/g, '') || 'plot';
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function exportChartPNG(cssW, cssH, xData, ySeriesArr, colors, xAxisTitle, yAxisTitle, filenameBase) {
+  const off = document.createElement('canvas');
+  off.width = Math.max(1, Math.round(cssW * CHART_EXPORT_SCALE));
+  off.height = Math.max(1, Math.round(cssH * CHART_EXPORT_SCALE));
+  const ctx = off.getContext('2d');
+  ctx.setTransform(CHART_EXPORT_SCALE, 0, 0, CHART_EXPORT_SCALE, 0, 0);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, cssW, cssH);
+  renderChartOnContext(ctx, cssW, cssH, xData, ySeriesArr, colors, xAxisTitle, yAxisTitle, CHART_EXPORT_THEME);
+  off.toBlob(blob => {
+    if (blob) downloadBlob(blob, `${sanitizeFilename(filenameBase)}.png`);
+  }, 'image/png');
+}
+
+function escapeXml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
+}
+
+function buildChartSVG(cssW, cssH, xData, ySeriesArr, colors, xAxisTitle, yAxisTitle) {
+  const hasAxisTitle = !!(xAxisTitle || yAxisTitle);
+  const pad = { t: 14, r: 20, b: hasAxisTitle ? 46 : 34, l: yAxisTitle ? 66 : 56 };
+  const w = cssW, h = cssH;
+  const pw = w - pad.l - pad.r, ph = h - pad.t - pad.b;
+  const allY = ySeriesArr.flat();
+  const minY = Math.min(...allY), maxY = Math.max(...allY);
+  const rangeY = maxY - minY || 1;
+  const minX = xData[0], maxX = xData[xData.length - 1];
+  const rangeX = maxX - minX || 1;
+  const toX = v => pad.l + ((v - minX) / rangeX) * pw;
+  const toY = v => pad.t + ph - ((v - minY) / rangeY) * ph;
+
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" font-family="monospace">`;
+  svg += `<rect x="0" y="0" width="${w}" height="${h}" fill="#ffffff"/>`;
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.t + (ph / 4) * i;
+    svg += `<line x1="${pad.l}" y1="${y}" x2="${pad.l + pw}" y2="${y}" stroke="rgba(0,0,0,0.12)" stroke-width="1"/>`;
+    const val = (maxY - (rangeY / 4) * i).toFixed(3);
+    svg += `<text x="${pad.l - 6}" y="${y + 3}" font-size="10" fill="#4b5563" text-anchor="end">${val}</text>`;
+  }
+  [[pad.l, 'start', minX], [pad.l + pw / 2, 'middle', (minX + maxX) / 2], [pad.l + pw, 'end', maxX]]
+    .forEach(([x, anchor, val]) => {
+      svg += `<text x="${x}" y="${pad.t + ph + 14}" font-size="10" fill="#4b5563" text-anchor="${anchor}">${val.toFixed(1)}</text>`;
+    });
+  if (xAxisTitle) {
+    svg += `<text x="${pad.l + pw / 2}" y="${h - 4}" font-size="11" font-weight="600" fill="#111827" text-anchor="middle">${escapeXml(xAxisTitle)}</text>`;
+  }
+  if (yAxisTitle) {
+    const cy = pad.t + ph / 2;
+    svg += `<text x="12" y="${cy}" font-size="11" font-weight="600" fill="#111827" text-anchor="middle" transform="rotate(-90 12 ${cy})">${escapeXml(yAxisTitle)}</text>`;
+  }
+  ySeriesArr.forEach((yData, si) => {
+    if (!yData || yData.length < 2) return;
+    const color = colors[si % colors.length];
+    let d = `M ${toX(xData[0]).toFixed(2)} ${toY(yData[0]).toFixed(2)}`;
+    for (let i = 1; i < xData.length; i++) d += ` L ${toX(xData[i]).toFixed(2)} ${toY(yData[i]).toFixed(2)}`;
+    svg += `<path d="${d}" fill="none" stroke="${color}" stroke-width="1.8"/>`;
+  });
+  svg += `</svg>`;
+  return svg;
+}
+
+function exportChartSVG(cssW, cssH, xData, ySeriesArr, colors, xAxisTitle, yAxisTitle, filenameBase) {
+  const svg = buildChartSVG(cssW, cssH, xData, ySeriesArr, colors, xAxisTitle, yAxisTitle);
+  const blob = new Blob([svg], { type: 'image/svg+xml' });
+  downloadBlob(blob, `${sanitizeFilename(filenameBase)}.svg`);
+}
+
+function csvField(v) {
+  if (typeof v === 'number') return String(v);
+  const s = v == null ? '' : String(v);
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+// Exports the raw, un-smoothed, un-filtered parsed series (all columns) so the
+// CSV is a faithful copy of the underlying .xvg data, independent of whatever
+// running-average window or series toggles are active in the viewer.
+function exportChartCSV(xLabel, yLabels, xData, ySeriesArr, filenameBase) {
+  const header = [xLabel || 'x', ...yLabels].map(csvField).join(',');
+  const rows = xData.map((x, i) => [x, ...ySeriesArr.map(y => y[i])].map(csvField).join(','));
+  const csv = [header, ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  downloadBlob(blob, `${sanitizeFilename(filenameBase)}.csv`);
+}
+
+// Redraw callbacks for all currently-rendered XVG charts, so a window resize
+// (responsive container width change) keeps them crisp instead of stretched.
+let _xvgRedrawFns = [];
+if (!window._xvgResizeListenerAdded) {
+  window._xvgResizeListenerAdded = true;
+  window.addEventListener('resize', () => _xvgRedrawFns.forEach(fn => fn()));
 }
 
 function renderXvgResultModal(dataList) {
   _xvgDatasets = dataList;
+  _xvgRedrawFns = [];
   const container = document.getElementById('xvg-result-cards');
   container.innerHTML = '';
 
@@ -4816,7 +4973,7 @@ function renderXvgResultModal(dataList) {
     const active = ySeries.map(() => true);
 
     const card = document.createElement('div');
-    card.style.cssText = 'background:rgba(255,255,255,0.03);border:1px solid var(--border-color);border-radius:10px;padding:16px;';
+    card.style.cssText = 'background:var(--bg-card);border:1px solid var(--border-color);border-radius:10px;padding:16px;';
 
     // Title
     const titleRow = document.createElement('div');
@@ -4862,19 +5019,52 @@ function renderXvgResultModal(dataList) {
       card.appendChild(legendRow);
     }
 
-    // Canvas
+    // Canvas — fixed CSS height, responsive width; backing store is scaled by
+    // devicePixelRatio inside drawFullChart() so the plot stays sharp on HiDPI.
     const canvas = document.createElement('canvas');
-    canvas.width = 800;
-    canvas.height = 200;
-    canvas.style.cssText = 'width:100%;height:auto;display:block;border-radius:6px;';
+    canvas.style.cssText = 'width:100%;height:220px;display:block;border-radius:6px;';
     card.appendChild(canvas);
 
-    function redraw() {
+    function currentActiveSeries() {
       const activeSeries = ySeries.filter((_, i) => active[i]);
       const activeColors = XVG_COLORS.filter((_, i) => i < ySeries.length && active[i]);
       const smoothed = activeSeries.map(y => computeRunningAverage(y, _smoothWindow));
-      requestAnimationFrame(() => drawFullChart(canvas, xData, smoothed, activeColors));
+      return { smoothed, activeColors };
     }
+
+    function redraw() {
+      const { smoothed, activeColors } = currentActiveSeries();
+      requestAnimationFrame(() => drawFullChart(canvas, xData, smoothed, activeColors, d.xaxis_label, d.yaxis_label));
+    }
+    _xvgRedrawFns.push(redraw);
+
+    // Export toolbar — PNG/SVG mirror the currently displayed (smoothed/filtered)
+    // view; CSV always exports the raw, full parsed series.
+    const baseName = (d.title || d.filename || 'plot').replace(/\.[a-z0-9]+$/i, '');
+    const toolbar = document.createElement('div');
+    toolbar.style.cssText = 'display:flex;gap:8px;margin-top:8px;';
+    const mkExportBtn = (label, onClick) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = label;
+      btn.style.cssText = 'font-size:11px;padding:3px 10px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-card);color:var(--text-secondary);cursor:pointer;';
+      btn.addEventListener('click', onClick);
+      return btn;
+    };
+    toolbar.appendChild(mkExportBtn('Export PNG', () => {
+      const { smoothed, activeColors } = currentActiveSeries();
+      const cssW = canvas.clientWidth || 800, cssH = canvas.clientHeight || 220;
+      exportChartPNG(cssW, cssH, xData, smoothed, activeColors.length ? activeColors : XVG_EXPORT_COLORS, d.xaxis_label, d.yaxis_label, baseName);
+    }));
+    toolbar.appendChild(mkExportBtn('Export SVG', () => {
+      const { smoothed, activeColors } = currentActiveSeries();
+      const cssW = canvas.clientWidth || 800, cssH = canvas.clientHeight || 220;
+      exportChartSVG(cssW, cssH, xData, smoothed, activeColors.length ? activeColors : XVG_EXPORT_COLORS, d.xaxis_label, d.yaxis_label, baseName);
+    }));
+    toolbar.appendChild(mkExportBtn('Export CSV', () => {
+      exportChartCSV(d.xaxis_label, legends, xData, ySeries, baseName);
+    }));
+    card.appendChild(toolbar);
 
     // Stats row
     if (stats.length > 0) {

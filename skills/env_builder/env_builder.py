@@ -55,6 +55,9 @@ def collect_hardware(workspace_dir: Path) -> None:
     s = state.read(workspace_dir)
     s["hardware"] = {"cpu_count": cpu, "gpu_ids": gpus, "ntomp": ntomp}
     state.write(workspace_dir, s)
+    # Capture gmx_version/platform provenance as early as possible (Step 0).
+    # Gracefully records None if gmx isn't installed; never raises.
+    state.capture_provenance(workspace_dir)
 
 
 _SOLVENT_AND_IONS = frozenset({
@@ -119,6 +122,7 @@ def run_step1_topology(workspace_dir: Path, forcefield: str, water: str) -> None
     }
     s["current_step"] = 1
     state.write(ws, s)
+    state.record_force_field(ws, forcefield)
 
 
 def run_step2_box(workspace_dir: Path, box_type: str, distance_nm: float) -> None:
@@ -175,7 +179,8 @@ def run_step3_solvate(workspace_dir: Path) -> None:
 def run_step4_ions_prep(workspace_dir: Path) -> None:
     ws = Path(workspace_dir)
     out_dir = ws / "stage1_env"
-    MDP.render("ions", overrides={}, output_dir=out_dir)
+    ions_mdp = MDP.render("ions", overrides={}, output_dir=out_dir)
+    state.record_mdp_hash(ws, "ions", ions_mdp)
     result = GW.run(
         ["grompp", "-f", "ions.mdp", "-c", "solv.gro",
          "-p", "topol.top", "-o", "ions.tpr", "-maxwarn", "1"],

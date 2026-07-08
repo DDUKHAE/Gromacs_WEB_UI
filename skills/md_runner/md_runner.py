@@ -25,6 +25,9 @@ def assert_ready(workspace_dir: Path) -> dict[str, Any]:
     for fname in REQUIRED_FILES:
         if not (ws / "stage1_env" / fname).exists():
             raise StateContractError(f"missing stage1 file: {fname}")
+    # Idempotent: also covers workspaces entered directly at md_runner
+    # (independent_entry_guide.md) where env_builder never ran Step 0.
+    state.capture_provenance(ws)
     return s
 
 
@@ -60,6 +63,7 @@ PHASE_TO_STATE_KEY = {
 
 
 _GROMPP_WARNING_RE = re.compile(r"^WARNING\s+\d+\s+\[.*", re.MULTILINE)
+_GEN_SEED_RE = re.compile(r"gen_seed\s*=\s*(-?\d+)")
 
 
 def _record_grompp_warnings(ws: Path, phase: str, combined_output: str) -> None:
@@ -86,6 +90,11 @@ def run_phase(workspace_dir: Path, phase: str,
             s_for_render.get("tutorial") or {}
         ).get("has_protein", True)
     mdp_path = MDP.render(phase, render_overrides, output_dir=out_dir)
+    state.record_mdp_hash(ws, phase, mdp_path)
+    if phase == "nvt":
+        seed_match = _GEN_SEED_RE.search(mdp_path.read_text())
+        if seed_match:
+            state.record_seed(ws, phase, int(seed_match.group(1)))
     in_dir_rel, in_gro = PHASE_INPUT_GRO[phase]
     in_gro_path = ws / in_dir_rel / in_gro
     top_path = ws / "stage1_env" / "topol.top"

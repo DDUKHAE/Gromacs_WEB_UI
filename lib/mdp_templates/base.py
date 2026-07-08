@@ -4,9 +4,17 @@ from typing import Any
 
 _DIR = Path(__file__).parent
 
+# Fixed seed used when a caller opts into "reproducible mode" for velocity
+# generation (gen_vel) instead of the production default of gen_seed=-1
+# (GROMACS draws a fresh random seed each run, which is scientifically
+# correct for production sampling but non-reproducible bit-for-bit). Any
+# integer works; this one is just a stable, documented convention.
+REPRODUCIBLE_SEED = 20240101
+
 DEFAULTS = {
     "em": {"emtol": 1000.0, "emstep": 0.01, "nsteps": 50000},
-    "nvt": {"nsteps": 50000, "dt": 0.002, "tau_t": 0.1, "ref_t": 300.0},
+    "nvt": {"nsteps": 50000, "dt": 0.002, "tau_t": 0.1, "ref_t": 300.0,
+            "gen_seed": -1},
     "npt": {"nsteps": 50000, "dt": 0.002, "tau_t": 0.1, "ref_t": 300.0, "tau_p": 2.0,
             # Initial equilibration: Berendsen (or C-rescale) barostat is
             # recommended before switching to Parrinello-Rahman, which can
@@ -48,6 +56,13 @@ def render(phase: str, overrides: dict[str, Any], output_dir: Path) -> Path:
         raise KeyError(f"unknown template: {phase}")
     template = (_DIR / _FILES[phase]).read_text()
     params = {**DEFAULTS[phase], **overrides}
+    if phase == "nvt":
+        # "reproducible_mode" is a render-time flag, not an mdp key: it picks
+        # a fixed, documented gen_seed for reproducible velocity generation.
+        # An explicit gen_seed override always wins over reproducible_mode.
+        reproducible_mode = params.pop("reproducible_mode", False)
+        if reproducible_mode and "gen_seed" not in overrides:
+            params["gen_seed"] = REPRODUCIBLE_SEED
     if phase in _TC_GRPS_PHASES:
         # tc-grps must reflect the actual system composition: "Protein
         # Non-Protein" only exists as an index group when there is a

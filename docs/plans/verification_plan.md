@@ -77,16 +77,17 @@ A1–A5 전부 PASS + 공통 회귀 그린 → **v1 게시 가능**.
 - **자동:** 신뢰성 표 산출물 존재 — ≥2 시스템 × 3 모델 × (N≥3) 반복, 성공률·표준편차·리트라이·복구율.
 - **판정:** 표 존재 + gemini TODO 해소 + 비결정성 정량화면 **PASS**.
 
-### B3 — 컨테이너·환경 정합
-- **자동:**
-  ```bash
-  docker build -t gromacs-web-ui .        # 성공(또는 conda env create -f environment.yml)
-  # 컨테이너/환경 내부:
-  python -m pytest -q                      # 통과
-  python scripts/check_gromacs_env.py      # gmx 탐지
-  ```
+### B3 — conda 환경 정합 (컨테이너 미사용)
+- **파일 존재:** `environment.yml`·`environment.lock.yml`·`environment.lock.txt`·`requirements.lock` 존재, 미-gitignore(`git check-ignore ...`), YAML 파싱 정상.
+- **락 실환경 반영:** `environment.lock.yml`에 `gromacs=2026.0`·`python=3.13` 핀 존재.
 - **정합 검증:** `matplotlib`·`propka`가 `requirements.txt`·`pyproject.toml` **양쪽**에 존재(`grep -n "matplotlib\|propka" requirements.txt pyproject.toml`).
-- **판정:** 빌드 성공 + 컨테이너 내 테스트 통과 + 의존성 정합이면 **PASS**.
+- **최종 확인(실환경 필요):**
+  ```bash
+  conda env create -f environment.lock.yml && conda activate gromacs_web
+  pip install -e . && python -m pytest -q       # 통과
+  python scripts/check_gromacs_env.py           # gmx 탐지
+  ```
+- **판정:** 락 4파일 정상 + 실환경 반영 + 의존성 정합이면 **PASS**(클린-머신 env create는 G2 종결 전 1회 확인).
 
 ### B4 — 출판급 플롯·내보내기
 - **코드 검증:** `grep -n "devicePixelRatio" web/static/index.html` 존재; `grep -n "255,255,255" web/static/index.html`가 차트 그리기 경로(`:4740,4748,4758`)에서 제거/토큰화; export 버튼 코드 존재(`toBlob`/CSV).

@@ -78,7 +78,7 @@ Claude Code, OpenAI Codex CLI, and Gemini CLI are supported. Each is spawned as 
 | ------------------ | ---------------------------------------------------------------------------------------------------------------- |
 | Python 3.13        | Web server runtime (FastAPI + uvicorn)                                                                           |
 | GROMACS 2026.0     | All pipeline stages — topology, solvation, equilibration, production run, analysis                               |
-| `requirements.txt` | REST API · WebSocket server + trajectory analysis plots (`fastapi`, `uvicorn`, `python-multipart`, `matplotlib`) |
+| `requirements.txt` | REST API · WebSocket server + trajectory analysis plots + PDB protonation state prediction (`fastapi`, `uvicorn`, `python-multipart`, `matplotlib`, `propka`) |
 
 ### Optional
 
@@ -215,6 +215,60 @@ python main.py --port 8080   # custom port
 python main.py --listen      # bind to 0.0.0.0 for LAN access
 python main.py --no-browser  # suppress automatic browser launch
 ```
+
+---
+
+## Reproducible environment (conda)
+
+GROMACS is only reliably distributed via conda-forge, so a **conda environment
+is the single reproducible install path** for this project. Three checked-in
+files support it at increasing levels of strictness:
+
+| File | Purpose | Reproducibility |
+| ---- | ------- | --------------- |
+| `environment.yml` | Human-editable spec (GROMACS + Python deps, version floors) | Loose — resolves latest compatible |
+| `environment.lock.yml` | `conda env export --no-builds` of the reference env (exact versions, cross-platform) | Strong — pinned versions |
+| `environment.lock.txt` | `conda list --explicit` of the reference env (exact package URLs, `linux-64`) | Strongest — byte-identical on `linux-64` |
+
+`requirements.txt` and `pyproject.toml` are kept in sync (`fastapi`,
+`uvicorn[standard]`, `python-multipart`, `matplotlib`, `propka`) so either
+`pip install -r requirements.txt` or `pip install -e .` yields the same Python
+dependency set; `requirements.lock` is a pinned, hash-locked resolution of the
+pip layer.
+
+### Create the environment
+
+```bash
+# Spec (recommended for most users — latest compatible versions)
+conda env create -f environment.yml
+
+# — or — reproduce the exact reference environment:
+conda env create -f environment.lock.yml           # any platform, pinned versions
+conda create --name gromacs_web --file environment.lock.txt   # linux-64, exact build
+
+conda activate gromacs_web
+pip install -e .                     # install this package into the env
+python scripts/check_gromacs_env.py  # verify gmx + optional tools
+python main.py --listen --no-browser
+```
+
+The reference environment pins **GROMACS 2026.0** and **Python 3.13**.
+
+### Regenerating the locks
+
+After changing `environment.yml` and rebuilding the env, refresh the locks so
+they track the working environment:
+
+```bash
+conda env export -n gromacs_web --no-builds | grep -v '^prefix:' > environment.lock.yml
+conda list -n gromacs_web --explicit > environment.lock.txt
+```
+
+**LLM CLIs are intentionally not part of the environment.** Claude Code, Codex
+CLI, and Gemini CLI require an authenticated login and are not redistributable
+via conda/pip; install them separately (see the LLM CLI notes above) for
+orchestrated execution, or use the direct, non-LLM path (`web/runner.py`)
+without them.
 
 ---
 

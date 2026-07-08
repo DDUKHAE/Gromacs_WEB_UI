@@ -73,25 +73,30 @@
 
 ---
 
-## B3 — 컨테이너 + 핀 고정 환경
+## B3 — conda 환경 고정 (컨테이너 미사용)
 
-**목표:** 재현 가능한 실행 환경을 컨테이너/락파일로 고정.
+> **결정(2026-07-08):** Docker는 사용하지 않는다. GROMACS가 conda-forge로만 안정 배포되므로 **conda 가상환경을 만들고 그 실환경을 export해 락으로 고정**하는 방식을 채택. 실제 구동 중인 `gromacs_web` 환경(GROMACS 2026.0 + Python 3.13.13)의 스냅샷이므로 이론적 빌드보다 재현성이 강하다.
 
-**근거:** `Dockerfile`/`environment.yml`/락파일 전무. 의존성은 전부 하한(`fastapi>=0.111`). `requirements.txt`(matplotlib, propka 포함) ↔ `pyproject.toml`(둘 다 누락) 불일치 → 두 설치 경로가 다른 환경 산출. 외부 바이너리(`gmx`, `acpype`, `packmol-memgen`, `propka`) + LLM CLI 의존. — 평가 구조 §3.3, §3.5-1
+**목표:** 재현 가능한 실행 환경을 conda 스펙 + 락파일로 고정.
 
-**대상 파일:** (신규) `Dockerfile`, (신규) `environment.yml`, `requirements.txt`, `pyproject.toml`, (신규) 락파일(`uv.lock`/`requirements.lock`), `README.md`.
+**근거:** `environment.yml`/락파일 전무, 의존성 전부 하한. `requirements.txt`(matplotlib, propka) ↔ `pyproject.toml`(둘 다 누락) 불일치 → 두 설치 경로가 다른 환경 산출. — 평가 구조 §3.3, §3.5-1
+
+**대상 파일:** (신규) `environment.yml`(스펙), (신규) `environment.lock.yml`(`conda env export --no-builds`), (신규) `environment.lock.txt`(`conda list --explicit`, linux-64), (신규) `requirements.lock`(pip 레이어), `requirements.txt`, `pyproject.toml`, `README.md`. **Dockerfile은 만들지 않는다.**
 
 **단계:**
 1. `requirements.txt` ↔ `pyproject.toml` 정합 — `matplotlib`, `propka`를 pyproject 의존성에 추가, 버전 정책 통일.
-2. `environment.yml` 생성 — conda-forge `gromacs`, `python=3.13`, 파이썬 의존성 핀.
-3. `Dockerfile`(또는 Apptainer def) — GROMACS + Python + 보조도구 핀 고정. LLM CLI는 옵션(설치 안내 또는 빌드 인자).
-4. 락파일 생성(`pip-tools`/`uv`).
-5. README에 컨테이너 실행 경로 문서화 + 직접(`web/runner.py`) 비-LLM 경로 명시(LLM CLI는 PyPI 미설치·로그인 필요).
+2. `environment.yml`(스펙) 생성 — conda-forge `gromacs=2026.0`, `python=3.13`, pip 서브블록에 파이썬 의존성.
+3. 실환경에서 락 export:
+   - `conda env export -n gromacs_web --no-builds | grep -v '^prefix:' > environment.lock.yml`
+   - `conda list -n gromacs_web --explicit > environment.lock.txt`
+4. pip 레이어 락(`uv pip compile` 또는 `pip freeze`) → `requirements.lock`.
+5. README에 3단계 재현 경로(스펙/버전락/정확락) + 락 재생성 명령 + 비-LLM(`web/runner.py`) 경로 명시(LLM CLI는 conda/pip 미설치·로그인 필요).
 
 **완료 조건(Acceptance):**
-- `docker build`(또는 conda env create)가 클린 환경에서 성공(빌드 로그 첨부).
-- 컨테이너/환경 내에서 `python -m pytest -q` 통과 + `python scripts/check_gromacs_env.py`가 gmx 탐지.
-- `diff`로 `requirements.txt`·`pyproject.toml` 의존성 정합 확인(matplotlib·propka 양쪽 존재).
+- `environment.yml`·`environment.lock.yml`·`environment.lock.txt`·`requirements.lock` 존재, YAML/파싱 정상, 미-gitignore.
+- 락이 실환경(GROMACS 2026.0 + Python 3.13) 반영.
+- `requirements.txt`·`pyproject.toml` 의존성 정합(matplotlib·propka 양쪽 존재).
+- (최종 확인, 실환경 필요) 클린 머신에서 `conda env create -f environment.lock.yml` → `pytest -q` 통과 + `check_gromacs_env.py`가 gmx 탐지.
 
 **규모:** 中
 
