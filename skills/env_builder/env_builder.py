@@ -6,10 +6,21 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+import re
+
 from lib import state
 from lib import tutorial_registry as TR
 from lib import gmx_wrapper as GW
+from lib import validators as V
 from lib.mdp_templates import base as MDP
+
+
+_NET_CHARGE_RE = re.compile(
+    r"non-zero total charge:\s*(-?\d+(?:\.\d+)?)", re.IGNORECASE
+)
+_GENION_ADD_RE = re.compile(
+    r"Will try to add\s+(\d+)\s+NA ions?\s+and\s+(\d+)\s+CL ions?", re.IGNORECASE
+)
 
 
 class UnsupportedTutorialError(Exception):
@@ -77,6 +88,9 @@ def select_tutorial(workspace_dir: Path, pdb_path: Path,
     s["tutorial"] = {
         "id": decision.tutorial_id,
         "variant": decision.pipeline_variant,
+        # Recorded so md_runner can derive tc-grps correctly (protein-free
+        # systems have no "Protein"/"Non-Protein" index groups).
+        "has_protein": hints.get("has_protein", True),
         "manifest_path": (
             f"docs/tutorial/{decision.tutorial_id}/tutorial.manifest.json"
         ),
@@ -169,7 +183,13 @@ def run_step4_ions_prep(workspace_dir: Path) -> None:
     )
     if not result.ok:
         raise RuntimeError(f"grompp (ions) failed: {result.stderr[-500:]}")
+    # grompp emits "System has non-zero total charge: X.XXXXXX" as a WARNING
+    # when the pre-neutralization system is charged; absence of the message
+    # means the system is already neutral (charge 0.0).
+    m = _NET_CHARGE_RE.search(result.stdout + result.stderr)
+    initial_net_charge = float(m.group(1)) if m else 0.0
     s = state.read(ws)
+    s["step_outputs"]["step_4"] = {"initial_net_charge": initial_net_charge}
     s["current_step"] = 4
     state.write(ws, s)
 
@@ -192,17 +212,44 @@ def run_step5_genion(workspace_dir: Path, concentration: float = 0.15) -> None:
     if not result.ok:
         GW.restore_topology(top)
         raise RuntimeError(f"genion failed: {result.stderr[-500:]}")
+    # genion reports both counts on a single line, e.g.
+    # "Will try to add 3 NA ions and 0 CL ions." — a naive per-substring
+    # scan (checking "NA" and "CL" independently) matches both branches on
+    # that one line and silently overwrites n_cl with the NA count. Parse
+    # both numbers from the same match instead.
     n_na = n_cl = 0
-    for line in (result.stdout + result.stderr).splitlines():
-        if "Will try to add" in line and "NA" in line:
-            n_na = int(line.split()[4])
-        if "Will try to add" in line and "CL" in line:
-            n_cl = int(line.split()[4])
+    m = _GENION_ADD_RE.search(result.stdout + result.stderr)
+    if m:
+        n_na, n_cl = int(m.group(1)), int(m.group(2))
     s = state.read(ws)
+    initial_net_charge = (s["step_outputs"].get("step_4") or {}).get(
+        "initial_net_charge", 0.0)
+    # NA/CL are the hardcoded monovalent ion species used above (+1/-1 e);
+    # the actual post-genion system charge is the pre-neutralization charge
+    # plus the ions genion actually added, not an assumed 0.0.
+    net_charge = initial_net_charge + n_na - n_cl
+    judgment = V.judge_neutrality(net_charge)
     s["step_outputs"]["step_5"] = {
         "ion_gro": "stage1_env/ions.gro",
-        "n_na": n_na, "n_cl": n_cl, "net_charge": 0.0,
+        "n_na": n_na, "n_cl": n_cl, "net_charge": net_charge,
+        "neutrality_tier": judgment.tier,
     }
+    if judgment.tier != "pass":
+        s["pending_warnings"].append({
+            "step": 5, "phase": "genion",
+            "metric": "net_charge", "observed": net_charge,
+            "cause": judgment.cause, "tier": judgment.tier,
+            "suggested_mutation": judgment.suggested_mutation,
+        })
+    state.write(ws, s)
+    if judgment.tier == "fatal":
+        GW.restore_topology(top)
+        raise RuntimeError(
+            f"genion neutralization gate FATAL: residual net charge "
+            f"{net_charge:+.3f} e after adding {n_na} NA / {n_cl} CL ions "
+            f"(pre-neutralization charge was {initial_net_charge:+.3f} e)"
+        )
+    s = state.read(ws)
     s["current_step"] = 5
     s["last_completed_stage"] = "env"
     state.write(ws, s)

@@ -915,7 +915,7 @@ body.light-theme .chart-card-title {
 }
 .wiz-tab {
   /* [마법사 탭 글자 및 크기 설정] 마법사 탭(Structure, Force Field 등)의 간격과 크기입니다. */
-  flex: 1;                      /* 회색 가로선 길이에 맞게 균등 배분 */
+  flex: 1;                      /* 전체 너비를 탭 개수로 균등 분할 */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1464,11 +1464,16 @@ body.light-theme #ligand-builder-form h2 {
 
 #drop-zone,
 #xvg-drop-zone,
-#mol-upload-container,
-#membrane-drop-zone,
+#membrane-drop-zone {
+  /* [업로드 박스 비율 설정] 단일 박스만 있는 탭은 정사각형(1:1)으로 표시합니다. */
+  aspect-ratio: 1 / 1;
+}
+
+#mol-struct-drop,
+#mol-traj-drop,
 #lb-protein-drop-zone,
 #lb-ligand-drop-zone {
-  /* [업로드 박스 가로세로 비율 설정] 세로 길이를 절반으로 줄이기 위해 비율을 2 / 1로 설정합니다. */
+  /* [업로드 박스 가로세로 비율 설정] 한 화면에 박스가 2개 있는 탭은 2 / 1 비율을 유지합니다. */
   aspect-ratio: 2 / 1;
 }
 
@@ -1528,13 +1533,25 @@ body.light-theme #lb-ligand-drop-zone {
   box-shadow: var(--glow-indigo);
 }
 
-#drop-zone p {
+#drop-zone p,
+#xvg-drop-zone p,
+#mol-struct-drop p,
+#mol-traj-drop p,
+#membrane-drop-zone p,
+#lb-protein-drop-zone p,
+#lb-ligand-drop-zone p {
   font-size: 13px;
   font-weight: 500;
   color: var(--text-primary);
 }
 
-#drop-zone small {
+#drop-zone small,
+#xvg-drop-zone small,
+#mol-struct-drop small,
+#mol-traj-drop small,
+#membrane-drop-zone small,
+#lb-protein-drop-zone small,
+#lb-ligand-drop-zone small {
   font-size: 10px;
   color: var(--text-muted);
 }
@@ -2111,6 +2128,12 @@ body.light-theme #run-search {
 
       <!-- [실행 상세정보] 진행 중이거나 완료된 시뮬레이션의 파이프라인 단계, 실시간 터미널 출력, 분석 차트 등을 모아보는 패널 -->
       <div id="run-view">
+        <!-- Persistent DEMO banner: only shown for the synthetic "Virtual Run" sandbox. Must never be hidden while
+             virtual-sandbox content (mock terminal log, mock charts, mock audit, mock chat) is on screen, so that a
+             screenshot or live demo can never be mistaken for a real simulation result. -->
+        <div id="demo-mode-banner" style="display:none; background:repeating-linear-gradient(45deg, var(--accent-yellow, #f59e0b), var(--accent-yellow, #f59e0b) 12px, #1a1a1a 12px, #1a1a1a 24px); color:#1a1a1a; font-weight:800; font-size:13px; letter-spacing:0.03em; text-align:center; padding:8px 12px; border-radius:var(--radius-sm); margin-bottom:12px;">
+          <span style="background:#fff; color:#7a4a00; padding:2px 10px; border-radius:4px;">⚠ DEMO / SYNTHETIC DATA — NOT A REAL SIMULATION — all charts, audit results and AI chat below are scripted placeholders for UI testing only</span>
+        </div>
         <!-- Stepper -->
         <div id="stepper" class="card" role="progressbar" aria-label="Pipeline progress">
           <div class="step-node done">
@@ -2771,8 +2794,8 @@ body.light-theme #run-search {
             <div style="width: 48px; height: 48px; border-radius: 50%; background: rgba(16, 185, 129, 0.1); display: flex; align-items: center; justify-content: center; color: var(--accent-green);">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
             </div>
-            <h3 style="font-size: 18px; font-weight: 600; color: var(--text-primary);">Virtual Run</h3>
-            <p style="color: var(--text-secondary); font-size: 13px; line-height: 1.4;">Simulate a molecular dynamics execution flow in real-time without physical computation.</p>
+            <h3 style="font-size: 18px; font-weight: 600; color: var(--text-primary);">Virtual Run <span style="font-size: 10px; font-weight: 700; color: var(--accent-yellow, #f59e0b); vertical-align: middle;">DEMO</span></h3>
+            <p style="color: var(--text-secondary); font-size: 13px; line-height: 1.4;">UI-testing sandbox only: plays back a scripted, synthetic MD execution log with fabricated charts/audit/chat. Produces no real simulation data.</p>
           </div>
           <!-- Choice Card 4: Membrane Builder -->
           <div onclick="showMembraneBuilder()" style="flex: 1; min-width: 250px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 24px; cursor: pointer; text-align: center; transition: all 0.3s ease; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; box-shadow: var(--shadow-sm);" onmouseover="this.style.borderColor='var(--accent-cyan)'; this.style.transform='translateY(-4px)'; this.style.background='var(--bg-card-hover)';" onmouseout="this.style.borderColor='var(--border-color)'; this.style.transform='none'; this.style.background='var(--bg-card)';">
@@ -2844,25 +2867,6 @@ body.light-theme #run-search {
                          border:none;border-radius:4px;cursor:pointer;font-size:12px;">Fetch</button>
               </div>
               <div id="mb-protein-info" style="display:none; font-size:11px; color:var(--accent-green); margin-top:10px; font-weight: 600;"></div>
-              
-              <div class="ff-container" style="margin-top: 14px;">
-                <div class="ff-row">
-                  <div class="ff-label-col">
-                    <span class="ff-title">Protein orientation</span>
-                    <div class="tooltip-container" onclick="event.stopPropagation()">
-                      <span class="info-icon">?</span>
-                      <span class="tooltip-text">Method for orienting the protein in the bilayer. Pre-oriented: uses OPM DB coordinates. Auto-orient: packmol-memgen --orient calculates the tilt angle. Manual: preserves the input coordinates as-is.</span>
-                    </div>
-                  </div>
-                  <div class="ff-select-col">
-                    <select id="mb-orientation">
-                      <option value="opm">Pre-oriented (OPM DB)</option>
-                      <option value="auto">Auto-orient (packmol-memgen --orient)</option>
-                      <option value="manual">Manual (no reorientation)</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
             </div>
 
           </div>
@@ -2912,6 +2916,22 @@ body.light-theme #run-search {
           </div>
           <div id="mb-section-3" class="wiz-section">
             <div class="ff-container">
+              <div class="ff-row" id="mb-orientation-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">Protein orientation</span>
+                  <div class="tooltip-container" onclick="event.stopPropagation()">
+                    <span class="info-icon">?</span>
+                    <span class="tooltip-text">Method for orienting the protein in the bilayer. Pre-oriented: uses OPM DB coordinates. Auto-orient: packmol-memgen --orient calculates the tilt angle. Manual: preserves the input coordinates as-is.</span>
+                  </div>
+                </div>
+                <div class="ff-select-col">
+                  <select id="mb-orientation">
+                    <option value="opm">Pre-oriented (OPM DB)</option>
+                    <option value="auto">Auto-orient (packmol-memgen --orient)</option>
+                    <option value="manual">Manual (no reorientation)</option>
+                  </select>
+                </div>
+              </div>
               <div class="ff-row">
                 <div class="ff-label-col">
                   <span class="ff-title">Protein–membrane distance (nm)</span>
@@ -3002,14 +3022,6 @@ body.light-theme #run-search {
           <div id="lb-section-1" class="wiz-section active">
             <div style="display:flex; flex-direction:column; gap:20px;">
               <div>
-                <div style="font-size:12px; font-weight:700; margin-bottom:8px; color:var(--text-primary); border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:4px; display:flex; align-items:center; gap:6px;">
-                  Protein Input
-                  <div class="tooltip-container" onclick="event.stopPropagation()">
-                    <span class="info-icon">?</span>
-                    <span class="tooltip-text">Upload a GROMACS-ready protein structure (.pdb) or fetch one via PDB ID. Files containing explicit hydrogen atoms and crystal waters are recommended for accurate parameterization.</span>
-                  </div>
-                </div>
-
                 <div id="lb-protein-drop-zone"
                   onclick="document.getElementById('lb-protein-file').click()"
                   ondragover="event.preventDefault(); this.style.borderColor='var(--accent-primary)'"
@@ -3039,17 +3051,8 @@ body.light-theme #run-search {
                            border:none;border-radius:4px;cursor:pointer;font-size:12px;">Fetch</button>
                 </div>
               </div>
-              
-              <hr style="border: none; border-top: 1px solid var(--border-color); margin: 4px 0;">
-  
+
               <div>
-                <div style="font-size:12px; font-weight:700; margin-bottom:8px; color:var(--text-primary); border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:4px; display:flex; align-items:center; gap:6px;">
-                  Ligand Input
-                  <div class="tooltip-container" onclick="event.stopPropagation()">
-                    <span class="info-icon">?</span>
-                    <span class="tooltip-text">Upload the small-molecule ligand structure. PDB, MOL2, and SDF formats are accepted. ACPYPE (GAFF2) will automatically generate GROMACS-compatible force field parameters (.itp, .gro, posre).</span>
-                  </div>
-                </div>
                 <div id="lb-ligand-drop-zone"
                   onclick="document.getElementById('lb-ligand-file').click()"
                   ondragover="event.preventDefault(); this.style.borderColor='var(--accent-primary)'"
@@ -3064,37 +3067,10 @@ body.light-theme #run-search {
                 </div>
                 <input type="file" id="lb-ligand-file" accept=".pdb,.mol2,.sdf" onchange="lbHandleLigand(this.files ? this.files[0] : null)" style="display:none;">
                 <div id="lb-ligand-info" style="display:none; font-size:11px; color:var(--accent-green); margin-bottom:12px; font-weight:600;"></div>
-                
-                <div class="ff-container" style="margin-top: 14px;">
-                  <div class="ff-row">
-                    <div class="ff-label-col">
-                      <span class="ff-title">Net charge</span>
-                      <div class="tooltip-container" onclick="event.stopPropagation()">
-                        <span class="info-icon">?</span>
-                        <span class="tooltip-text">Formal (net) charge of the ligand. Required for ACPYPE to assign correct AM1-BCC partial charges. Use 0 for neutral molecules; e.g. +1 for protonated amines, −1 for carboxylates.</span>
-                      </div>
-                    </div>
-                    <div class="ff-select-col">
-                      <input type="number" id="lb-charge" value="0" min="-10" max="10" step="1">
-                    </div>
-                  </div>
-                  <div class="ff-row">
-                    <div class="ff-label-col">
-                      <span class="ff-title">Residue name</span>
-                      <div class="tooltip-container" onclick="event.stopPropagation()">
-                        <span class="info-icon">?</span>
-                        <span class="tooltip-text">Residue name used in the GROMACS topology and .gro file. Up to 3 alphanumeric characters (e.g. LIG, MOL, INH). Must not clash with standard amino acid residue names (GLY, ALA, etc.).</span>
-                      </div>
-                    </div>
-                    <div class="ff-select-col">
-                      <input type="text" id="lb-resname" value="LIG" maxlength="3" style="text-transform:uppercase;">
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
-          
+
           <!-- Section 2 -->
           <div id="lb-section-2" class="wiz-section">
             <div class="ff-container" style="margin-bottom:16px;">
@@ -3111,6 +3087,30 @@ body.light-theme #run-search {
                     <option value="gaff2">GAFF2 (recommended)</option>
                     <option value="gaff">GAFF</option>
                   </select>
+                </div>
+              </div>
+              <div class="ff-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">Net charge</span>
+                  <div class="tooltip-container" onclick="event.stopPropagation()">
+                    <span class="info-icon">?</span>
+                    <span class="tooltip-text">Formal (net) charge of the ligand. Required for ACPYPE to assign correct AM1-BCC partial charges. Use 0 for neutral molecules; e.g. +1 for protonated amines, −1 for carboxylates.</span>
+                  </div>
+                </div>
+                <div class="ff-select-col">
+                  <input type="number" id="lb-charge" value="0" min="-10" max="10" step="1">
+                </div>
+              </div>
+              <div class="ff-row">
+                <div class="ff-label-col">
+                  <span class="ff-title">Residue name</span>
+                  <div class="tooltip-container" onclick="event.stopPropagation()">
+                    <span class="info-icon">?</span>
+                    <span class="tooltip-text">Residue name used in the GROMACS topology and .gro file. Up to 3 alphanumeric characters (e.g. LIG, MOL, INH). Must not clash with standard amino acid residue names (GLY, ALA, etc.).</span>
+                  </div>
+                </div>
+                <div class="ff-select-col">
+                  <input type="text" id="lb-resname" value="LIG" maxlength="3" style="text-transform:uppercase;">
                 </div>
               </div>
             </div>
@@ -3162,11 +3162,11 @@ body.light-theme #run-search {
           <!-- Visualization tabs -->
           <div id="viz-tab-header" style="display:flex;gap:0;border-bottom:1px solid var(--border-color);margin-bottom:16px;flex-shrink:0;">
             <button class="viz-tab active" id="viz-tab-xvg" onclick="switchVizTab('xvg')"
-                    style="flex:1;display:flex;align-items:center;justify-content:center;padding:8px 0;font-size:13px;font-weight:500;background:none;border:none;border-bottom:2px solid var(--accent-cyan);color:var(--accent-cyan);cursor:pointer;transition:all 0.2s;">
+                    style="flex:1;display:flex;align-items:center;justify-content:center;padding:8px 0;font-size:13px;font-weight:500;font-family:inherit;background:none;border:none;border-bottom:2px solid var(--accent-cyan);color:var(--accent-cyan);cursor:pointer;transition:all 0.2s;">
               XVG Plots
             </button>
             <button class="viz-tab" id="viz-tab-3d" onclick="switchVizTab('3d')"
-                    style="flex:1;display:flex;align-items:center;justify-content:center;padding:8px 0;font-size:13px;font-weight:500;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-secondary);cursor:pointer;transition:all 0.2s;">
+                    style="flex:1;display:flex;align-items:center;justify-content:center;padding:8px 0;font-size:13px;font-weight:500;font-family:inherit;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-secondary);cursor:pointer;transition:all 0.2s;">
               3D Viewer
             </button>
           </div>
@@ -3180,8 +3180,8 @@ body.light-theme #run-search {
               <div class="upload-icon">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
               </div>
-              <p style="font-size: 13px; font-weight: 600; color: var(--text-primary);">Visualization Data</p>
-              <small style="color: var(--text-secondary); font-size: 11px;">Support: .xvg (Click to browse)</small>
+              <p>Visualization Data</p>
+              <small>Support: .xvg (Click to browse)</small>
               <div id="selected-xvg-file" style="margin-top: 8px; font-size: 12px; font-weight: 500; color: var(--accent-primary);"></div>
             </div>
             <input type="file" id="xvg-input" accept=".xvg" multiple style="display: none;" onchange="handleXvgFileSelect(this.files)">
@@ -3191,35 +3191,33 @@ body.light-theme #run-search {
             <!-- File upload section -->
             <!-- File upload section -->
             <div id="mol-upload-container">
-              <div style="flex: 1; display: flex; flex-direction: column; gap: 6px; min-height: 0;">
+              <div style="display: flex; flex-direction: column; gap: 6px;">
                 <div id="mol-struct-drop"
                      onclick="document.getElementById('mol-struct-input').click()"
                      ondragover="event.preventDefault(); this.style.borderColor='var(--accent-primary)'"
                      ondragleave="this.style.borderColor=''"
-                     ondrop="event.preventDefault(); this.style.borderColor=''; handleMolStructFile(event.dataTransfer.files[0])"
-                     style="flex: 1; min-height: 0;">
+                     ondrop="event.preventDefault(); this.style.borderColor=''; handleMolStructFile(event.dataTransfer.files[0])">
                   <div class="upload-icon">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
                   </div>
-                  <p style="font-size: 13px; font-weight: 600; color: var(--text-primary);">Structure Configuration</p>
-                  <small style="color: var(--text-secondary); font-size: 11px;">Support: .gro, .pdb (Click to browse)</small>
+                  <p>Structure Configuration</p>
+                  <small>Support: .gro, .pdb (Click to browse)</small>
                 </div>
                 <input type="file" id="mol-struct-input" accept=".gro,.pdb" style="display:none;"
                        onchange="handleMolStructFile(this.files[0])">
               </div>
 
-              <div style="flex: 1; display: flex; flex-direction: column; gap: 6px; min-height: 0;">
+              <div style="display: flex; flex-direction: column; gap: 6px;">
                 <div id="mol-traj-drop"
                      onclick="document.getElementById('mol-traj-input').click()"
                      ondragover="event.preventDefault(); this.style.borderColor='var(--accent-primary)'"
                      ondragleave="this.style.borderColor=''"
-                     ondrop="event.preventDefault(); this.style.borderColor=''; handleMolTrajFile(event.dataTransfer.files[0])"
-                     style="flex: 1; min-height: 0;">
+                     ondrop="event.preventDefault(); this.style.borderColor=''; handleMolTrajFile(event.dataTransfer.files[0])">
                   <div class="upload-icon">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
                   </div>
-                  <p style="font-size: 13px; font-weight: 600; color: var(--text-primary);">Trajectory Configuration</p>
-                  <small style="color: var(--text-secondary); font-size: 11px;">Support: .xtc (Click to browse)</small>
+                  <p>Trajectory Configuration</p>
+                  <small>Support: .xtc (Click to browse)</small>
                 </div>
                 <input type="file" id="mol-traj-input" accept=".xtc" style="display:none;"
                        onchange="handleMolTrajFile(this.files[0])">
@@ -3768,25 +3766,6 @@ function wizardBack() {
   if (prev !== _wizardStep) _wizardShowStep(prev);
 }
 
-#ff-manager-btn {
-  transition: transform 0.2s ease, color 0.2s ease;
-}
-#ff-manager-btn:hover {
-  color: var(--accent-primary) !important;
-  transform: scale(1.15);
-}
-.ff-tab.active {
-  border-bottom-color: var(--accent-primary) !important;
-  color: var(--accent-primary);
-  font-weight: 600;
-}
-#ff-drop-zone.dragover {
-  border-color: var(--accent-primary);
-  background: color-mix(in srgb, var(--accent-primary) 8%, transparent);
-}
-</style>
-</head>
-<body>
 
 function _wizardCollectConfig() {
   const ff    = document.getElementById('forcefield-select')?.value || '';
@@ -4447,6 +4426,8 @@ async function selectRun(runId, reconnectWs = true) {
   document.getElementById('ligand-builder-view').style.display = 'none';
   _setTypeSwitcher(null);
   document.getElementById('run-view').style.display = 'flex';
+  const _demoBanner = document.getElementById('demo-mode-banner');
+  if (_demoBanner) _demoBanner.style.display = 'none';
 
   try {
     const resp = await fetch(`/api/runs/${runId}`);
@@ -5652,6 +5633,8 @@ function startVirtualRun() {
   _setTypeSwitcher(null);
   document.getElementById('run-view').style.display = 'flex';
   document.getElementById('view-title').textContent = 'Simulation: [VIRTUAL RUN] 1AKI (Lysozyme)';
+  const demoBanner = document.getElementById('demo-mode-banner');
+  if (demoBanner) demoBanner.style.display = '';
 
   // Reset Stepper
   updateStepper({ last_completed_stage: 'none', status: 'running', current_step: 1 });
@@ -5776,7 +5759,8 @@ function startVirtualRun() {
           auditPanel.style.display = '';
           if (auditBadge) auditBadge.style.background = 'var(--accent-green)';
           auditContent.innerHTML = `
-            <div style="margin-bottom:10px; font-size:11px; color:var(--text-muted);">Tutorial: <strong style="color:var(--text-primary)">Lysozyme in Water</strong> — 4 passed, 0 failed</div>
+            <div style="margin-bottom:6px; font-size:10px; font-weight:700; color:var(--accent-yellow, #f59e0b); text-transform:uppercase; letter-spacing:0.04em;">⚠ Synthetic demo data — not from a real audit run</div>
+            <div style="margin-bottom:10px; font-size:11px; color:var(--text-muted);">Tutorial: <strong style="color:var(--text-primary)">Lysozyme in Water</strong> (demo) — 4 passed, 0 failed</div>
             <div style="display:flex; align-items:baseline; gap:8px; padding:5px 0; border-bottom:1px solid var(--border-color);">
               <span style="color:var(--accent-green); font-weight:700; width:14px; flex-shrink:0;">✓</span>
               <span style="color:var(--text-secondary); width:110px; flex-shrink:0;">Forcefield</span>
@@ -5823,13 +5807,14 @@ function startVirtualRun() {
   ];
 
   mockDialogue.forEach(({ delay, text }) => {
+    const demoText = '[DEMO — synthetic, scripted dialogue, not a real AI response] ' + text;
     const t = setTimeout(() => {
       if (terminalMode === 'chat') {
-        _addChatBubble(text);
+        _addChatBubble(demoText);
       } else {
         // Store for when user switches to chat mode
         const container = document.getElementById('chat-messages');
-        if (container) container.appendChild(_makeBubble(text));
+        if (container) container.appendChild(_makeBubble(demoText));
       }
     }, delay);
     _virtualRunTimeouts.push(t);
@@ -5963,6 +5948,7 @@ function _mbRenderSummary() {
 function toggleMbProtein() {
   const memOnly = document.getElementById('mb-membrane-only').checked;
   document.getElementById('mb-protein-inputs').style.display = memOnly ? 'none' : '';
+  document.getElementById('mb-orientation-row').style.display = memOnly ? 'none' : '';
 }
 
 async function mbFetchPDB() {

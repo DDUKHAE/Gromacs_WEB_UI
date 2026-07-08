@@ -3,8 +3,18 @@
 이 문서는 LLM 에이전트(`AGENTS.md` 참조)가 GROMACS를 자율적으로 운용하기 위한 **파이프라인 지도**입니다.
 단백질-수용액 시스템을 기준으로, 각 Step의 명령어/입력/출력/상태 변화를 정의하며 에이전트는 이 문서를 나침반 삼아 단계를 진행합니다.
 
-> **하네스 연동 규칙:** 각 Step 실행 시 `skills/gmx-executor/SKILL.md`의 `GmxExecutor`를 호출하고,
-> Step 완료 후 `skills/system-validator/SKILL.md`의 `SystemValidator`로 결과를 검증해야 합니다.
+> **참고 (2026-05-14 이후 현재 구조):** 아래 `GmxExecutor`/`SystemValidator`/`MdpComposer`/
+> `TrajectoryAnalyzer`는 설계 당시의 개념적 스킬 이름이며, `skills/gmx-executor/SKILL.md`·
+> `skills/system-validator/SKILL.md` 같은 개별 디렉터리는 현재 코드에 존재하지 않습니다.
+> 실제로는 3-스킬 구조로 통합되어 있습니다: `skills/env_builder/`(Step 0–5),
+> `skills/md_runner/`(Step 6–7, 검증 게이트 `lib/validators.py` 직접 호출),
+> `skills/illustrator/`(Step 8). 최신 스킬 매핑은 루트 `ARCHITECTURE.md` §7과
+> `skills/SKILLS_OVERVIEW.md`를 참조. 아래 Step 0–8 명령어/입출력 매핑 자체(섹션 3)는
+> 여전히 유효합니다 — 바뀐 것은 이를 호출하는 스킬 계층의 이름과 구조입니다.
+
+> **하네스 연동 규칙 (개념 원안, 위 참고 참조):** 각 Step 실행 시 `GmxExecutor` 역할(현재
+> `lib/gmx_wrapper.py`)을 호출하고, Step 완료 후 `SystemValidator` 역할(현재
+> `lib/validators.py`)로 결과를 검증해야 합니다.
 
 ## 1. 시스템 워크플로우 개요 (System Workflow)
 
@@ -159,7 +169,13 @@ Pipeline_Steps:
 
 ## 4. 하네스 연동 요약 (Harness Integration Summary)
 
-| Step | Action | 사용 Skill | 참조 Doc |
+> 아래 표의 `GmxExecutor`/`StateManager`/`MdpComposer`/`SystemValidator`/`TrajectoryAnalyzer`는
+> 개념적 역할 이름입니다. 현재 코드에서 Step 0–5는 `skills/env_builder/`, Step 6–7은
+> `skills/md_runner/`, Step 8은 `skills/illustrator/`가 이 역할들을 `lib/gmx_wrapper.py`,
+> `lib/state.py`, `lib/mdp_templates/`, `lib/validators.py`, `lib/xvg_parser.py`를 직접
+> 호출해 수행합니다. 참조 Doc 열의 파일명들도 현재 문서 트리와 다를 수 있습니다(§2 참조).
+
+| Step | Action | 사용 Skill (개념적 역할) | 참조 Doc |
 |---|---|---|---|
 | 0 | Pre-flight | `GmxExecutor` + `StateManager` | - |
 | 1 | Topology Generation | `GmxExecutor` + `StateManager` | `force_field_guide.md` |
