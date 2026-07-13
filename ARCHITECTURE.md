@@ -31,7 +31,14 @@ Step numbering is immutable. Tutorial variants may change implementation details
 
 ## 4. Tutorial-Guided Autonomy Layer
 
-### 4.1 Routing and Planning Chain
+### 4.1 Routing and Planning Chain (historical — replaced, see §7)
+
+The three-stage `TutorialRouter` / `TutorialPlanner` / `ProtocolCompiler`
+chain described below was the *original* design and is **no longer
+present in the code**. It is kept here only for historical context;
+do not treat it as current behavior. The routing/planning role it
+described is now performed by `lib/tutorial_registry.py`, invoked
+directly from the `env-builder` skill — see §7.
 
 1. `TutorialRouter`: choose tutorial family and report missing inputs
 2. `TutorialPlanner`: map selected tutorial to Step 0-8 plan with state/validator requirements
@@ -56,7 +63,7 @@ Step numbering is immutable. Tutorial variants may change implementation details
 
 - Step 3 and Step 5 must backup `topol.top` and support rollback on retry.
 - Retry max is 3; each retry must mutate parameters/flags and command configuration.
-- `SystemValidator` gate is required after Step 1-7.
+- A validator gate is required after Step 1-7. There is no separate `SystemValidator` skill/class in the current code (that name is historical, see §4.1); the gate is `lib/validators.py`'s `judge_*` functions, called directly from `skills/env_builder/env_builder.py` and `skills/md_runner/md_runner.py`.
 - Step 8 analysis must use `TrajectoryAnalyzer` downsampled outputs.
 
 ## 6. Immediate FAIL Conditions

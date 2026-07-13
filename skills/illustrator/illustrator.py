@@ -397,17 +397,32 @@ import sys as _sys
 def plot_xvg(xvg_path: Path, output_path: Path, title: str = "") -> Path:
     import matplotlib
     matplotlib.use("Agg")
+    import sys as _sys_path
+    _sys_path.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+    try:
+        from _pubstyle import apply_style
+        apply_style()
+    except ImportError:
+        matplotlib.rcParams.update({"figure.dpi": 300, "savefig.dpi": 300})
     import matplotlib.pyplot as plt
     data = xvg_parser.parse(xvg_path, max_points=2000)
-    fig, ax = plt.subplots(figsize=(8, 5))
+    fig, ax = plt.subplots(figsize=(6, 3.5))
     cols = data["columns"]
+    legends = data.get("column_labels") or []
     if len(cols) >= 2:
-        ax.plot(cols[0], cols[1])
-    ax.set_xlabel(data["xaxis_label"])
-    ax.set_ylabel(data["yaxis_label"])
+        x = cols[0]
+        series = cols[1:]
+        for i, y in enumerate(series):
+            label = legends[i] if i < len(legends) and legends[i] else (f"series {i + 1}" if len(series) > 1 else None)
+            ax.plot(x, y, linewidth=1.0, label=label)
+        if len(series) > 1:
+            ax.legend(loc="best", frameon=False)
+    ax.set_xlabel(data["xaxis_label"] or "x")
+    ax.set_ylabel(data["yaxis_label"] or "y")
     ax.set_title(title or data["title"] or xvg_path.stem)
+    ax.grid(True, linewidth=0.4, alpha=0.4)
     fig.tight_layout()
-    fig.savefig(output_path, dpi=120)
+    fig.savefig(output_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
     return output_path
 

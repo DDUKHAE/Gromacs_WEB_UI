@@ -50,7 +50,7 @@ PDB       Force    박스      이온     시뮬레이션  검토 &
 업로드    Field             설정     (Expert)    시작
 ```
 
-마법사가 생성한 `system_config.json`을 LLM이 반드시 따라야 하는 설정으로 주입합니다. Force field, Water model, Box 형태·크기, 이온 종류·농도를 기본 파라미터로 설정하며, Expert 모드에서는 온도, 압력, 시뮬레이션 시간, Thermostat, Barostat까지 제어할 수 있습니다. 설정을 프리셋으로 저장해 다음 런에서 바로 불러올 수 있으며, 런 완료 후 `/api/runs/{id}/audit` 엔드포인트에서 LLM이 Builder 설정을 실제로 준수했는지 확인할 수 있습니다.
+마법사가 생성한 `system_config.json`은 LLM 프롬프트에 "반드시 따라야 할 제약"으로 주입되지만, 이는 프롬프트 상의 지시일 뿐 프로그램적으로 강제되지는 않습니다. Force field, Water model, Box 형태·크기, 이온 종류·농도를 기본 파라미터로 설정하며, Expert 모드에서는 온도, 압력, 시뮬레이션 시간, Thermostat, Barostat까지 제어할 수 있습니다. 설정을 프리셋으로 저장해 다음 런에서 바로 불러올 수 있으며, 런 완료 후 `/api/runs/{id}/audit` 엔드포인트(`lib/system_config_validator.py`)는 이 중 **3개 파라미터**(force field 접두사, water model, box type)만 `state.json` 기록값과 비교해 pass/fail을 보고합니다. mdp 파라미터(온도·압력·dt·thermostat/barostat 선택), 이온 농도, 양성자화 상태는 감사되지 않으며, 이 3개 항목 밖에서 LLM이 지시를 이탈해도 이를 막는 구조적 장치는 없습니다. [Limitations](#limitations-한계) 참고.
 
 ### 지원 LLM
 
@@ -389,6 +389,20 @@ python -c "from lib.tutorial_registry import load_manifest; print(load_manifest(
 | [`docs/runbook.md`](docs/runbook.md)                                         | 수동 복구 절차                     |
 | [`docs/tutorial/LLM_TUTORIAL_GUIDE.md`](docs/tutorial/LLM_TUTORIAL_GUIDE.md) | 튜토리얼 라우팅 결정 트리          |
 | [`TESTING_WITH_TUTORIAL_DATA.md`](TESTING_WITH_TUTORIAL_DATA.md)             | 튜토리얼 데이터 회귀 테스트 가이드 |
+
+---
+
+## Limitations (한계)
+
+이 절은 이 코드베이스의 자동 검증이 실제로 무엇을 커버하고 무엇을 커버하지 않는지 정확히 명시합니다. 이 README의 다른 곳에 이보다 더 강하게 들리는 표현이 있다면, 범위가 다르다는 뜻이 아니라 문구가 부정확한 것으로 간주해 주세요.
+
+- **Config audit는 3개 파라미터만 검사하며 "런 전체"를 검증하지 않습니다.** `lib/system_config_validator.py::validate_run_against_config`는 force field 접두사, water model, box type만 `state.json`과 비교합니다. mdp 파라미터(온도·압력·`dt`·thermostat/barostat 선택·cutoff), 이온 농도, 양성자화 상태는 검사하지 않습니다 — LLM 에이전트가 이 값들을 몰래 바꿔도 감사는 3개 항목에서만 pass를 보고합니다. `lib/system_config.py`가 생성하는 제약 프롬프트("MUST FOLLOW")는 어디까지나 LLM 지시문에 삽입되는 조언 텍스트이며, 위 3개 항목 감사 외에는 프로그램적 강제가 없습니다.
+- **LLM의 프로토콜 이탈 전반에 대한 구조적 방어는 없습니다.** `run_llm_agent`(`web/llm_runner.py`)는 PTY 출력과 종료코드만 기록하며, 에이전트가 튜토리얼이 의도한 명령을 실제로 실행했는지, 의도한 mdp 값을 썼는지, "완료" 상태를 조작하지 않았는지는 검증하지 않습니다. 실제로 실행되는 물리 검증은 `lib/validators.py`의 단계별 게이트(중성화·밀도·에너지 드리프트·RMSD 평탄화)뿐이며, 이 게이트들이 측정하지 않는 것은 검증되지 않습니다.
+- **에너지 드리프트 게이트는 거칠고 시스템 크기로 정규화되지 않습니다.** `_judge_energy_drift`(`skills/md_runner/md_runner.py`)는 **전체(total)** 에너지의 시뮬레이션 시간(ns) 대비 선형회귀 기울기를 계산합니다(이전의 "퍼텐셜 에너지 ÷ 프레임 수" 버그는 수정됨). pass/warning/retryable 임계값(`lib/validators.py`의 `ENERGY_DRIFT_WARNING`/`ENERGY_DRIFT_RETRY`)은 고정된 절대 kJ/mol/ns 값이며 원자 수로 정규화되지 않습니다 — 같은 원자당 안정성이라도 큰 용매화 시스템은 작은 시스템보다 절대 에너지 변동이 크게 나타납니다. 이 게이트는 정밀 진단이 아니라 명백한 적분 불안정을 걸러내는 거친 필터입니다.
+- **밀도 게이트는 단일 벌크 밀도가 물리적으로 의미 있는 계에만 적용됩니다.** 막(membrane), biphasic 등 단일상 수용성 벌크가 아닌 계에서는 게이트가 건너뛰어집니다(`skills/md_runner/md_runner.py`의 `_density_expected_range`, `density_gate_not_applicable_for_system_type`로 pass 처리).
+- **런 재현성/프로버넌스 기록이 없습니다.** `nvt.mdp`는 `gen_seed = -1`(비재현 초기 속도)을 사용하며, `state.json`에는 `gmx` 바이너리 버전, mdp 파일 해시, 실제 사용된 시드가 기록되지 않습니다. 동일 튜토리얼의 두 런이 동일하거나 통계적으로 동등함이 보장되거나 검증되지 않습니다. 이 프로버넌스 기록은 계획 중이나 아직 구현되지 않았습니다.
+- **분석 결과에 불확실도 정량화가 없습니다.** RMSD/RMSF/Rg/SASA/에너지 요약(`lib/xvg_parser.py`)은 궤적에 대한 원시 평균/표준편차이며, 블록 평균·자기상관 시간 추정·신뢰구간이 없습니다.
+- **막/단백질-리간드 분석 2종은 스텁입니다.** `_run_membrane_analysis`, `_run_protein_ligand_analysis`(`skills/illustrator/illustrator.py`)는 `{"status": "stub"}`만 반환합니다 — 해당 튜토리얼 변형에 대한 이중층 두께/면적당지질/order parameter 또는 리간드 RMSD/접촉맵 출력이 아직 없습니다.
 
 ---
 

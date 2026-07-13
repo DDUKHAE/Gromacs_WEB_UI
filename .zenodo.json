@@ -1,23 +1,35 @@
 {
   "title": "GROMACS Web UI: An LLM-Guided Web Interface for Autonomous MD Simulation",
-  "description": "A FastAPI + vanilla JS web application that uses LLMs (Claude, Codex, Gemini) to autonomously execute GROMACS simulation tutorials via a skills-based pipeline (env-builder, md-runner, illustrator). Supports 8 tutorial systems including Lysozyme, KALP15 membrane, Protein-Ligand, Umbrella Sampling, and Free Energy Perturbation.",
+  "description": "A FastAPI + vanilla JS web application that uses LLM agents (Claude, Codex, Gemini) to autonomously execute GROMACS simulation tutorials via a skills-based pipeline (env-builder, md-runner, illustrator), with live command-execution transparency and tutorial-grounded guidance. Supports 8 tutorial systems including Lysozyme, KALP15 membrane, Protein-Ligand, Umbrella Sampling, and Free Energy Perturbation.",
   "upload_type": "software",
   "license": "MIT",
   "keywords": [
     "GROMACS",
     "molecular dynamics",
     "LLM",
+    "LLM agent",
     "large language model",
     "web interface",
+    "autonomous simulation",
     "CHARMM-GUI",
-    "free energy",
-    "membrane simulation"
+    "free energy perturbation",
+    "membrane simulation",
+    "Python"
   ],
   "creators": [
     {
-      "name": "Author, Name",
-      "affiliation": "Institution"
+      "name": "FIXME-AUTHOR-FAMILY-NAME, FIXME-AUTHOR-GIVEN-NAME",
+      "affiliation": "FIXME-INSTITUTION",
+      "orcid": "FIXME-ORCID"
     }
   ],
-  "related_identifiers": []
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/DDUKHAE/Gromacs_WEB_UI",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    }
+  ],
+  "access_right": "open",
+  "language": "eng"
 }

@@ -25,6 +25,9 @@ def assert_ready(workspace_dir: Path) -> dict[str, Any]:
     for fname in REQUIRED_FILES:
         if not (ws / "stage1_env" / fname).exists():
             raise StateContractError(f"missing stage1 file: {fname}")
+    # Idempotent: also covers workspaces entered directly at md_runner
+    # (independent_entry_guide.md) where env_builder never ran Step 0.
+    state.capture_provenance(ws)
     return s
 
 
@@ -59,11 +62,39 @@ PHASE_TO_STATE_KEY = {
 }
 
 
+_GROMPP_WARNING_RE = re.compile(r"^WARNING\s+\d+\s+\[.*", re.MULTILINE)
+_GEN_SEED_RE = re.compile(r"gen_seed\s*=\s*(-?\d+)")
+
+
+def _record_grompp_warnings(ws: Path, phase: str, combined_output: str) -> None:
+    """Log any grompp WARNING blocks into state so suppressed (-maxwarn)
+    warnings remain auditable in the run record instead of silently vanishing."""
+    warnings = [m.group(0).strip() for m in _GROMPP_WARNING_RE.finditer(combined_output)]
+    if not warnings:
+        return
+    s = state.read(ws)
+    step7 = s["step_outputs"].setdefault("step_7", {})
+    log = step7.setdefault("grompp_warnings", {})
+    log[phase] = warnings
+    state.write(ws, s)
+
+
 def run_phase(workspace_dir: Path, phase: str,
               overrides: dict[str, Any] | None = None) -> None:
     ws = Path(workspace_dir)
     out_dir = ws / "stage2_md"
-    mdp_path = MDP.render(phase, overrides or {}, output_dir=out_dir)
+    render_overrides = dict(overrides or {})
+    if "has_protein" not in render_overrides and "tc_grps" not in render_overrides:
+        s_for_render = state.read(ws)
+        render_overrides["has_protein"] = (
+            s_for_render.get("tutorial") or {}
+        ).get("has_protein", True)
+    mdp_path = MDP.render(phase, render_overrides, output_dir=out_dir)
+    state.record_mdp_hash(ws, phase, mdp_path)
+    if phase == "nvt":
+        seed_match = _GEN_SEED_RE.search(mdp_path.read_text())
+        if seed_match:
+            state.record_seed(ws, phase, int(seed_match.group(1)))
     in_dir_rel, in_gro = PHASE_INPUT_GRO[phase]
     in_gro_path = ws / in_dir_rel / in_gro
     top_path = ws / "stage1_env" / "topol.top"
@@ -72,9 +103,10 @@ def run_phase(workspace_dir: Path, phase: str,
         ["grompp", "-f", mdp_path.name,
          "-c", str(in_gro_path),
          "-p", str(top_path),
-         "-o", tpr_path.name, "-maxwarn", "2"],
+         "-o", tpr_path.name, "-maxwarn", "1"],
         cwd=out_dir,
     )
+    _record_grompp_warnings(ws, phase, grompp_result.stdout + grompp_result.stderr)
     if not grompp_result.ok:
         raise RuntimeError(
             f"grompp ({phase}) failed [{grompp_result.classification}]: "
@@ -308,21 +340,71 @@ def _judge_temperature(ws: Path, phase: str) -> V.Judgment:
     return V.judge_temperature(observed=summary["mean"], target=300.0)
 
 
+# Expected bulk-density ranges (kg/m^3) by tutorial pipeline variant. `None`
+# means "skip the density gate" — the system is not a single-phase aqueous
+# bulk, so a single expected-density window does not apply (e.g. membranes
+# have a heterogeneous lipid/water density profile; biphasic systems have an
+# immiscible interface with no single bulk density).
+DENSITY_RANGE_BY_VARIANT: dict[str, tuple[float, float] | None] = {
+    "protein_aqueous_standard": (995.0, 1005.0),
+    "protein_ligand_complex": (995.0, 1005.0),
+    "umbrella_sampling": (995.0, 1005.0),
+    "free_energy_alchemical": (995.0, 1005.0),
+    "membrane_md_standard": None,
+    "biphasic_system": None,
+    "virtual_sites_topology": None,
+}
+
+
+def _density_expected_range(ws: Path) -> tuple[float, float] | None:
+    s = state.read(ws)
+    variant = (s.get("tutorial") or {}).get("variant")
+    if variant in DENSITY_RANGE_BY_VARIANT:
+        return DENSITY_RANGE_BY_VARIANT[variant]
+    return (995.0, 1005.0)  # unknown variant: default to water-like assumption
+
+
 def _judge_density(ws: Path, phase: str) -> V.Judgment:
+    expected_range = _density_expected_range(ws)
+    if expected_range is None:
+        return V.Judgment(tier="pass", metric="density",
+                           cause="density_gate_not_applicable_for_system_type")
     xvg = _gmx_energy(ws, phase, "Density", f"{phase}_dens.xvg")
     summary = xvg_parser.summary(xvg)
     if summary["count"] == 0:
         return V.Judgment(tier="pass", metric="density")
     return V.judge_density(observed=summary["mean"],
-                           expected_range=(995.0, 1005.0))
+                           expected_range=expected_range)
+
+
+def _linregress_slope_per_ns(time_ps: list[float], y: list[float]) -> float:
+    """Linear-regression slope of y vs time (time_ps assumed in ps, as
+    reported by `gmx energy`), returned in units of [y] per ns."""
+    if len(time_ps) < 2:
+        return 0.0
+    time_ns = [t / 1000.0 for t in time_ps]
+    n = len(time_ns)
+    mean_x = sum(time_ns) / n
+    mean_y = sum(y) / n
+    num = sum((x - mean_x) * (yy - mean_y) for x, yy in zip(time_ns, y))
+    den = sum((x - mean_x) ** 2 for x in time_ns)
+    if den == 0:
+        return 0.0
+    return num / den
 
 
 def _judge_energy_drift(ws: Path, phase: str) -> V.Judgment:
-    xvg = _gmx_energy(ws, phase, "Potential", f"{phase}_pot.xvg")
+    # Total energy (kinetic + potential), not potential alone, is the
+    # quantity whose long-term drift indicates integrator instability.
+    xvg = _gmx_energy(ws, phase, "Total-Energy", f"{phase}_total.xvg")
     summary = xvg_parser.summary(xvg)
     if summary["count"] < 2:
         return V.Judgment(tier="pass", metric="energy_drift")
-    slope = (summary["last"] - summary["first"]) / max(1, summary["count"])
+    # Slope of total energy (kJ/mol) vs simulation time (ns), via linear
+    # regression over the full series (not just first/last frame count).
+    parsed = xvg_parser.parse(xvg, max_points=100000)
+    cols = parsed["columns"]
+    slope = _linregress_slope_per_ns(cols[0], cols[1])
     return V.judge_energy_drift(slope_per_ns=slope)
 
 

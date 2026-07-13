@@ -16,6 +16,7 @@
 | `retry_history` | array | 실패/재시도 엔트리 |
 | `pending_warnings` | array | 사용자 결정 대기 WARNING 페이로드 |
 | `topology_backups` | array<string> | `.top.bak` 상대경로 누적 |
+| `provenance` | object | 재현성 메타데이터 (`gmx_version`, mdp 해시, 시드 등) — 아래 §3.1 참조 |
 
 ## 2. `tutorial` 객체
 
@@ -40,6 +41,51 @@
 ```
 
 `env-builder.collect_hardware()`가 Step 0에서 채운다. `gpu_ids`는 `nvidia-smi` 부재 시 `[]`.
+
+## 3.1 `provenance` 객체 (Task B5)
+
+각 런의 재현에 필요한 메타데이터. `lib.state.initial()`이 빈 骨格을 만들고,
+`env-builder`/`md-runner`가 실행 중 채운다. 필드가 채워지지 않을 이유(예:
+`gmx` 미설치)가 있으면 크래시 대신 `null`을 남긴다 — provenance 캡처는 절대
+파이프라인을 실패시키지 않는다.
+
+```json
+{
+  "gmx_version": "2023.3",
+  "platform": "Linux-5.4.0-144-generic-x86_64-with-glibc2.35",
+  "force_field": "charmm36",
+  "mdp_hashes": {
+    "ions": "3f8b1c...(sha256 hex, 64 chars)",
+    "em":   "a1c9de...",
+    "nvt":  "902fbe...",
+    "npt":  "77aa10...",
+    "production": "c4d001..."
+  },
+  "seed": {
+    "nvt": 20240101
+  }
+}
+```
+
+| 키 | 타입 | 설명 |
+|---|---|---|
+| `gmx_version` | string \| null | `gmx --version`의 `GROMACS version:` 라인 파싱 결과 (`lib.gmx_wrapper.get_version`). `gmx` 바이너리 부재/응답없음 시 `null` — 크래시하지 않음 |
+| `platform` | string \| null | `platform.platform()` 산출 OS/아키텍처 문자열 |
+| `force_field` | string \| null | Step 1(`pdb2gmx`)에 실제 사용된 포스필드 이름 (`lib.state.record_force_field`) |
+| `mdp_hashes` | object<string, string> | 렌더링된 `.mdp` 파일의 sha256 hex digest, phase(`ions`/`em`/`nvt`/`npt`/`production`/`umbrella`/`free_energy`)로 키잉 (`lib.state.record_mdp_hash`). 동일 입력(overrides) → 동일 해시 → 결정론적 재현성 증거 |
+| `seed` | object<string, int> | 실제 렌더링된 mdp에서 사용된 `gen_seed` 값, phase로 키잉 (`lib.state.record_seed`). 현재는 `nvt`만 `gen_vel`을 사용하므로 채워짐 |
+
+**시드 처리 / 재현 모드:** 프로덕션 기본값은 `gen_seed = -1`(GROMACS가 매번
+새 난수 시드 사용 — 통계적으로 독립적인 반복실행에는 정확하지만 비트단위
+재현은 불가). 호출자가 `lib.mdp_templates.base.render("nvt", {"reproducible_mode": True}, ...)`
+로 렌더링하면 고정 시드 `lib.mdp_templates.base.REPRODUCIBLE_SEED`(`20240101`)가
+기록되고 mdp에 박힌다. 명시적으로 `gen_seed=<int>`를 넘기면 `reproducible_mode`
+보다 우선한다. 어느 경로든 실제 사용된 값이 `provenance.seed`에 남는다.
+
+**감사 추적:** mdp·명령 트레이스는 이미 `stage2_md/<phase>_progress.log`
+(mdrun 실시간 로그) + `step_outputs.step_7.grompp_warnings`(억제된 grompp
+WARNING)로 남는다. `provenance.mdp_hashes`는 이를 대체하지 않고, "어떤 mdp
+내용이 실제로 grompp에 들어갔는지"를 해시로 고정해 보강한다.
 
 ## 4. `step_outputs` 객체
 

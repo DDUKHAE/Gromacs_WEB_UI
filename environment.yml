@@ -1,0 +1,30 @@
+# Reproducible conda environment for the GROMACS Web UI harness.
+#
+# GROMACS is only reliably distributed via conda-forge, so this conda spec is
+# the primary reproducible install path (no container is used). This file is
+# the human-editable spec with version floors; two pinned locks are exported
+# from the built environment for stricter reproducibility:
+#   - environment.lock.yml  (conda env export --no-builds; pinned, cross-platform)
+#   - environment.lock.txt  (conda list --explicit; exact URLs, linux-64)
+# The pip layer is additionally pinned in requirements.lock. Keep the Python
+# deps below in sync with requirements.txt / pyproject.toml — update together.
+#
+# Usage:
+#   conda env create -f environment.yml
+#   conda activate gromacs_web
+#   pip install -e .
+#   python scripts/check_gromacs_env.py
+#   python main.py
+name: gromacs_web
+channels:
+  - conda-forge
+dependencies:
+  - python=3.13
+  - gromacs=2026.0
+  - pip
+  - pip:
+      - fastapi>=0.111
+      - uvicorn[standard]>=0.30
+      - python-multipart>=0.0.9
+      - matplotlib>=3.8
+      - propka>=3.5

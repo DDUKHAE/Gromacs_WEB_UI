@@ -47,7 +47,7 @@ PDB       Force    Box      Ions     Simulation  Review &
 Upload    Field             Settings (Expert)    Start
 ```
 
-The wizard generates a `system_config.json` that the LLM must follow exactly. Parameters include force field, water model, box type, edge distance, salt type & concentration, and (in Expert mode) temperature, pressure, simulation time, thermostat, and barostat. Configurations can be saved as named presets and reloaded across runs. After a run completes, the audit endpoint (`/api/runs/{id}/audit`) reports which parameters the LLM actually used versus the builder's constraints.
+The wizard generates a `system_config.json` that is injected into the LLM prompt as a constraint the agent is instructed to follow. Parameters include force field, water model, box type, edge distance, salt type & concentration, and (in Expert mode) temperature, pressure, simulation time, thermostat, and barostat. Configurations can be saved as named presets and reloaded across runs. After a run completes, the audit endpoint (`/api/runs/{id}/audit`, backed by `lib/system_config_validator.py`) checks **3 of those parameters** — force field prefix, water model, and box type — against what the run's `state.json` actually recorded, and reports pass/fail per key. It does not check mdp parameters (temperature, pressure, dt, thermostat/barostat choice), ion concentration, or protonation state; there is no programmatic block on the LLM deviating from the prompt outside those 3 keys. See [Limitations](#limitations).
 
 ### Supported LLMs
 
@@ -78,7 +78,7 @@ Claude Code, OpenAI Codex CLI, and Gemini CLI are supported. Each is spawned as 
 | ------------------ | ---------------------------------------------------------------------------------------------------------------- |
 | Python 3.13        | Web server runtime (FastAPI + uvicorn)                                                                           |
 | GROMACS 2026.0     | All pipeline stages — topology, solvation, equilibration, production run, analysis                               |
-| `requirements.txt` | REST API · WebSocket server + trajectory analysis plots (`fastapi`, `uvicorn`, `python-multipart`, `matplotlib`) |
+| `requirements.txt` | REST API · WebSocket server + trajectory analysis plots + PDB protonation state prediction (`fastapi`, `uvicorn`, `python-multipart`, `matplotlib`, `propka`) |
 
 ### Optional
 
@@ -215,6 +215,60 @@ python main.py --port 8080   # custom port
 python main.py --listen      # bind to 0.0.0.0 for LAN access
 python main.py --no-browser  # suppress automatic browser launch
 ```
+
+---
+
+## Reproducible environment (conda)
+
+GROMACS is only reliably distributed via conda-forge, so a **conda environment
+is the single reproducible install path** for this project. Three checked-in
+files support it at increasing levels of strictness:
+
+| File | Purpose | Reproducibility |
+| ---- | ------- | --------------- |
+| `environment.yml` | Human-editable spec (GROMACS + Python deps, version floors) | Loose — resolves latest compatible |
+| `environment.lock.yml` | `conda env export --no-builds` of the reference env (exact versions, cross-platform) | Strong — pinned versions |
+| `environment.lock.txt` | `conda list --explicit` of the reference env (exact package URLs, `linux-64`) | Strongest — byte-identical on `linux-64` |
+
+`requirements.txt` and `pyproject.toml` are kept in sync (`fastapi`,
+`uvicorn[standard]`, `python-multipart`, `matplotlib`, `propka`) so either
+`pip install -r requirements.txt` or `pip install -e .` yields the same Python
+dependency set; `requirements.lock` is a pinned, hash-locked resolution of the
+pip layer.
+
+### Create the environment
+
+```bash
+# Spec (recommended for most users — latest compatible versions)
+conda env create -f environment.yml
+
+# — or — reproduce the exact reference environment:
+conda env create -f environment.lock.yml           # any platform, pinned versions
+conda create --name gromacs_web --file environment.lock.txt   # linux-64, exact build
+
+conda activate gromacs_web
+pip install -e .                     # install this package into the env
+python scripts/check_gromacs_env.py  # verify gmx + optional tools
+python main.py --listen --no-browser
+```
+
+The reference environment pins **GROMACS 2026.0** and **Python 3.13**.
+
+### Regenerating the locks
+
+After changing `environment.yml` and rebuilding the env, refresh the locks so
+they track the working environment:
+
+```bash
+conda env export -n gromacs_web --no-builds | grep -v '^prefix:' > environment.lock.yml
+conda list -n gromacs_web --explicit > environment.lock.txt
+```
+
+**LLM CLIs are intentionally not part of the environment.** Claude Code, Codex
+CLI, and Gemini CLI require an authenticated login and are not redistributable
+via conda/pip; install them separately (see the LLM CLI notes above) for
+orchestrated execution, or use the direct, non-LLM path (`web/runner.py`)
+without them.
 
 ---
 
@@ -371,8 +425,29 @@ python -c "from lib.tutorial_registry import load_manifest; print(load_manifest(
 
 ---
 
+## Limitations
+
+This section states, precisely, what the automated checks in this codebase do and do not cover. Treat any claim elsewhere in this README that appears stronger than what's below as imprecise wording, not a different scope of behavior.
+
+- **Config audit checks 3 parameters, not "the run."** `lib/system_config_validator.py::validate_run_against_config` compares only force field prefix, water model, and box type against `state.json`. It does not check mdp parameters (temperature, pressure, `dt`, thermostat/barostat choice, cutoffs), ion concentration, or protonation state — an LLM agent can silently change any of those and the audit will still report pass on the 3 keys it does check. The constraint prompt built by `lib/system_config.py` is advisory text ("MUST FOLLOW") injected into the LLM's instructions; there is no programmatic enforcement behind it beyond the 3-key audit.
+- **No structural guard against LLM protocol deviation in general.** `run_llm_agent` (`web/llm_runner.py`) records the PTY transcript and exit code; it does not verify that the agent actually executed the tutorial's intended commands, used the intended mdp values, or didn't fabricate a "completed" status. The only physical checks that run are the per-step validator gates in `lib/validators.py` (neutrality, density, energy drift, RMSD plateau) — anything those gates don't measure is unverified.
+- **Energy-drift gate is coarse and not size-normalized.** `_judge_energy_drift` (`skills/md_runner/md_runner.py`) computes a linear-regression slope of **total** energy vs. simulation time in ns (this was corrected from an earlier bug that used potential energy ÷ frame count). The pass/warning/retryable thresholds (`ENERGY_DRIFT_WARNING`/`ENERGY_DRIFT_RETRY` in `lib/validators.py`) are fixed absolute kJ/mol-per-ns cutoffs. They are not normalized by atom count, so a large solvated system will show larger absolute total-energy fluctuation than a small one at the same per-atom stability — the gate is a blunt fatal-instability filter, not a precision diagnostic.
+- **Density gate applies only where a single bulk density is physically meaningful.** It is skipped (reported as `pass`/`density_gate_not_applicable_for_system_type`) for membrane, biphasic, and other non-single-phase-aqueous systems, per `_density_expected_range` in `skills/md_runner/md_runner.py`.
+- **No run determinism or provenance capture.** `nvt.mdp` uses `gen_seed = -1` (non-reproducible initial velocities), and `state.json` does not record the `gmx` binary version, mdp file hashes, or the seed actually used. Two runs of the same tutorial are not guaranteed — or verifiable as — bit-identical or statistically equivalent. Capturing this provenance is planned but not yet implemented.
+- **No uncertainty quantification on analysis outputs.** RMSD/RMSF/Rg/SASA/energy summaries (`lib/xvg_parser.py`) are raw mean/stdev over the trajectory; there is no block averaging, autocorrelation-time estimate, or confidence interval.
+- **Two membrane/protein-ligand analyses are stubs.** `_run_membrane_analysis` and `_run_protein_ligand_analysis` (`skills/illustrator/illustrator.py`) return `{"status": "stub"}` — no bilayer thickness/area-per-lipid/order-parameter or ligand-RMSD/contact-map output for those tutorial variants yet.
+
+---
+
 ## License
 
 MIT — see [`LICENSE`](LICENSE).
 
 GROMACS is distributed separately under LGPL-2.1; this repository invokes it solely as an external binary.
+
+## Citing this software
+
+If you use this software in your research, please cite it using the metadata in
+[`CITATION.cff`](CITATION.cff). An archival DOI via Zenodo has not yet been minted for
+this repository — once available, it will be added here and to `CITATION.cff`
+(see `docs/plans/tier_a_implementation.md`, task A4, for the pending steps).

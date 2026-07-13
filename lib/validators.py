@@ -29,8 +29,17 @@ DENSITY_WARNING_FRAC = 0.02
 DENSITY_RETRYABLE_FRAC = 0.10
 TEMP_WARNING_K = 3.0
 TEMP_RETRYABLE_K = 10.0
-ENERGY_DRIFT_WARNING = 0.5   # kJ/mol per ns
-ENERGY_DRIFT_RETRY = 5.0
+# Thresholds are for the *total* energy (kinetic + potential) linear-regression
+# slope over simulation time, in kJ/mol per ns. Total energy (not potential
+# energy) is the quantity that should be conserved/stable under NVT/NPT
+# integration; potential energy alone routinely drifts with thermostat/
+# barostat action and is not a valid integrator-stability signal.
+# NOTE: these are coarse absolute thresholds and are not normalized by system
+# size (atom count); a large solvated system will naturally show larger
+# absolute total-energy fluctuation than a small one for the same per-atom
+# stability. Treat as a blunt fatal-instability filter, not a precision gate.
+ENERGY_DRIFT_WARNING = 10.0   # kJ/mol per ns
+ENERGY_DRIFT_RETRY = 100.0
 RMSD_PLATEAU_MAX_RANGE = 0.05  # nm tail-half range threshold
 RETRYABLE_MAX = 3
 
@@ -115,6 +124,8 @@ def judge_temperature(observed: float, target: float) -> Judgment:
 
 
 def judge_energy_drift(slope_per_ns: float) -> Judgment:
+    """slope_per_ns must be the linear-regression slope of TOTAL energy
+    (kJ/mol) vs simulation time (ns) — not potential energy, not per-frame."""
     s = abs(slope_per_ns)
     if s <= ENERGY_DRIFT_WARNING:
         return Judgment(tier="pass", metric="energy_drift", observed=slope_per_ns)

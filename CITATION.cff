@@ -1,17 +1,35 @@
 cff-version: 1.2.0
-title: "GROMACS Web UI: An LLM-Guided Web Interface for Autonomous MD Simulation"
 message: "If you use this software, please cite it using the metadata from this file."
 type: software
+title: "GROMACS Web UI: An LLM-Guided Web Interface for Autonomous MD Simulation"
+abstract: >-
+  A FastAPI + vanilla JS web application that uses LLM agents (Claude, Codex,
+  or Gemini) to autonomously drive GROMACS molecular dynamics simulations
+  from a single uploaded PDB file, via a skills-based pipeline (env-builder,
+  md-runner, illustrator) with live command-execution transparency and
+  tutorial-grounded guidance. Supports 8 tutorial systems including
+  Lysozyme, KALP15 membrane, Protein-Ligand, Umbrella Sampling, and Free
+  Energy Perturbation.
 authors:
-  - family-names: Author
-    given-names: Name
-    affiliation: Institution
-repository-code: https://github.com/<org>/gromacs-web-ui
+  - family-names: "FIXME-AUTHOR-FAMILY-NAME"
+    given-names: "FIXME-AUTHOR-GIVEN-NAME"
+    affiliation: "FIXME-INSTITUTION"
+    orcid: "FIXME-ORCID"
+    email: "dongjoon69@gmail.com"
+repository-code: "https://github.com/DDUKHAE/Gromacs_WEB_UI"
+url: "https://github.com/DDUKHAE/Gromacs_WEB_UI"
 license: MIT
 version: 0.1.0
-date-released: 2026-07-07
+date-released: "2026-07-07"
 keywords:
   - GROMACS
   - molecular dynamics
-  - LLM
+  - LLM agent
+  - large language model
   - web interface
+  - autonomous simulation
+  - free energy perturbation
+  - membrane simulation
+  - CHARMM-GUI
+# DOI: to be added once a Zenodo release is minted for this repository
+# (see README "Citing this software" section for the manual steps).
