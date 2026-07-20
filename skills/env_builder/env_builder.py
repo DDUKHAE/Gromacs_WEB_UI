@@ -13,6 +13,8 @@ from lib import tutorial_registry as TR
 from lib import gmx_wrapper as GW
 from lib import validators as V
 from lib.mdp_templates import base as MDP
+from lib import protocol_contract as PC
+from lib import run_plan as RP
 
 
 _NET_CHARGE_RE = re.compile(
@@ -311,12 +313,47 @@ def build_environment(pdb_path: Path, prompt: str, workspace_dir: Path,
             user_prefs = meta.get("user_preferences", {})
         except Exception:
             pass
-    # Use user-selected tutorial if provided; otherwise auto-route
-    user_tutorial_id = meta.get("tutorial_id", "")
+    plan = RP.assert_valid(workspace_dir)
+    if plan is None:
+        plan = RP.materialize(workspace_dir, inputs_pdb, meta.get("tutorial_id") or None)
+    if plan["compatibility"]["status"] == "blocked":
+        raise UnsupportedTutorialError(
+            "resolved run plan is blocked; missing inputs: " + ", ".join(plan["missing_inputs"])
+        )
+    contract = PC.assert_valid(workspace_dir)
+    if contract is None:
+        contract = PC.materialize(workspace_dir, plan["tutorial"]["id"])
+    # A materialized contract is authoritative.  This fixes the historical
+    # bug where a selected tutorial only replaced the ID after auto-routing,
+    # leaving the pipeline variant and prerequisite decision from another
+    # tutorial in place.
+    user_tutorial_id = (contract or {}).get("tutorial_id") or plan["tutorial"]["id"]
     if user_tutorial_id:
-        from dataclasses import replace as _dc_replace
-        _base = select_tutorial(workspace_dir, inputs_pdb, prompt, prerequisites or {})
-        decision = _dc_replace(_base, tutorial_id=user_tutorial_id)
+        entry = TR.get_entry(user_tutorial_id)
+        manifest_for_choice = TR.load_manifest(user_tutorial_id)
+        if entry is None or manifest_for_choice is None:
+            raise UnsupportedTutorialError(f"unknown selected tutorial: {user_tutorial_id}")
+        # Preflight already resolved user-supplied builder inputs (including
+        # ligand/membrane configuration) into the plan. Do not re-evaluate
+        # only the legacy ``prerequisites`` argument and contradict it.
+        missing = list(plan["missing_inputs"])
+        unsupported = (f"{user_tutorial_id} requires missing inputs: {missing}"
+                       if missing else None)
+        decision = TR.RoutingDecision(
+            tutorial_id=user_tutorial_id,
+            pipeline_variant=manifest_for_choice.get("pipeline_variant"),
+            confidence="explicit",
+            missing_inputs=missing,
+            unsupported_reason=unsupported,
+            selected_docs=entry.get("recommended_docs", {}).get("minimal", []),
+        )
+        if unsupported:
+            raise UnsupportedTutorialError(unsupported)
+        s = state.read(workspace_dir)
+        s["tutorial"] = {"id": decision.tutorial_id, "variant": decision.pipeline_variant,
+                         "has_protein": _pdb_hints(inputs_pdb).get("has_protein", True),
+                         "manifest_path": f"docs/tutorial/{decision.tutorial_id}/tutorial.manifest.json"}
+        state.write(workspace_dir, s)
     else:
         decision = select_tutorial(workspace_dir, inputs_pdb, prompt,
                                    prerequisites or {})
@@ -329,15 +366,18 @@ def build_environment(pdb_path: Path, prompt: str, workspace_dir: Path,
             user_prefs = json.loads(meta_file.read_text()).get("user_preferences", {})
         except Exception:
             pass
-    ff = _resolve_forcefield(
-        user_prefs.get("forcefield") or defaults.get("forcefield", "charmm36")
-    )
-    water = user_prefs.get("water") or defaults.get("water_model", "tip3p")
-    box_type = user_prefs.get("box_type") or defaults.get("box_type", "cubic")
-    box_d = defaults.get("box_distance_nm", 1.0)
+    # Contract values originate from either the selected tutorial or explicit
+    # System Builder fields.  Fall back to legacy preferences only for runs
+    # created before protocol contracts existed.
+    locked = (contract or {}).get("locked_parameters", {})
+    ff = _resolve_forcefield(locked.get("forcefield") or user_prefs.get("forcefield")
+                             or defaults.get("forcefield", "charmm36"))
+    water = locked.get("water_model") or user_prefs.get("water") or defaults.get("water_model", "tip3p")
+    box_type = locked.get("box_type") or user_prefs.get("box_type") or defaults.get("box_type", "cubic")
+    box_d = locked.get("box_distance_nm") or defaults.get("box_distance_nm", 1.0)
     run_step1_topology(workspace_dir, ff, water)
     run_step2_box(workspace_dir, box_type, box_d)
     run_step3_solvate(workspace_dir)
     run_step4_ions_prep(workspace_dir)
-    run_step5_genion(workspace_dir, concentration=0.15)
+    run_step5_genion(workspace_dir, concentration=locked.get("ion_concentration_M", 0.15))
     return state.read(workspace_dir)

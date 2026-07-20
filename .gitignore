@@ -8,6 +8,8 @@ venv/
 dist/
 build/
 .pytest_cache/
+.coverage
+coverage.xml
 
 # GROMACS output / backup files
 #*#
@@ -51,6 +53,13 @@ simulation_state.json
 # Local development artifacts
 docs/superpowers/
 docs/prestudy.md
+docs/jcim_testing_validation_plan.md
+CLAUDE.md
+setup-gromacs-web-ui.sh
+.mcp.json
 
 # Brainstorm session content (visual companion)
 .superpowers/
+
+# JCIM testing/validation working directory (local artifacts, not for git)
+/GROMACS_WEB_UI/

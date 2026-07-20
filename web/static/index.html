@@ -2227,6 +2227,22 @@ body.light-theme #run-search {
             <div id="audit-content" style="font-size:12px;"></div>
           </div>
         </div>
+
+        <div id="literature-panel" class="card" style="display:none; margin-top:12px;">
+          <div style="padding:12px 16px; border-bottom:1px solid var(--border-color); font-weight:700;">Literature evidence (PaperQA)</div>
+          <div style="padding:12px 16px;">
+            <div style="font-size:12px;color:var(--text-secondary);margin-bottom:9px;">Upload run-local PDF/TXT/Markdown papers, then ask an evidence question. Results cannot modify this run's protocol automatically.</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              <input id="literature-file" type="file" accept=".pdf,.txt,.md,text/plain,application/pdf" style="font-size:12px;max-width:280px;">
+              <button type="button" class="btn-secondary" onclick="uploadLiterature()">Upload paper</button>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:10px;">
+              <input id="literature-question" type="text" maxlength="2000" placeholder="Question about the uploaded papers" style="flex:1;min-width:160px;">
+              <button type="button" class="btn-secondary" onclick="queryLiterature()">Ask</button>
+            </div>
+            <pre id="literature-result" style="display:none;white-space:pre-wrap;max-height:260px;overflow:auto;margin:10px 0 0;padding:10px;background:var(--bg-secondary);border-radius:6px;font:12px/1.45 monospace;"></pre>
+          </div>
+        </div>
       </div>
 
       <!-- [새 시뮬레이션 생성] System Builder 마법사 탭(PDB 업로드, FF 지정, 박스 설정, 이온 등) 설정 폼 영역 -->
@@ -2752,9 +2768,9 @@ body.light-theme #run-search {
                 <div class="param-field">
                   <label>Permission Mode</label>
                   <select name="auto_approve">
-                    <option value="false">Interactive approvals</option>
-                    <option value="true">Auto-approve actions</option>
+                    <option value="false">Interactive approvals (required)</option>
                   </select>
+                  <small style="color:var(--text-secondary);display:block;margin-top:5px;line-height:1.35;">LLM automatic approval is unavailable until the runner is deployed in an OS/container sandbox.</small>
                 </div>
               </div>
             </div>
@@ -3223,6 +3239,18 @@ body.light-theme #run-search {
                        onchange="handleMolTrajFile(this.files[0])">
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Structured permission approval dialog (C4) -->
+      <div id="permission-modal" role="dialog" aria-modal="true" aria-labelledby="permission-title" style="display:none;position:fixed;inset:0;background:rgba(6,8,19,0.8);backdrop-filter:blur(8px);z-index:1080;align-items:center;justify-content:center;padding:16px;">
+        <div style="background:var(--bg-surface,#0b0f24);border:1px solid var(--border-color);border-radius:14px;width:100%;max-width:560px;padding:20px;box-shadow:var(--shadow-lg);">
+          <div id="permission-title" style="font-weight:700;font-size:15px;color:var(--text-primary);">Permission requested</div>
+          <pre id="permission-detail" style="max-height:240px;overflow:auto;white-space:pre-wrap;font:12px/1.5 monospace;color:var(--text-secondary);background:var(--bg-secondary);padding:12px;border-radius:8px;margin:14px 0;"></pre>
+          <div style="display:flex;justify-content:flex-end;gap:8px;">
+            <button type="button" onclick="respondPermission(false)" style="padding:8px 18px;border-radius:8px;border:1px solid var(--border-color);background:transparent;color:var(--text-secondary);cursor:pointer;">Deny</button>
+            <button type="button" onclick="respondPermission(true)" style="padding:8px 18px;border-radius:8px;border:0;background:var(--accent-green);color:#07110b;font-weight:700;cursor:pointer;">Approve</button>
           </div>
         </div>
       </div>
@@ -3954,7 +3982,7 @@ async function wizardSavePreset() {
   } catch (_) { showToast('Server error', 'error'); }
 }
 
-async function startRun() {
+async function startRun(acceptExperimentalOverrides = false) {
   if (!selectedPdb) return;
 
   const form = document.getElementById('new-run-form');
@@ -3967,6 +3995,7 @@ async function startRun() {
   data.append('tutorial_id', form.querySelector('[name="tutorial_id"]').value);
   data.append('llm', form.querySelector('[name="llm"]').value);
   data.append('auto_approve', form.querySelector('[name="auto_approve"]').value);
+  data.append('accept_experimental_overrides', String(acceptExperimentalOverrides));
   const protConfig = _collectProtonationConfig();
   if (protConfig) config.protonation = protConfig;
   data.append('system_config', JSON.stringify(config));
@@ -3979,6 +4008,20 @@ async function startRun() {
     const resp = await fetch('/api/runs', { method: 'POST', body: data });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
+      const detail = err.detail || err;
+      if (resp.status === 409 && detail.code === 'experimental_override_confirmation_required') {
+        const differences = (detail.compatibility?.items || []).map(item =>
+          `• ${item.field}: selected ${item.user_value}; tutorial recommends ${item.tutorial_recommendation}`
+        ).join('\n');
+        const approved = window.confirm(
+          `${detail.message}\n\n${differences}\n\nProceed with your settings as an experimental override?`
+        );
+        if (approved) {
+          btnStart.disabled = false;
+          btnStart.textContent = 'Start Simulation Run';
+          return startRun(true);
+        }
+      }
       showToast(err.detail || 'Failed to start run.', 'error');
       btnStart.disabled = false;
       btnStart.textContent = 'Start Simulation Run';
@@ -4355,6 +4398,22 @@ function initTerminal() {
   _fitTerminal();
 }
 
+function showPermissionRequest(detail) {
+  const modal = document.getElementById("permission-modal");
+  const body = document.getElementById("permission-detail");
+  if (body) body.textContent = detail;
+  if (modal) modal.style.display = "flex";
+  document.querySelector("#permission-modal button:last-child")?.focus();
+}
+
+function respondPermission(approved) {
+  if (wsConn && wsConn.readyState === WebSocket.OPEN) {
+    wsConn.send(new TextEncoder().encode(approved ? "y\n" : "n\n"));
+  }
+  const modal = document.getElementById("permission-modal");
+  if (modal) modal.style.display = "none";
+}
+
 function connectWs(runId) {
   stopWs();
   initTerminal();
@@ -4377,7 +4436,9 @@ function connectWs(runId) {
     } else {
       try {
         const msg = JSON.parse(e.data);
-        if (msg.type === 'exit') {
+        if (msg.type === "permission_request") {
+          showPermissionRequest(msg.detail || "Permission requested");
+        } else if (msg.type === 'exit') {
           wsConn.close();
           wsConn = null;
           // 종료 후 런 상태 재조회
@@ -4428,6 +4489,10 @@ async function selectRun(runId, reconnectWs = true) {
   document.getElementById('run-view').style.display = 'flex';
   const _demoBanner = document.getElementById('demo-mode-banner');
   if (_demoBanner) _demoBanner.style.display = 'none';
+  const _literaturePanel = document.getElementById('literature-panel');
+  if (_literaturePanel) _literaturePanel.style.display = '';
+  const _literatureResult = document.getElementById('literature-result');
+  if (_literatureResult) { _literatureResult.style.display = 'none'; _literatureResult.textContent = ''; }
 
   try {
     const resp = await fetch(`/api/runs/${runId}`);
@@ -5196,12 +5261,49 @@ async function loadAudit(runId) {
         </div>`;
     }).join('');
 
-    const summary = `<div style="margin-bottom:10px; font-size:11px; color:var(--text-muted);">Tutorial: <strong style="color:var(--text-primary)">${escapeHtml(report.tutorial_id)}</strong> — ${report.passed} passed, ${report.failed} failed</div>`;
+    const plan = report.run_plan;
+    const planStatus = plan?.compatibility?.status || 'n/a';
+    const planColor = planStatus === 'pass' ? 'var(--accent-green)'
+                    : planStatus === 'warning' ? 'var(--accent-yellow)'
+                    : planStatus === 'blocked' ? 'var(--accent-red)' : 'var(--text-muted)';
+    const locks = plan?.user_locked_settings;
+    const lockText = locks ? `${locks.forcefield} / ${locks.water_model} / ${locks.box_type}` : 'not recorded';
+    const summary = `<div style="margin-bottom:10px; font-size:11px; color:var(--text-muted);">Tutorial: <strong style="color:var(--text-primary)">${escapeHtml(report.tutorial_id)}</strong> — ${report.passed} passed, ${report.failed} failed<br>Run plan: <strong style="color:${planColor}">${escapeHtml(planStatus)}</strong> · User locks: <code>${escapeHtml(lockText)}</code>${plan?.plan_sha256 ? ` · <code title="${escapeHtml(plan.plan_sha256)}">${escapeHtml(plan.plan_sha256.slice(0, 12))}…</code>` : ''}</div>`;
     content.innerHTML = summary + rows;
   } catch (e) {
     console.error('loadAudit:', e);
     panel.style.display = 'none';
   }
+}
+
+async function uploadLiterature() {
+  if (!currentRunId || currentRunId === 'virtual_sandbox') return;
+  const file = document.getElementById('literature-file')?.files?.[0];
+  if (!file) { showToast('Choose a PDF, TXT, or Markdown paper first.', 'error'); return; }
+  const data = new FormData();
+  data.append('literature_file', file);
+  try {
+    const resp = await fetch(`/api/runs/${currentRunId}/literature/upload`, { method: 'POST', body: data });
+    const payload = await resp.json().catch(() => ({}));
+    if (!resp.ok) { showToast(payload.detail || 'Literature upload failed.', 'error'); return; }
+    showToast(`${payload.filename} added to this run's evidence corpus.`, 'success');
+  } catch (_) { showToast('Literature upload failed.', 'error'); }
+}
+
+async function queryLiterature() {
+  if (!currentRunId || currentRunId === 'virtual_sandbox') return;
+  const question = document.getElementById('literature-question')?.value?.trim();
+  const result = document.getElementById('literature-result');
+  if (!question) { showToast('Enter a literature question first.', 'error'); return; }
+  try {
+    const resp = await fetch(`/api/runs/${currentRunId}/literature/query`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question }),
+    });
+    const payload = await resp.json().catch(() => ({}));
+    if (!resp.ok) { showToast(payload.detail || 'Literature query failed.', 'error'); return; }
+    result.style.display = 'block';
+    result.textContent = `${payload.answer}\n\nCitations: ${(payload.citation_markers || []).join('; ') || 'none returned'}\nRecord: ${payload.record_path}\n\nEvidence requires explicit approval and has not changed this run.`;
+  } catch (_) { showToast('Literature query failed.', 'error'); }
 }
 
 let _pendingDeleteId = null;

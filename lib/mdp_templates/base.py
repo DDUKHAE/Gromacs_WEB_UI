@@ -37,6 +37,18 @@ DEFAULTS = {
                      "couple_moltype": "LIG"},
 }
 
+# Common MDP controls intentionally exposed by the System Builder.  Keeping
+# them in template defaults makes a user choice executable rather than merely
+# an instruction in an LLM prompt.
+for _phase in ("nvt", "npt", "production"):
+    DEFAULTS[_phase].update({
+        "constraint_algorithm": "lincs", "constraints": "h-bonds",
+        "rcoulomb": 1.0, "rvdw": 1.0, "coulombtype": "PME",
+        "pme_order": 4, "fourierspacing": 0.16, "tcoupl": "V-rescale",
+    })
+for _phase in ("npt", "production"):
+    DEFAULTS[_phase]["ref_p"] = 1.0
+
 _FILES = {
     "em": "em.mdp",
     "nvt": "nvt.mdp",

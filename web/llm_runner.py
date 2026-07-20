@@ -25,6 +25,7 @@ from pathlib import Path
 
 from web.llm_adapters import ADAPTERS, LLMAdapter
 from lib.system_config import load_config, build_constraint_prompt
+from lib.protocol_contract import render_prompt as render_protocol_contract
 
 _ANSI_RE = re.compile(r"\x1b(?:\[[0-9;]*[mGKHFABCDJsr]|\[\?[0-9;]*[hlr]|[=>])")
 
@@ -51,7 +52,7 @@ def _apply_system_config_constraint(workspace: Path) -> str:
 
 @dataclass
 class LLMRunState:
-    output_queue: asyncio.Queue[bytes | None] = field(default_factory=asyncio.Queue)
+    output_queue: asyncio.Queue[bytes | str | None] = field(default_factory=asyncio.Queue)
     input_queue:  asyncio.Queue[bytes]        = field(default_factory=asyncio.Queue)
     master_fd: int = -1
     pid: int = 0
@@ -95,6 +96,7 @@ async def run_llm_agent(
     cmd    = adapter.build_command(auto_approve)
     prompt = adapter.build_prompt(harness_dir, workspace, pdb_path)
     prompt += _apply_system_config_constraint(workspace)
+    prompt += render_protocol_contract(workspace)
 
     master_fd, slave_fd = pty.openpty()
     set_winsize(master_fd, rows=50, cols=220)
@@ -129,7 +131,7 @@ async def run_llm_agent(
                         "type": "permission_request",
                         "detail": detail,
                     })
-                    loop.call_soon_threadsafe(output_q.put_nowait, event.encode("utf-8"))
+                    loop.call_soon_threadsafe(output_q.put_nowait, event)
                     perm_context = perm_context[-8:]
 
         loop.call_soon_threadsafe(output_q.put_nowait, None)   # EOF sentinel

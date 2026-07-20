@@ -161,7 +161,8 @@ def run(args: Sequence[str], cwd: Path,
     with open(progress_log, "a", encoding="utf-8", errors="replace") as log_fh:
         t_out = threading.Thread(target=_reader, args=(proc.stdout, stdout_buf, log_fh), daemon=True)
         t_err = threading.Thread(target=_reader, args=(proc.stderr, stderr_buf, log_fh), daemon=True)
-        t_out.start(); t_err.start()
+        t_out.start()
+        t_err.start()
         if proc_input:
             try:
                 proc.stdin.write(proc_input)

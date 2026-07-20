@@ -140,3 +140,14 @@
 - [ ] C6: FE 창 세분화
 
 > 검증 절차는 `docs/plans/verification_plan.md` §C 참조.
+
+
+## 2026-07-10 진행 상태
+
+GROMACS를 실행하지 않는 범위에서 C3·C4·C5의 기반 구현을 진행했다.
+
+- C3: API 경로·PTY 이벤트 단위 테스트를 추가하고 Python 3.11–3.13 × Ubuntu/macOS CI, ruff, mypy, coverage 게이트를 구성했다.
+- C4: PTY의 권한 요청을 구조화된 WebSocket `permission_request` 이벤트로 전달하고 웹 UI의 Approve/Deny 다이얼로그에서 `y`/`n` 응답을 보낼 수 있게 했다.
+- C5: 백그라운드 LLM 태스크의 참조·예외 로깅을 추가하고 `docs/SECURITY_THREAT_MODEL.md`에 실행 경계를 문서화했다. 전체 APIRouter 및 프론트 모듈 분리는 후속 리팩터링으로 남아 있다.
+
+실행 의존 항목은 중복을 피하기 위해 상위 항목만 추적한다. C1이 B1의 전체 벤치마크를 포함하므로 B1은 별도 구현하지 않는다. C1(8시스템·불확실도), C2(막/복합체 수치 분석), C6(세분화된 자유에너지 창)은 활성 GROMACS와 시뮬레이션 결과가 있어야 완료할 수 있다. 실행 시에는 각 항목의 acceptance 조건과 `docs/plans/verification_plan.md`의 G3 검증 명령을 수행하고 결과 표, 오차막대, 로그를 커밋한다.

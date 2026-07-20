@@ -1,5 +1,6 @@
 import asyncio
 import io
+import logging
 import json
 import os
 import re
@@ -88,6 +89,8 @@ RUNNER_PY: Path = Path(__file__).parent / "runner.py"
 STATIC_DIR: Path = Path(__file__).parent / "static"
 _NEXT_SKILL: dict[str, str] = {"env": "md", "md": "viz"}
 _MAX_PDB_BYTES: int = 50 * 1024 * 1024  # 50 MB
+_MAX_LITERATURE_BYTES: int = 20 * 1024 * 1024  # 20 MB per local paper
+_LITERATURE_EXTENSIONS = {".pdf", ".txt", ".md"}
 _RUN_ID_RE = re.compile(r"^[a-z0-9][a-z0-9\-]*_\d{8}_\d{6}$")
 
 
@@ -126,6 +129,20 @@ def _run_summary(info: RunInfo) -> dict:
 
 def create_app(harness_dir: Path | None = None) -> FastAPI:
     app = FastAPI(title="Gromacs Harness Web UI")
+    # Keep fire-and-forget runners strongly referenced and surface failures.
+    app.state.background_tasks = set()
+
+    def _track_task(coro):
+        task = asyncio.create_task(coro)
+        app.state.background_tasks.add(task)
+        def _finish(done):
+            app.state.background_tasks.discard(done)
+            if not done.cancelled():
+                error = done.exception()
+                if error:
+                    logging.getLogger(__name__).exception("background run task failed", exc_info=error)
+        task.add_done_callback(_finish)
+        return task
 
     app.add_middleware(
         CORSMiddleware,
@@ -203,7 +220,7 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         if not src.name.endswith(".ff"):
             raise ValueError(f"Expected a directory ending in .ff, got: {src.name}")
         if not (src / "forcefield.itp").exists():
-            raise ValueError(f"Not a valid force field directory (missing forcefield.itp)")
+            raise ValueError("Not a valid force field directory (missing forcefield.itp)")
         dest = Path(gmxlib) / src.name
         if dest.exists():
             shutil.rmtree(dest)
@@ -222,7 +239,9 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         content = await ff_archive.read(_MAX_FF_BYTES + 1)
         if len(content) > _MAX_FF_BYTES:
             raise HTTPException(status_code=413, detail="Archive too large (max 200 MB)")
-        import tarfile, zipfile, tempfile as _tmp
+        import tarfile
+        import zipfile
+        import tempfile as _tmp
         with _tmp.TemporaryDirectory() as td:
             extract_dir = Path(td) / "extracted"
             extract_dir.mkdir()
@@ -356,7 +375,68 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         config_report = validate_run_against_config(workspace)
         result = report.to_dict()
         result["config_audit"] = config_report.to_dict()
+        from lib.run_plan import assert_valid as assert_run_plan
+        plan = assert_run_plan(workspace)
+        result["run_plan"] = plan
         return result
+
+    @app.get("/api/runs/{run_id}/plan")
+    def api_get_run_plan(run_id: str, hd: HarnessDir) -> dict:
+        workspace = _check_run_id(run_id, hd / "runs")
+        from lib.run_plan import RunPlanError, assert_valid as assert_run_plan
+        try:
+            plan = assert_run_plan(workspace)
+        except RunPlanError as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+        if plan is None:
+            raise HTTPException(status_code=404, detail="run plan not found")
+        return plan
+
+    @app.post("/api/runs/{run_id}/literature/query")
+    def api_query_literature(run_id: str, body: dict, hd: HarnessDir) -> dict:
+        """Evidence-only PaperQA escalation for a run-local paper corpus.
+
+        This endpoint does not accept URLs, API keys, filesystem paths, or
+        executable changes.  Results always require explicit user approval
+        before a new tutorial/experimental contract can be created.
+        """
+        workspace = _check_run_id(run_id, hd / "runs")
+        if not workspace.is_dir():
+            raise HTTPException(status_code=404, detail="run not found")
+        question = body.get("question", "")
+        proposed_change = body.get("proposed_change")
+        if proposed_change is not None and not isinstance(proposed_change, dict):
+            raise HTTPException(status_code=400, detail="proposed_change must be an object")
+        from lib.literature_retrieval import LiteratureRetrievalError, query_local_corpus
+        try:
+            return query_local_corpus(workspace, question, proposed_change)
+        except LiteratureRetrievalError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/api/runs/{run_id}/literature/upload", status_code=201)
+    async def api_upload_literature(run_id: str, hd: HarnessDir,
+                                    literature_file: UploadFile = File(...)) -> dict:
+        """Store a paper only in this run's local, evidence-only corpus."""
+        workspace = _check_run_id(run_id, hd / "runs")
+        if not workspace.is_dir():
+            raise HTTPException(status_code=404, detail="run not found")
+        from lib.protocol_contract import ProtocolContractError, assert_valid as assert_contract
+        try:
+            if assert_contract(workspace) is None:
+                raise ProtocolContractError("protocol contract is required before literature upload")
+        except ProtocolContractError as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+        filename = Path(literature_file.filename or "paper.pdf").name
+        if Path(filename).suffix.lower() not in _LITERATURE_EXTENSIONS:
+            raise HTTPException(status_code=400, detail="only PDF, TXT, and Markdown literature files are allowed")
+        content = await literature_file.read(_MAX_LITERATURE_BYTES + 1)
+        if len(content) > _MAX_LITERATURE_BYTES:
+            raise HTTPException(status_code=413, detail="literature file too large (max 20 MB)")
+        corpus = workspace / "literature"
+        corpus.mkdir(exist_ok=True)
+        destination = corpus / filename
+        destination.write_bytes(content)
+        return {"filename": filename, "bytes": len(content), "corpus_path": "literature"}
 
     _MOL_EXTENSIONS = {'.gro', '.pdb', '.xtc', '.tpr'}
 
@@ -431,8 +511,19 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         tutorial_id: str = Form(""),
         llm: str = Form(""),
         auto_approve: str = Form("false"),
+        accept_experimental_overrides: str = Form("false"),
         system_config: str = Form(""),
     ) -> dict:
+        # An external CLI has its own shell/tool layer.  Until it is launched
+        # inside a real OS/container sandbox, silently approving that layer
+        # would turn an uploaded structure or prompt injection into host-level
+        # command execution.  Keep the API gate here (not only in the UI).
+        if auto_approve.lower() == "true":
+            raise HTTPException(
+                status_code=403,
+                detail="LLM auto-approval is disabled until a sandboxed runner is configured. "
+                       "Use interactive approvals or the direct pipeline.",
+            )
         raw_stem = Path(pdb_file.filename or "protein").stem
         protein = re.sub(r"[^a-z0-9\-]", "", re.sub(r"^\d+", "", raw_stem).lower())[:40] or "protein"
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -475,17 +566,41 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
                 original = pdb_path.read_text(encoding="utf-8", errors="replace")
                 pdb_path.write_text(apply_his_states(original, his_states), encoding="utf-8")
 
+        # Compile the browser inputs before starting either execution path.
+        # Auto-detect therefore receives exactly the same plan/contract/context
+        # treatment as an explicitly selected tutorial.
+        from lib.run_plan import RunPlanError, materialize as materialize_run_plan
+        from lib.protocol_contract import ProtocolContractError, materialize as materialize_contract
+        try:
+            plan = materialize_run_plan(ws, pdb_path, tutorial_id or None)
+            if plan["compatibility"]["status"] == "blocked":
+                raise RunPlanError("missing required inputs: " + ", ".join(plan["missing_inputs"]))
+            if (plan["compatibility"]["status"] == "warning"
+                    and accept_experimental_overrides.lower() != "true"):
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "experimental_override_confirmation_required",
+                        "message": "Your settings differ from the selected tutorial recommendation. "
+                                   "Review and explicitly approve the experimental override to continue.",
+                        "compatibility": plan["compatibility"],
+                    },
+                )
+            materialize_contract(ws, plan["tutorial"]["id"])
+        except (RunPlanError, ProtocolContractError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+
         if llm and llm in ADAPTERS:
             if not llm_runner.check_cli(ADAPTERS[llm]):
                 raise HTTPException(status_code=400, detail=f"'{ADAPTERS[llm].cli}' CLI not found. Install and log in first.")
             (ws / "runner.log").write_text("")
-            asyncio.create_task(llm_runner.run_llm_agent(
+            _track_task(llm_runner.run_llm_agent(
                 run_id=run_id,
                 workspace=ws,
                 pdb_path=pdb_path,
                 harness_dir=hd,
                 llm_key=llm,
-                auto_approve=(auto_approve.lower() == "true"),
+                auto_approve=False,
             ))
         else:
             log_file = ws / "runner.log"
@@ -608,7 +723,10 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
                     if data is None:
                         await websocket.send_text(json.dumps({"type": "exit"}))
                         break
-                    await websocket.send_bytes(data)
+                    if isinstance(data, str):
+                        await websocket.send_text(data)
+                    else:
+                        await websocket.send_bytes(data)
 
             async def _recv_input() -> None:
                 while True:
@@ -733,7 +851,8 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
     @app.post("/api/pdb/analyze")
     async def api_pdb_analyze(pdb_file: UploadFile = File(...)) -> dict:
         from lib.pdb_analyzer import PDBAnalyzer
-        import tempfile, os
+        import tempfile
+        import os
         content = await pdb_file.read()
         with tempfile.NamedTemporaryFile(suffix=".pdb", delete=False) as tmp:
             tmp.write(content)
@@ -745,7 +864,8 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
 
     @app.get("/api/pdb/fetch")
     async def api_pdb_fetch(pdb_id: str) -> dict:
-        import urllib.request, urllib.error
+        import urllib.request
+        import urllib.error
         if not (len(pdb_id) == 4 and pdb_id.isalnum()):
             raise HTTPException(status_code=400, detail="PDB ID must be exactly 4 alphanumeric characters")
         pdb_id = pdb_id.upper()
@@ -768,7 +888,8 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         ph: Annotated[float, Form(ge=0.0, le=14.0)] = 7.0,
     ) -> dict:
         from lib.protonation import run_propka
-        import tempfile, os
+        import tempfile
+        import os
         content = await pdb_file.read()
         with tempfile.NamedTemporaryFile(suffix=".pdb", delete=False) as tmp:
             tmp.write(content)
