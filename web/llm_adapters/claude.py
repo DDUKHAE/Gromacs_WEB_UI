@@ -13,7 +13,7 @@ class ClaudeAdapter(LLMAdapter):
         return "claude"
 
     def build_command(self, auto_approve: bool) -> list[str]:
-        cmd = ["claude"]
-        if auto_approve:
-            cmd.append("--dangerously-skip-permissions")
-        return cmd
+        # Host-side automatic permission bypass is intentionally unsupported.
+        # `auto_approve` remains in the interface for backwards-compatible
+        # callers; the web API rejects it before reaching an adapter.
+        return ["claude"]

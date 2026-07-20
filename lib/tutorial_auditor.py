@@ -5,6 +5,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from lib import protocol_contract as PC
+from lib import tutorial_registry as TR
+
 
 # Expected configuration per tutorial_id
 _TUTORIAL_EXPECTATIONS: dict[str, dict[str, Any]] = {
@@ -108,7 +111,7 @@ def audit_run(workspace: Path) -> AuditReport:
     state = _load_state(workspace)
     tutorial_id = _load_tutorial_id(workspace, state)
 
-    if not tutorial_id or tutorial_id not in _TUTORIAL_EXPECTATIONS:
+    if not tutorial_id:
         na_keys = ["forcefield", "water_model", "box_type", "phase_sequence"]
         return AuditReport(
             tutorial_id=tutorial_id,
@@ -119,17 +122,42 @@ def audit_run(workspace: Path) -> AuditReport:
             ],
         )
 
-    expected = _TUTORIAL_EXPECTATIONS[tutorial_id]
+    # The materialized contract is the authoritative protocol for a run.  For
+    # old workspaces without one, derive expectations from the checked-in
+    # manifest rather than the stale hand-maintained duplicate table above.
+    contract_error = ""
+    try:
+        contract = PC.assert_valid(workspace)
+    except PC.ProtocolContractError as exc:
+        contract = None
+        contract_error = str(exc)
+    manifest = TR.load_manifest(tutorial_id) or {}
+    locked = (contract or {}).get("locked_parameters", manifest.get("defaults", {}))
+    expected = {
+        "forcefield": locked.get("forcefield"),
+        "water_model": locked.get("water_model"),
+        "box_type": locked.get("box_type"),
+        "phase_sequence": (contract or {}).get(
+            "phase_sequence",
+            PC.PHASE_SEQUENCE_BY_VARIANT.get(manifest.get("pipeline_variant"), []),
+        ),
+    }
     step_out = state.get("step_outputs", {})
     step1 = step_out.get("step_1", {})
     step2 = step_out.get("step_2", {})
     step7 = step_out.get("step_7", {})
 
     items: list[AuditItem] = []
+    if contract_error:
+        items.append(AuditItem("protocol_contract", "valid checksum", "invalid",
+                               "fail", contract_error))
+    elif contract:
+        items.append(AuditItem("protocol_contract", "valid checksum", "valid",
+                               "pass", f"sha256={contract['contract_sha256']}"))
 
     # Forcefield
     actual_ff = str(step1.get("forcefield", "")).lower()
-    exp_ff = str(expected["forcefield"]).lower()
+    exp_ff = str(expected["forcefield"] or "").lower()
     items.append(AuditItem(
         key="forcefield",
         expected=exp_ff,
@@ -139,7 +167,7 @@ def audit_run(workspace: Path) -> AuditReport:
 
     # Water model
     actual_wm = str(step1.get("water_model", "")).lower()
-    exp_wm = str(expected["water_model"]).lower()
+    exp_wm = str(expected["water_model"] or "").lower()
     items.append(AuditItem(
         key="water_model",
         expected=exp_wm,
@@ -149,7 +177,7 @@ def audit_run(workspace: Path) -> AuditReport:
 
     # Box type
     actual_box = str(step2.get("box_type", "")).lower()
-    exp_box = str(expected["box_type"]).lower()
+    exp_box = str(expected["box_type"] or "").lower()
     items.append(AuditItem(
         key="box_type",
         expected=exp_box,

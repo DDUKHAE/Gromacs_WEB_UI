@@ -13,6 +13,6 @@ class CodexAdapter(LLMAdapter):
         return "codex"
 
     def build_command(self, auto_approve: bool) -> list[str]:
-        if auto_approve:
-            return ["codex", "--approval-mode", "full-auto"]
+        # Do not grant an external agent unattended host command execution.
+        # The API always launches this adapter with interactive approvals.
         return ["codex", "--approval-mode", "suggest"]

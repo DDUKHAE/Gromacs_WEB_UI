@@ -1,7 +1,6 @@
 """Task B5 — provenance capture: gmx_version, mdp hashes, seed handling."""
 import subprocess
 
-import pytest
 
 from lib import gmx_wrapper as GW
 from lib import state

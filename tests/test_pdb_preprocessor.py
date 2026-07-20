@@ -1,4 +1,3 @@
-import pytest
 from lib.pdb_preprocessor import apply_his_states
 
 

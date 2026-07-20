@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest tests/ --co -q)",
+      "mcp__co_scientist__whoami",
+      "mcp__co_scientist__project_guide",
+      "mcp__co_scientist__list_papers"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "co_scientist"
+  ]
+}

@@ -1,7 +1,7 @@
 import io
 import zipfile
+from pathlib import Path
 
-import pytest
 from fastapi.testclient import TestClient
 
 from web.server import create_app

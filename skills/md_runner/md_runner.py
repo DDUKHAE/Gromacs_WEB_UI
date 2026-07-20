@@ -9,6 +9,7 @@ from lib import gmx_wrapper as GW
 from lib.mdp_templates import base as MDP
 from lib import validators as V
 from lib import xvg_parser
+from lib import protocol_contract as PC
 
 
 REQUIRED_KEYS = ["step_1", "step_2", "step_3", "step_5"]
@@ -90,6 +91,9 @@ def run_phase(workspace_dir: Path, phase: str,
             s_for_render.get("tutorial") or {}
         ).get("has_protein", True)
     mdp_path = MDP.render(phase, render_overrides, output_dir=out_dir)
+    contract_errors = PC.validate_rendered_mdp(ws, mdp_path)
+    if contract_errors:
+        raise StateContractError("; ".join(contract_errors))
     state.record_mdp_hash(ws, phase, mdp_path)
     if phase == "nvt":
         seed_match = _GEN_SEED_RE.search(mdp_path.read_text())
@@ -432,10 +436,18 @@ def run_simulation(workspace_dir: Path,
     seq = phase_sequence_for_variant(variant)
     phase_overrides = phase_overrides or {}
     for phase in seq:
+        # Explicit System Builder controls are part of the protocol contract
+        # and take precedence over caller/agent overrides.  This makes an
+        # attempted LLM parameter change observable as a contract violation
+        # rather than a silent scientific deviation.
+        requested_overrides = {
+            **phase_overrides.get(phase, {}),
+            **PC.phase_overrides(workspace_dir, phase),
+        }
         judgment = run_phase_with_recovery(
             workspace_dir, phase=phase,
             phase_runner=_validating_phase_runner,
-            overrides=phase_overrides.get(phase, {}),
+            overrides=requested_overrides,
         )
         if judgment.tier == "warning":
             outcome = handle_phase_result(workspace_dir, phase, judgment,

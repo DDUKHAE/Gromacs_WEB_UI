@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """Plot RMSD, Rg, and potential energy from GROMACS .xvg files (Figure 2).
 
+illustrator (skills/illustrator) is the source of truth for raw scientific plots
+(rmsd.xvg, gyrate.xvg, energy_*.xvg, etc.); this script only produces the Figure 2
+publication composite — do not treat its output as a second independent analysis.
+
 Usage:
     python scripts/plot_validation.py \
-        --rmsd   runs/<id>/rmsd_backbone.xvg \
-        --rg     runs/<id>/gyrate.xvg \
-        --energy runs/<id>/potential.xvg \
+        --rmsd   runs/<id>/stage3_viz/rmsd.xvg \
+        --rg     runs/<id>/stage3_viz/gyrate.xvg \
+        --energy runs/<id>/stage3_viz/energy_potential.xvg \
         --output docs/figures/fig2_lysozyme_validation.pdf
 """
 import argparse

@@ -2,11 +2,24 @@ name: CI
 on: [push, pull_request]
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.11", "3.12", "3.13"]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-      - run: pip install -e ".[test]"
-      - run: pytest tests/ -v --tb=short
+          python-version: ${{ matrix.python }}
+      - run: pip install -e ".[test]" pytest-cov ruff mypy
+      - run: |
+          pytest tests/ -v --tb=short -m "not integration and not renderer and not animation" \
+                 --cov=lib --cov=web --cov-report=xml --cov-fail-under=40
+      - run: ruff check lib web tests
+      - run: mypy lib web --ignore-missing-imports
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.os }}-py${{ matrix.python }}
+          path: coverage.xml
