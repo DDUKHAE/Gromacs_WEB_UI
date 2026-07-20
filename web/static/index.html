@@ -2229,9 +2229,13 @@ body.light-theme #run-search {
         </div>
 
         <div id="literature-panel" class="card" style="display:none; margin-top:12px;">
-          <div style="padding:12px 16px; border-bottom:1px solid var(--border-color); font-weight:700;">Literature evidence (PaperQA)</div>
+          <div style="padding:12px 16px; border-bottom:1px solid var(--border-color); font-weight:700;">Literature evidence</div>
           <div style="padding:12px 16px;">
-            <div style="font-size:12px;color:var(--text-secondary);margin-bottom:9px;">Upload run-local PDF/TXT/Markdown papers, then ask an evidence question. Results cannot modify this run's protocol automatically.</div>
+            <div style="font-size:12px;color:var(--text-secondary);margin-bottom:9px;">Search public Europe PMC abstracts or upload permitted PDF/TXT/Markdown papers. PaperQA reviews this run-local corpus; evidence cannot change the protocol automatically.</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              <input id="literature-search-query" type="text" maxlength="500" placeholder="e.g. CHARMM36 zinc coordination GROMACS" style="flex:1;min-width:220px;">
+              <button type="button" class="btn-secondary" onclick="searchLiterature()">Search public evidence</button>
+            </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
               <input id="literature-file" type="file" accept=".pdf,.txt,.md,text/plain,application/pdf" style="font-size:12px;max-width:280px;">
               <button type="button" class="btn-secondary" onclick="uploadLiterature()">Upload paper</button>
@@ -2775,7 +2779,7 @@ body.light-theme #run-search {
               </div>
             </div>
 
-            <button type="submit" id="btn-start" disabled>Start Simulation Run</button>
+            <button type="button" id="btn-start" disabled onclick="startRun()">Start Simulation Run</button>
           </div>
 
 
@@ -2828,7 +2832,7 @@ body.light-theme #run-search {
               <span style="font-size: 24px;">💊</span>
             </div>
             <h3 style="font-size: 18px; font-weight: 600; color: var(--text-primary);">Protein-Ligand</h3>
-            <p style="color: var(--text-secondary); font-size: 13px; line-height: 1.4;">Parameterize small-molecule ligands with ACPYPE (GAFF2) and assemble protein-ligand complex topologies.</p>
+            <p style="color: var(--text-secondary); font-size: 13px; line-height: 1.4;">Parameterize small-molecule ligands with CGenFF and assemble CHARMM36-compatible complex topologies.</p>
             <div id="ligand-tool-badge" style="font-size: 11px; color: var(--text-muted);"></div>
           </div>
         </div>
@@ -2844,6 +2848,7 @@ body.light-theme #run-search {
             <button type="button" class="wiz-tab" id="mb-step-4-label" onclick="mbGoStep(4)">Simulation</button>
             <button type="button" class="wiz-tab" id="mb-step-5-label" onclick="mbGoStep(5)">Start</button>
           </div>
+          <div id="mb-install-guide" style="display:none;margin:0 0 14px;padding:12px 14px;border:1px solid var(--accent-yellow, #f5a623);border-radius:8px;background:color-mix(in srgb, var(--accent-yellow, #f5a623) 10%, var(--bg-card));font-size:12px;line-height:1.45;"></div>
           <div id="mb-section-1" class="wiz-section active">
             <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
               <label style="font-size:13px; font-weight:600; color: var(--text-primary);">Membrane only (no protein)</label>
@@ -3033,6 +3038,7 @@ body.light-theme #run-search {
             <button type="button" class="wiz-tab" id="lb-step-2-label" onclick="lbGoStep(2)">Parameterize</button>
             <button type="button" class="wiz-tab" id="lb-step-3-label" onclick="lbGoStep(3)">Assemble</button>
           </div>
+          <div id="lb-install-guide" style="display:none;margin:0 0 14px;padding:12px 14px;border:1px solid var(--accent-yellow, #f5a623);border-radius:8px;background:color-mix(in srgb, var(--accent-yellow, #f5a623) 10%, var(--bg-card));font-size:12px;line-height:1.45;"></div>
           
           <!-- Section 1 -->
           <div id="lb-section-1" class="wiz-section active">
@@ -3079,9 +3085,9 @@ body.light-theme #run-search {
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
                   </div>
                   <p>Ligand Input</p>
-                  <small>Support: .pdb, .mol2, .sdf (Click to browse)</small>
+                  <small>Upload the reviewed CGenFF input .mol2 (Click to browse)</small>
                 </div>
-                <input type="file" id="lb-ligand-file" accept=".pdb,.mol2,.sdf" onchange="lbHandleLigand(this.files ? this.files[0] : null)" style="display:none;">
+                <input type="file" id="lb-ligand-file" accept=".mol2" onchange="lbHandleLigand(this.files ? this.files[0] : null)" style="display:none;">
                 <div id="lb-ligand-info" style="display:none; font-size:11px; color:var(--accent-green); margin-bottom:12px; font-weight:600;"></div>
               </div>
             </div>
@@ -3089,32 +3095,32 @@ body.light-theme #run-search {
 
           <!-- Section 2 -->
           <div id="lb-section-2" class="wiz-section">
+            <div style="margin-bottom:14px;font-size:12px;color:var(--text-secondary);">Upload the <code>.str</code> file returned by the CGenFF service for the MOL2 submitted in Step 1. Review CGenFF penalty scores before continuing.</div>
+            <input type="file" id="lb-cgenff-stream" accept=".str,text/plain" onchange="lbHandleCgenffStream(this.files ? this.files[0] : null)" style="font-size:12px;">
+            <div id="lb-cgenff-stream-info" style="display:none;font-size:11px;color:var(--accent-green);margin:7px 0 12px;font-weight:600;"></div>
             <div class="ff-container" style="margin-bottom:16px;">
               <div class="ff-row">
                 <div class="ff-label-col">
-                  <span class="ff-title">Force field</span>
+                    <span class="ff-title">Force field</span>
                   <div class="tooltip-container" onclick="event.stopPropagation()">
                     <span class="info-icon">?</span>
-                    <span class="tooltip-text">GAFF2: General Amber Force Field v2 — improved torsion parameters and atom types; recommended for most small molecules. GAFF: original version, retained for compatibility with legacy pipelines.</span>
+                    <span class="tooltip-text">CGenFF parameters are converted for the CHARMM36 force field. This pairing is required for a consistent protein–ligand topology.</span>
                   </div>
                 </div>
                 <div class="ff-select-col">
-                  <select id="lb-atomtype">
-                    <option value="gaff2">GAFF2 (recommended)</option>
-                    <option value="gaff">GAFF</option>
-                  </select>
+                  <select id="lb-atomtype" disabled><option value="cgenff">CGenFF / CHARMM36</option></select>
                 </div>
               </div>
               <div class="ff-row">
                 <div class="ff-label-col">
-                  <span class="ff-title">Net charge</span>
+                  <span class="ff-title">CGenFF review</span>
                   <div class="tooltip-container" onclick="event.stopPropagation()">
                     <span class="info-icon">?</span>
-                    <span class="tooltip-text">Formal (net) charge of the ligand. Required for ACPYPE to assign correct AM1-BCC partial charges. Use 0 for neutral molecules; e.g. +1 for protonated amines, −1 for carboxylates.</span>
+                    <span class="tooltip-text">Verify CGenFF penalty scores in the returned stream file. High penalties require parameter review before MD.</span>
                   </div>
                 </div>
                 <div class="ff-select-col">
-                  <input type="number" id="lb-charge" value="0" min="-10" max="10" step="1">
+                  <input type="text" value="Review stream penalties" disabled>
                 </div>
               </div>
               <div class="ff-row">
@@ -3130,7 +3136,7 @@ body.light-theme #run-search {
                 </div>
               </div>
             </div>
-            <button type="button" id="lb-param-btn" onclick="lbRunAcpype()" style="padding:9px 22px; border-radius:6px; background:var(--accent-cyan); color:#000; border:none; font-size:13px; font-weight:600; cursor:pointer;">Run ACPYPE</button>
+            <button type="button" id="lb-param-btn" onclick="lbRunCgenff()" style="padding:9px 22px; border-radius:6px; background:var(--accent-cyan); color:#000; border:none; font-size:13px; font-weight:600; cursor:pointer;">Convert CGenFF for GROMACS</button>
             <div id="lb-param-status" style="display:none; margin-top:12px; font-size:12px; padding:10px; border-radius:6px; background:var(--bg-tertiary);"></div>
             <div id="lb-param-files" style="display:none; margin-top:10px; font-size:11px; color:var(--text-secondary);"></div>
           </div>
@@ -3523,8 +3529,9 @@ function _fitTerminal() {
   }, 80);
 }
 let selectedPdb = null;
-let terminalMode = 'raw'; // 'raw' | 'chat'
+let terminalMode = 'structured'; // 'structured' | 'chat' | 'raw'
 let chatPollTimer = null;
+let _startRunInFlight = false;
 
 function handleFileSelect(file) {
   if (!file) return;
@@ -3760,7 +3767,14 @@ function _wizardShowStep(step) {
     if (i === step) tab.classList.add('active');
   }
 
-  if (step === 6) { _wizardBuildSummary(); wizardLoadPresets(); }
+  if (step === 6) {
+    _wizardBuildSummary();
+    wizardLoadPresets();
+    // Keep the submit control in sync when a user reaches Start through the
+    // wizard navigation rather than immediately after choosing a structure.
+    const startButton = document.getElementById('btn-start');
+    if (startButton) startButton.disabled = !selectedPdb;
+  }
 }
 
 function wizardGoToStep(step) {
@@ -3983,7 +3997,12 @@ async function wizardSavePreset() {
 }
 
 async function startRun(acceptExperimentalOverrides = false) {
-  if (!selectedPdb) return;
+  if (_startRunInFlight) return;
+  if (!selectedPdb) {
+    showToast('Fetch or upload a PDB structure before starting the run.', 'error');
+    _wizardShowStep(1);
+    return;
+  }
 
   const form = document.getElementById('new-run-form');
   const config = _wizardCollectConfig();
@@ -4001,6 +4020,7 @@ async function startRun(acceptExperimentalOverrides = false) {
   data.append('system_config', JSON.stringify(config));
 
   const btnStart = document.getElementById('btn-start');
+  _startRunInFlight = true;
   btnStart.disabled = true;
   btnStart.textContent = 'Starting...';
 
@@ -4019,7 +4039,10 @@ async function startRun(acceptExperimentalOverrides = false) {
         if (approved) {
           btnStart.disabled = false;
           btnStart.textContent = 'Start Simulation Run';
-          return startRun(true);
+          // Let this request finish before submitting the explicitly
+          // approved retry; this prevents double submission from rapid clicks.
+          setTimeout(() => startRun(true), 0);
+          return;
         }
       }
       showToast(err.detail || 'Failed to start run.', 'error');
@@ -4039,6 +4062,8 @@ async function startRun(acceptExperimentalOverrides = false) {
     showToast('Server connection error', 'error');
     btnStart.disabled = false;
     btnStart.textContent = 'Start Simulation Run';
+  } finally {
+    _startRunInFlight = false;
   }
 }
 
@@ -4257,10 +4282,40 @@ fetch('/api/membrane/status').then(r => r.json()).then(data => {
 fetch('/api/ligand/status').then(r => r.json()).then(data => {
   const badge = document.getElementById('ligand-tool-badge');
   if (badge) {
-    badge.textContent = data.available ? `✓ acpype available` : '⚠ acpype not installed';
+    badge.textContent = data.available ? `✓ CGenFF converter available` : '⚠ CGenFF converter not installed';
     badge.style.color = data.available ? 'var(--accent-green)' : 'var(--accent-yellow, #f5a623)';
   }
 }).catch(() => {});
+
+function _renderBuilderInstallGuide(targetId, data) {
+  const guide = document.getElementById(targetId);
+  if (!guide) return;
+  if (data.available) {
+    guide.style.display = 'none';
+    guide.innerHTML = '';
+    return;
+  }
+  const install = data.install || {};
+  const command = install.command || 'See the server installation documentation.';
+  guide.style.display = '';
+  guide.innerHTML = `
+    <div style="font-weight:700;color:var(--accent-yellow, #f5a623);margin-bottom:4px;">${escapeHtml(data.tool || 'Required tool')} is not installed on this server</div>
+    <div style="color:var(--text-secondary);">${escapeHtml(install.summary || 'Install the required backend dependency, then restart the web server.')}</div>
+    <code style="display:block;margin:8px 0;padding:7px 9px;background:var(--bg-secondary);border-radius:5px;user-select:all;color:var(--accent-cyan);">${escapeHtml(command)}</code>
+    <div style="display:flex;gap:8px;align-items:center;"><span style="color:var(--text-muted);">Run this on the server, then restart it.</span><button type="button" class="btn-secondary" style="font-size:11px;padding:4px 8px;" onclick="refreshBuilderDependency('${targetId}', '${targetId === 'lb-install-guide' ? 'ligand' : 'membrane'}')">Check again</button></div>`;
+}
+
+async function refreshBuilderDependency(targetId, kind) {
+  try {
+    const resp = await fetch(`/api/${kind}/status`);
+    if (!resp.ok) throw new Error('status unavailable');
+    const data = await resp.json();
+    _renderBuilderInstallGuide(targetId, data);
+    if (data.available) showToast(`${data.tool} is now available.`, 'success');
+  } catch (_) {
+    showToast('Could not check the server dependency status.', 'error');
+  }
+}
 
 function updateStepper(info) {
   const stage = info.last_completed_stage;
@@ -4270,7 +4325,7 @@ function updateStepper(info) {
   let activeStep;
   if (stage === 'viz' || status === 'completed') {
     activeStep = 9; // all steps done
-  } else if (stage === 'md') {
+  } else if (stage === 'md' || status === 'analysis_pending') {
     activeStep = 8; // MD done, analysis is next
   } else if (stage === 'env') {
     activeStep = 6; // env done, MD is next
@@ -4317,11 +4372,11 @@ function updateButtons(status) {
 
   const termStatus = document.getElementById('term-status');
   if (termStatus) {
-    const cls = { running: 'badge-running', paused: 'badge-paused',
+    const cls = { running: 'badge-running', paused: 'badge-paused', analysis_pending: 'badge-paused',
                   completed: 'badge-completed', failed: 'badge-failed',
                   aborted: 'badge-aborted' }[status] || 'badge-aborted';
     termStatus.className = 'run-item-badge ' + cls;
-    termStatus.textContent = status;
+    termStatus.textContent = status === 'analysis_pending' ? 'MD complete · analysis pending' : status;
   }
 
   const open3dBtn = document.getElementById('open-3d-btn');
@@ -4463,6 +4518,34 @@ function connectWs(runId) {
   }
 }
 
+function _writeStructuredTerminal(events) {
+  initTerminal();
+  const writeLine = (text) => {
+    if (term) term.write(text + '\r\n');
+    else {
+      const fallback = document.getElementById('fallback-terminal-text');
+      if (fallback) fallback.textContent += text + '\n';
+    }
+  };
+  writeLine('\x1b[1;36m[Run activity — fact-based]\x1b[0m');
+  for (const event of events) {
+    const marker = event.status === 'completed' ? '✓' : event.status === 'running' ? '●' : '○';
+    const color = event.status === 'completed' ? '1;32' : event.status === 'running' ? '1;36' : '33';
+    writeLine(`\x1b[${color}m${marker} Stage ${event.step}: ${event.stage}\x1b[0m`);
+    writeLine(`  ${event.text}`);
+  }
+}
+
+async function loadStructuredActivity(runId) {
+  try {
+    const resp = await fetch(`/api/runs/${runId}/activity`);
+    if (!resp.ok || currentRunId !== runId) return;
+    const payload = await resp.json();
+    if (terminalMode === 'structured') _writeStructuredTerminal(payload.events || []);
+    if (terminalMode === 'chat') _renderActivityBubbles(payload.events || []);
+  } catch (_) {}
+}
+
 async function selectRun(runId, reconnectWs = true) {
   currentRunId = runId;
   _lastKnownStatus = null;
@@ -4504,11 +4587,17 @@ async function selectRun(runId, reconnectWs = true) {
     updateStepper(info);
     updateButtons(info.status);
 
-    // Reset to raw terminal mode when switching runs
-    if (terminalMode === 'chat') {
-      toggleTerminalMode();
-    }
-    if (reconnectWs) connectWs(runId);
+    // Real runs default to the same structured, fact-based presentation as
+    // Virtual Run. Raw PTY output remains available through RAW LOG.
+    terminalMode = 'structured';
+    const termPanel = document.getElementById('terminal-panel');
+    const chatPanel = document.getElementById('chat-panel');
+    termPanel.style.display = '';
+    chatPanel.style.display = 'none';
+    document.getElementById('btn-terminal-mode').textContent = 'CHAT';
+    document.getElementById('btn-terminal-mode').style.color = 'var(--accent-cyan)';
+    if (reconnectWs) stopWs();
+    loadStructuredActivity(runId);
 
     if (info.status === 'completed') {
       loadArtifacts(runId);
@@ -4599,12 +4688,12 @@ function renderRunList(runs) {
       ? run.created_at.replace('T', ' ').substring(0, 19)
       : '';
     const badgeClass = {
-      running: 'badge-running', paused: 'badge-paused',
+      running: 'badge-running', paused: 'badge-paused', analysis_pending: 'badge-paused',
       completed: 'badge-completed', failed: 'badge-failed',
       aborted: 'badge-aborted',
     }[run.status] || 'badge-aborted';
     const badgeText = {
-      running: '● running', paused: '⏸ paused',
+      running: '● running', paused: '⏸ paused', analysis_pending: '✓ MD complete · analysis pending',
       completed: '✓ completed', failed: '✕ failed',
       aborted: '○ aborted',
     }[run.status] || 'unknown';
@@ -5290,6 +5379,22 @@ async function uploadLiterature() {
   } catch (_) { showToast('Literature upload failed.', 'error'); }
 }
 
+async function searchLiterature() {
+  if (!currentRunId || currentRunId === 'virtual_sandbox') return;
+  const query = document.getElementById('literature-search-query')?.value?.trim();
+  if (!query) { showToast('Enter a public-literature search query first.', 'error'); return; }
+  try {
+    const resp = await fetch(`/api/runs/${currentRunId}/literature/search`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, limit: 5 }),
+    });
+    const payload = await resp.json().catch(() => ({}));
+    if (!resp.ok) { showToast(payload.detail || 'Public literature search failed.', 'error'); return; }
+    const found = (payload.results || []).length;
+    showToast(`${found} public abstract record${found === 1 ? '' : 's'} added to this run's evidence corpus.`, found ? 'success' : 'error');
+  } catch (_) { showToast('Public literature search failed.', 'error'); }
+}
+
 async function queryLiterature() {
   if (!currentRunId || currentRunId === 'virtual_sandbox') return;
   const question = document.getElementById('literature-question')?.value?.trim();
@@ -5632,34 +5737,37 @@ async function doAction(action) {
 }
 
 function toggleTerminalMode() {
-  terminalMode = terminalMode === 'raw' ? 'chat' : 'raw';
+  terminalMode = terminalMode === 'structured' ? 'chat' : terminalMode === 'chat' ? 'raw' : 'structured';
   const btn = document.getElementById('btn-terminal-mode');
   const termPanel = document.getElementById('terminal-panel');
   const chatPanel = document.getElementById('chat-panel');
 
   if (terminalMode === 'chat') {
-    btn.textContent = 'TERMINAL';
+    btn.textContent = 'RAW LOG';
     btn.style.color = 'var(--accent-green)';
     termPanel.style.display = 'none';
     chatPanel.style.display = 'flex';
     chatPanel.style.flexDirection = 'column';
-    // Only reset bubbles for real runs (virtual run builds incrementally)
+    // Real runs render the same structured events as the terminal view.
     if (currentRunId && currentRunId !== 'virtual_sandbox') {
-      _lastChatText = '';
-      const msgs = document.getElementById('chat-messages');
-      if (msgs) msgs.innerHTML = '';
+      loadStructuredActivity(currentRunId);
     }
     clearTimeout(chatPollTimer);
     chatPollTimer = null;
-    if (currentRunId) pollChatLog();
+  } else if (terminalMode === 'raw') {
+    btn.textContent = 'TERMINAL';
+    btn.style.color = 'var(--accent-yellow)';
+    termPanel.style.display = '';
+    chatPanel.style.display = 'none';
+    if (currentRunId && currentRunId !== 'virtual_sandbox') connectWs(currentRunId);
   } else {
     btn.textContent = 'CHAT';
     btn.style.color = 'var(--accent-cyan)';
     termPanel.style.display = '';
-    // Keep chatPanel hidden but preserve its content
     chatPanel.style.display = 'none';
     clearTimeout(chatPollTimer);
     chatPollTimer = null;
+    if (currentRunId && currentRunId !== 'virtual_sandbox') loadStructuredActivity(currentRunId);
   }
 }
 
@@ -5714,6 +5822,18 @@ async function pollChatLog() {
   if (terminalMode === 'chat') {
     chatPollTimer = setTimeout(pollChatLog, 3000);
   }
+}
+
+function _renderActivityBubbles(events) {
+  const container = document.getElementById('chat-messages');
+  if (!container) return;
+  container.innerHTML = '';
+  for (const event of events) {
+    const prefix = event.status === 'completed' ? 'Completed' : event.status === 'running' ? 'Running' : 'Pending';
+    container.appendChild(_makeBubble(`${prefix} · ${event.stage}\n${event.text}`));
+  }
+  const panel = document.getElementById('chat-panel');
+  if (panel) panel.scrollTop = panel.scrollHeight;
 }
 
 // ── Force Field Manager ─────────────────────────────────────────────────────
@@ -6126,6 +6246,7 @@ function showMembraneBuilder() {
   document.getElementById('membrane-builder-view').style.display = 'flex';
   document.getElementById('view-title').textContent = 'Membrane Builder';
   _setTypeSwitcher('mem');
+  refreshBuilderDependency('mb-install-guide', 'membrane');
   mbGoStep(1);
   if (!document.getElementById('mb-upper-rows').children.length) {
     mbAddLipid('upper');
@@ -6367,14 +6488,16 @@ async function mbBuild() {
   buildBtn.disabled = true;
 
   try {
-    const resp = await fetch('/api/membrane/build', { method: 'POST', body: formData });
+    const resp = await fetch('/api/membrane/runs', { method: 'POST', body: formData });
     const data = await resp.json();
     if (!resp.ok) {
       statusEl.textContent = `Error: ${data.detail || 'Build failed'}`;
       statusEl.style.color = 'var(--accent-red, #ff4444)';
     } else {
-      statusEl.textContent = '✓ Membrane system built. Files saved to workspace.';
+      statusEl.textContent = `✓ Run ${data.run_id} started from the prebuilt membrane system.`;
       statusEl.style.color = 'var(--accent-green)';
+      await loadRuns();
+      selectRun(data.run_id);
     }
   } catch {
     statusEl.textContent = 'Network error.';
@@ -6387,8 +6510,10 @@ async function mbBuild() {
 let _lbProteinContent = null;
 let _lbProteinFilename = null;
 let _lbLigandFile = null;
+let _lbCgenffStream = null;
 let _lbItp = null;
 let _lbLigandGro = null;
+let _lbPrm = null;
 let _lbResname = "LIG";
 
 function showLigandBuilder() {
@@ -6399,6 +6524,7 @@ function showLigandBuilder() {
   document.getElementById('ligand-builder-view').style.display = 'flex';
   document.getElementById('view-title').textContent = 'Protein-Ligand Builder';
   _setTypeSwitcher('lig');
+  refreshBuilderDependency('lb-install-guide', 'ligand');
   lbGoStep(1);
 }
 
@@ -6464,21 +6590,26 @@ function lbHandleLigand(fileOrInput) {
   }
 }
 
-async function lbRunAcpype() {
-  if (!_lbLigandFile) { showToast('Upload a ligand file first', 'error'); return; }
+function lbHandleCgenffStream(fileOrInput) {
+  _lbCgenffStream = fileOrInput instanceof File ? fileOrInput : (fileOrInput?.files?.[0] || null);
+  const info = document.getElementById('lb-cgenff-stream-info');
+  if (_lbCgenffStream) { info.style.display = ''; info.textContent = `✓ ${_lbCgenffStream.name}`; }
+}
+
+async function lbRunCgenff() {
+  if (!_lbLigandFile || !_lbCgenffStream) { showToast('Upload both a MOL2 and its CGenFF STR file first', 'error'); return; }
   const btn = document.getElementById('lb-param-btn');
   const statusEl = document.getElementById('lb-param-status');
   const filesEl = document.getElementById('lb-param-files');
   btn.disabled = true;
   statusEl.style.display = '';
-  statusEl.textContent = 'Running ACPYPE...';
+  statusEl.textContent = 'Converting CGenFF parameters...';
   statusEl.style.color = 'var(--text-secondary)';
 
   _lbResname = (document.getElementById('lb-resname').value || 'LIG').toUpperCase().slice(0, 3);
   const formData = new FormData();
-  formData.append('ligand', _lbLigandFile);
-  formData.append('charge', document.getElementById('lb-charge').value);
-  formData.append('atom_type', document.getElementById('lb-atomtype').value);
+  formData.append('mol2', _lbLigandFile);
+  formData.append('cgenff_stream', _lbCgenffStream);
   formData.append('residue_name', _lbResname);
 
   try {
@@ -6488,17 +6619,15 @@ async function lbRunAcpype() {
       statusEl.textContent = `Error: ${data.detail || 'Parameterization failed'}`;
       statusEl.style.color = 'var(--accent-red, #ff4444)';
     } else if (!data.available) {
-      statusEl.textContent = 'acpype is not installed on this server.';
+      statusEl.textContent = 'CGenFF converter is not installed on this server.';
     } else {
       _lbItp = data.itp;
       _lbLigandGro = data.gro;
-      const penalty = data.penalty || 0;
-      let msg = `✓ Parameterization complete. Penalty score: ${penalty.toFixed(1)}`;
-      if (penalty > 10) msg += ' ⚠ (review recommended)';
-      statusEl.textContent = msg;
-      statusEl.style.color = penalty > 10 ? 'var(--accent-yellow, #f5a623)' : 'var(--accent-green)';
+      _lbPrm = data.prm;
+      statusEl.textContent = '✓ CGenFF conversion complete. Review the original stream penalties before MD.';
+      statusEl.style.color = 'var(--accent-green)';
       filesEl.style.display = '';
-      filesEl.textContent = `Files generated: ${_lbResname}.itp, ${_lbResname}.gro, posre_${_lbResname}.itp`;
+      filesEl.textContent = `Files generated: ${_lbResname}.itp, ${_lbResname}.prm, ${_lbResname}.gro`;
       document.getElementById('lb-next-3-btn').disabled = false;
       document.getElementById('lb-next-3-btn').style.opacity = '1';
     }
@@ -6511,32 +6640,35 @@ async function lbRunAcpype() {
 }
 
 async function lbAssemble() {
-  if (!_lbProteinContent || !_lbItp || !_lbLigandGro) {
+  if (!_lbProteinContent || !_lbItp || !_lbLigandGro || !_lbCgenffStream || !_lbLigandFile) {
     showToast('Complete Steps 1 and 2 first', 'error');
     return;
   }
   const statusEl = document.getElementById('lb-assemble-status');
   const btn = document.getElementById('lb-assemble-btn');
   statusEl.style.display = '';
-  statusEl.textContent = 'Assembling protein-ligand complex...';
+  statusEl.textContent = 'Creating CHARMM36/CGenFF simulation run...';
   btn.disabled = true;
 
-  const minimalTop = '#include "amber99sb-ildn.ff/forcefield.itp"\n[ system ]\nProtein in water\n[ molecules ]\nProtein_chain_A  1\n';
   const formData = new FormData();
-  formData.append('protein_gro', new Blob([_lbProteinContent], {type:'text/plain'}), _lbProteinFilename || 'protein.pdb');
-  formData.append('ligand_gro', new Blob([_lbLigandGro], {type:'text/plain'}), `${_lbResname}.gro`);
-  formData.append('ligand_itp', new Blob([_lbItp], {type:'text/plain'}), `${_lbResname}.itp`);
-  formData.append('topol_top', new Blob([minimalTop], {type:'text/plain'}), 'topol.top');
+  formData.append('protein_pdb', new Blob([_lbProteinContent], {type:'text/plain'}), _lbProteinFilename || 'protein.pdb');
+  formData.append('mol2', _lbLigandFile);
+  formData.append('cgenff_stream', _lbCgenffStream);
+  formData.append('residue_name', _lbResname);
+  formData.append('temperature_K', document.getElementById('lb-temp').value);
+  formData.append('concentration_M', document.getElementById('lb-salt').value);
 
   try {
-    const resp = await fetch('/api/ligand/assemble', { method: 'POST', body: formData });
+    const resp = await fetch('/api/ligand/runs', { method: 'POST', body: formData });
     const data = await resp.json();
     if (!resp.ok) {
       statusEl.textContent = `Error: ${data.detail || 'Assembly failed'}`;
       statusEl.style.color = 'var(--accent-red, #ff4444)';
     } else {
-      statusEl.textContent = '✓ Complex assembled. Files: complex.gro, topol_complex.top';
+      statusEl.textContent = `✓ Run ${data.run_id} started with CHARMM36/CGenFF topology.`;
       statusEl.style.color = 'var(--accent-green)';
+      await loadRuns();
+      selectRun(data.run_id);
     }
   } catch {
     statusEl.textContent = 'Network error.';

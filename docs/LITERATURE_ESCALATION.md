@@ -1,4 +1,4 @@
-# PaperQA Literature Escalation
+# Literature Retrieval and PaperQA Escalation
 
 PaperQA2 is an optional evidence-retrieval layer for cases not covered by a
 selected tutorial: nonstandard ligands, metal sites, unusual force fields, or
@@ -17,6 +17,20 @@ PaperQA2 requires Python 3.11+ and an operator-configured LLM/embedding
 provider (or local equivalent). Do not submit provider credentials through the
 web UI. Place papers the project is allowed to index under the run-local
 `literature/` directory.
+
+## Public-evidence retrieval
+
+`POST /api/runs/{run_id}/literature/search` searches the allow-listed public
+Europe PMC API and writes returned bibliographic metadata and abstracts as
+Markdown into the run-local `literature/` directory. It does not download full
+text, bypass publisher access controls, assert a license, or accept arbitrary
+URLs. Each search record includes its Europe PMC URL, source ID, retrieval time,
+the active contract hash, and `requires_user_approval` execution policy.
+
+Use this when the selected tutorial lacks context for a nonstandard ligand,
+metal site, force field, or sampling setup. Review the returned source records
+and ask PaperQA a focused question afterwards. Results can inform a proposed
+experimental contract, but never modify a standard run automatically.
 
 ## Query contract
 

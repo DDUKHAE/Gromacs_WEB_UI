@@ -15,6 +15,8 @@ from lib import validators as V
 from lib.mdp_templates import base as MDP
 from lib import protocol_contract as PC
 from lib import run_plan as RP
+from lib.system_config import load_config
+from lib import ligand_params as LP
 
 
 _NET_CHARGE_RE = re.compile(
@@ -23,6 +25,7 @@ _NET_CHARGE_RE = re.compile(
 _GENION_ADD_RE = re.compile(
     r"Will try to add\s+(\d+)\s+NA ions?\s+and\s+(\d+)\s+CL ions?", re.IGNORECASE
 )
+_GROMPP_WARNING_RE = re.compile(r"^WARNING\s+\d+\s+\[.*", re.MULTILINE)
 
 
 class UnsupportedTutorialError(Exception):
@@ -127,6 +130,62 @@ def run_step1_topology(workspace_dir: Path, forcefield: str, water: str) -> None
     state.record_force_field(ws, forcefield)
 
 
+def integrate_cgenff_ligand(workspace_dir: Path) -> None:
+    """Merge pre-converted CGenFF files into the CHARMM36 protein topology.
+
+    Builder files live below ``inputs/`` and are copied into ``stage1_env`` so
+    every GROMACS include is run-local and archived with the run.
+    """
+    ws = Path(workspace_dir)
+    config = load_config(ws) or {}
+    ligand = config.get("ligand") or {}
+    if ligand.get("parameterization") != "cgenff":
+        return
+    required = {key: ws / ligand.get(key, "") for key in ("itp_file", "prm_file", "gro_file")}
+    missing = [key for key, file_path in required.items() if not file_path.is_file()]
+    if missing:
+        raise UnsupportedTutorialError("CGenFF builder files missing: " + ", ".join(missing))
+    stage = ws / "stage1_env"
+    result = LP.assemble_complex(
+        stage / "processed.gro", required["gro_file"], required["itp_file"],
+        stage / "topol.top", stage, required["prm_file"],
+    )
+    (stage / "processed.gro").write_text(result["complex_gro"])
+    (stage / "topol.top").write_text(result["topol_top"])
+    s = state.read(ws)
+    s["step_outputs"]["step_1"]["ligand"] = {
+        "parameterization": "cgenff", "residue_name": ligand.get("residue_name"),
+        "itp": "stage1_env/" + required["itp_file"].name,
+        "prm": "stage1_env/" + required["prm_file"].name,
+    }
+    state.write(ws, s)
+
+
+def prepare_prebuilt_membrane(workspace_dir: Path, gro_text: str, top_text: str,
+                              tutorial_id: str = "KALP15_in_DPPC") -> None:
+    """Stage a packmol-memgen GROMACS system as a completed environment build."""
+    ws = Path(workspace_dir)
+    init_workspace(ws)
+    stage = ws / "stage1_env"
+    (stage / "processed.gro").write_text(gro_text)
+    (stage / "ions.gro").write_text(gro_text)
+    (stage / "topol.top").write_text(top_text)
+    collect_hardware(ws)
+    manifest = TR.load_manifest(tutorial_id) or {}
+    s = state.read(ws)
+    s["tutorial"] = {"id": tutorial_id, "variant": manifest.get("pipeline_variant"),
+                     "has_protein": True, "manifest_path": f"docs/tutorial/{tutorial_id}/tutorial.manifest.json"}
+    s["step_outputs"].update({
+        "step_1": {"forcefield": "charmm36", "water_model": "tip3p", "top_file": "stage1_env/topol.top", "gro_file": "stage1_env/processed.gro"},
+        "step_2": {"box_type": "prebuilt", "box_distance": "prebuilt", "box_gro": "stage1_env/ions.gro"},
+        "step_3": {"solv_gro": "stage1_env/ions.gro", "n_solvent_molecules": "prebuilt"},
+        "step_5": {"ion_gro": "stage1_env/ions.gro", "n_na": "prebuilt", "n_cl": "prebuilt", "net_charge": "unverified"},
+    })
+    s["current_step"], s["last_completed_stage"] = 5, "env"
+    state.write(ws, s)
+    (ws / "builder_handoff.json").write_text(json.dumps({"kind": "membrane", "environment": "prebuilt"}, indent=2))
+
+
 def run_step2_box(workspace_dir: Path, box_type: str, distance_nm: float) -> None:
     ws = Path(workspace_dir)
     out_dir = ws / "stage1_env"
@@ -183,9 +242,15 @@ def run_step4_ions_prep(workspace_dir: Path) -> None:
     out_dir = ws / "stage1_env"
     ions_mdp = MDP.render("ions", overrides={}, output_dir=out_dir)
     state.record_mdp_hash(ws, "ions", ions_mdp)
+    # GROMACS 2026 emits two expected pre-genion warnings for charged GROMOS
+    # systems: the legacy GROMOS cutoff notice and PME on the deliberately
+    # not-yet-neutral system. Keep the normal limit for other force fields.
+    s = state.read(ws)
+    ff = str((s["step_outputs"].get("step_1") or {}).get("forcefield", "")).lower()
+    maxwarn = "2" if ff.startswith("gromos") else "1"
     result = GW.run(
         ["grompp", "-f", "ions.mdp", "-c", "solv.gro",
-         "-p", "topol.top", "-o", "ions.tpr", "-maxwarn", "1"],
+         "-p", "topol.top", "-o", "ions.tpr", "-maxwarn", maxwarn],
         cwd=out_dir,
     )
     if not result.ok:
@@ -195,8 +260,13 @@ def run_step4_ions_prep(workspace_dir: Path) -> None:
     # means the system is already neutral (charge 0.0).
     m = _NET_CHARGE_RE.search(result.stdout + result.stderr)
     initial_net_charge = float(m.group(1)) if m else 0.0
+    warnings = _GROMPP_WARNING_RE.findall(result.stdout + result.stderr)
     s = state.read(ws)
-    s["step_outputs"]["step_4"] = {"initial_net_charge": initial_net_charge}
+    s["step_outputs"]["step_4"] = {
+        "initial_net_charge": initial_net_charge,
+        "grompp_maxwarn": int(maxwarn),
+        "grompp_warnings": warnings,
+    }
     s["current_step"] = 4
     state.write(ws, s)
 
@@ -299,6 +369,10 @@ def build_environment(pdb_path: Path, prompt: str, workspace_dir: Path,
                       prerequisites: dict[str, Any] | None = None,
                       interactive: bool = True) -> dict[str, Any]:
     init_workspace(workspace_dir)
+    if (Path(workspace_dir) / "builder_handoff.json").exists():
+        # A prebuilt membrane already includes its box, solvent, and ions.
+        # Do not silently rebuild it with the aqueous protein path.
+        return state.read(workspace_dir)
     collect_hardware(workspace_dir)
     inputs_pdb = Path(workspace_dir) / "inputs" / "input.pdb"
     if Path(pdb_path).resolve() != inputs_pdb.resolve():
@@ -376,6 +450,7 @@ def build_environment(pdb_path: Path, prompt: str, workspace_dir: Path,
     box_type = locked.get("box_type") or user_prefs.get("box_type") or defaults.get("box_type", "cubic")
     box_d = locked.get("box_distance_nm") or defaults.get("box_distance_nm", 1.0)
     run_step1_topology(workspace_dir, ff, water)
+    integrate_cgenff_ligand(workspace_dir)
     run_step2_box(workspace_dir, box_type, box_d)
     run_step3_solvate(workspace_dir)
     run_step4_ions_prep(workspace_dir)

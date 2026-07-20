@@ -80,6 +80,10 @@ Claude Code, OpenAI Codex CLI, and Gemini CLI are supported. Each is spawned as 
 | GROMACS 2026.0     | All pipeline stages — topology, solvation, equilibration, production run, analysis                               |
 | `requirements.txt` | REST API · WebSocket server + trajectory analysis plots + PDB protonation state prediction (`fastapi`, `uvicorn`, `python-multipart`, `matplotlib`, `propka`) |
 
+> Create and activate the `gromacs_web` conda environment before running any
+> command below. System Python is unsupported; the project requires Python
+> 3.11 or later and the reference environment uses Python 3.13.
+
 ### Optional
 
 | Dependency      | Purpose                                      |
@@ -90,6 +94,63 @@ Claude Code, OpenAI Codex CLI, and Gemini CLI are supported. Each is spawned as 
 | Claude Code CLI | LLM-orchestrated execution — Claude          |
 | Codex CLI       | LLM-orchestrated execution — OpenAI Codex    |
 | Gemini CLI      | LLM-orchestrated execution — Google Gemini   |
+
+### Builder-specific dependencies
+
+The standard aqueous-protein workflow requires only the **Required** tools
+above. The two specialised Builders have additional, server-side dependencies.
+They are not installed by `pip install -r requirements.txt`.
+
+| Builder | Required additional tools | Why |
+| --- | --- | --- |
+| Membrane Builder | AmberTools distribution containing `packmol-memgen`, plus `packmol` | Builds the lipid bilayer and initial GROMACS topology. |
+| Protein–Ligand Builder | CHARMM36 GROMACS force-field files, a local `cgenff_charmm2gmx.py` converter, and a reviewed CGenFF `.str` file | Converts CGenFF ligand parameters into CHARMM36-compatible GROMACS files. |
+
+The web server checks these dependencies whenever the relevant Builder is
+opened. It shows an installation panel instead of attempting an incomplete
+build when a requirement is missing.
+
+#### Membrane Builder: AmberTools / PACKMOL-Memgen
+
+Install AmberTools into the same active environment, then verify that its
+PACKMOL-Memgen executable is visible to the process that starts `main.py`:
+
+```bash
+conda install -c conda-forge ambertools
+command -v packmol-memgen
+packmol-memgen --version
+```
+
+PACKMOL-Memgen is distributed with AmberTools; installations that do not expose
+`packmol-memgen` on `PATH` are not usable by this web server. Do **not** add a
+separate `packmol` conda package to this command: it can conflict with the
+AmberTools package resolution on macOS. Consult the AmberTools installation
+documentation for platform-specific packaging if the executable is absent.
+
+#### Protein–Ligand Builder: CHARMM36 / CGenFF
+
+1. Install CHARMM36 as described in [Requires Separate Installation:
+   CHARMM36](#requires-separate-installation-charmm36).
+2. Prepare a hydrogen-complete ligand MOL2 file and submit it directly with
+   **your own account** to the [CGenFF web service](https://cgenff.com/).
+   Review the returned parameter penalties, then save the returned stream
+   file (`.str`). The Protein–Ligand Builder does not submit structures to
+   CGenFF, automate its web interface, or collect CGenFF credentials.
+3. Download a compatible `cgenff_charmm2gmx.py` converter and configure its
+   absolute path for the web-server process:
+
+```bash
+export CGENFF_CONVERTER=/absolute/path/to/cgenff_charmm2gmx.py
+test -f "$CGENFF_CONVERTER"
+python "$CGENFF_CONVERTER" --help
+```
+
+In the Builder, upload the paired MOL2 and reviewed STR together with the
+protein PDB. The protein PDB and ligand MOL2 must use the same docking
+coordinate frame. The Builder creates run-local `.itp`, `.prm`, and `.gro`
+files; it never submits structures or credentials to CGenFF itself. Do not
+continue to production MD with high-penalty parameters without scientific
+review. Restart `main.py` after changing `CGENFF_CONVERTER` or `GMXLIB`.
 
 ---
 
@@ -300,6 +361,20 @@ CHARMM36 is not distributed with GROMACS and must be installed manually for the 
 
 Download "CHARMM36 force field for GROMACS" from the MacKerell Lab distribution page:  
 https://mackerell.umaryland.edu/charmm_ff.shtml
+
+Extract the downloaded `charmm36*.ff` directory into the GROMACS topology
+directory, or set `GMXLIB` to the parent directory that contains it. Confirm
+that the active GROMACS installation can see the force field before starting a
+CHARMM36 or Protein–Ligand run:
+
+```bash
+# Example: /opt/gromacs-top/charmm36.ff exists after extraction
+export GMXLIB=/opt/gromacs-top
+test -f "$GMXLIB/charmm36.ff/forcefield.itp"
+```
+
+For a CGenFF ligand, CHARMM36 is mandatory: do not mix the generated CGenFF
+files with the Amber/GAFF topology path.
 
 ---
 

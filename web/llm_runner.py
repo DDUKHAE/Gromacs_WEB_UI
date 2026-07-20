@@ -97,6 +97,9 @@ async def run_llm_agent(
     prompt = adapter.build_prompt(harness_dir, workspace, pdb_path)
     prompt += _apply_system_config_constraint(workspace)
     prompt += render_protocol_contract(workspace)
+    prompt_via_argv = adapter.accepts_initial_prompt_argument
+    if prompt_via_argv:
+        cmd.append(prompt)
 
     master_fd, slave_fd = pty.openpty()
     set_winsize(master_fd, rows=50, cols=220)
@@ -162,11 +165,14 @@ async def run_llm_agent(
 
     threading.Thread(target=_pty_reader, daemon=True).start()
 
-    # Deliver initial prompt (simulates the user's first message)
-    try:
-        os.write(master_fd, (prompt + "\n").encode())
-    except OSError:
-        pass
+    # Some TUIs discard PTY input while initializing their alternate screen.
+    # Codex accepts a prompt argv and therefore receives it after startup;
+    # other adapters retain the interactive PTY delivery path.
+    if not prompt_via_argv:
+        try:
+            os.write(master_fd, (prompt + "\n").encode())
+        except OSError:
+            pass
 
     async def _pty_writer() -> None:
         """Forward keystrokes from WebSocket to PTY stdin."""

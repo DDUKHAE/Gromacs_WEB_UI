@@ -262,8 +262,8 @@ def render_prompt(workspace: Path) -> str:
         packs or "- no derived context pack available",
         "- Do not substitute another tutorial, force field, water model, box, or phase sequence.",
         "- Do not run raw gmx commands or create ad-hoc scripts; use the three skill entry points.",
-        "- If an unsupported case needs literature evidence, do not search or alter the contract yourself;",
-        "  stop and request a PaperQA evidence-only escalation for operator approval.",
+        "- If an unsupported case needs literature evidence, request the approved Europe PMC evidence",
+        "  retrieval/PaperQA escalation. Do not alter this contract; all resulting changes need operator approval.",
         "",
     ]
     if contract["locked_mdp_parameters"]:
@@ -296,19 +296,17 @@ def _same_mdp_value(expected: Any, actual: str) -> bool:
         return False
 
 
-def validate_rendered_mdp(workspace: Path, mdp_path: Path) -> list[str]:
-    """Return contract violations in an MDP rendered for this workspace."""
+def validate_rendered_mdp(workspace: Path, mdp_path: Path, phase: str | None = None) -> list[str]:
+    """Return contract violations applicable to the rendered MDP phase."""
     contract = assert_valid(workspace)
     if not contract or not contract["locked_mdp_parameters"]:
         return []
+    phase_name = (phase or Path(mdp_path).stem).lower()
+    expected_parameters = phase_overrides(workspace, phase_name)
     actual = _parse_mdp(mdp_path)
     errors = []
-    for key, expected in contract["locked_mdp_parameters"].items():
+    for key, expected in expected_parameters.items():
         observed = actual.get(key)
-        # Not every expert control is meaningful in every phase (e.g. a
-        # barostat is intentionally absent from NVT and EM).  Validate the
-        # parameters rendered by that phase; the contract prevents a changed
-        # value without incorrectly demanding a barostat in NVT.
         if observed is None:
             continue
         elif not _same_mdp_value(expected, observed):

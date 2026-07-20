@@ -26,10 +26,37 @@ def _process_alive(pid: int) -> bool:
         return False
 
 
+def _production_finished(workspace: Path) -> bool:
+    """Return whether GROMACS wrote its normal production completion marker.
+
+    A live LLM terminal is not evidence that MD is still running.  Read only
+    the tail because production logs can become large.
+    """
+    log_path = workspace / "stage2_md" / "production.log"
+    try:
+        with log_path.open("rb") as handle:
+            handle.seek(0, os.SEEK_END)
+            handle.seek(max(0, handle.tell() - 65536))
+            tail = handle.read().decode("utf-8", errors="replace")
+        return "Finished mdrun on rank" in tail
+    except OSError:
+        return False
+
+
 def derive_status(workspace: Path) -> str:
     pid_file = workspace / "runner.pid"
     exit_file = workspace / "runner.exit"
     state_file = workspace / "state.json"
+
+    # Keep the MD state distinct from a still-open (or stalled) LLM terminal.
+    # This prevents the UI from claiming "MD Running" after mdrun has ended.
+    if _production_finished(workspace):
+        try:
+            state = json.loads(state_file.read_text()) if state_file.exists() else {}
+        except Exception:
+            state = {}
+        if state.get("last_completed_stage") != "viz":
+            return "analysis_pending"
 
     if pid_file.exists():
         try:

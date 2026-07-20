@@ -91,7 +91,7 @@ def run_phase(workspace_dir: Path, phase: str,
             s_for_render.get("tutorial") or {}
         ).get("has_protein", True)
     mdp_path = MDP.render(phase, render_overrides, output_dir=out_dir)
-    contract_errors = PC.validate_rendered_mdp(ws, mdp_path)
+    contract_errors = PC.validate_rendered_mdp(ws, mdp_path, phase)
     if contract_errors:
         raise StateContractError("; ".join(contract_errors))
     state.record_mdp_hash(ws, phase, mdp_path)
@@ -435,7 +435,16 @@ def run_simulation(workspace_dir: Path,
     variant = (s.get("tutorial") or {}).get("variant")
     seq = phase_sequence_for_variant(variant)
     phase_overrides = phase_overrides or {}
+    completed_phases = set(
+        (s.get("step_outputs", {}).get("step_7", {}) or {}).get(
+            "phase_sequence", []
+        )
+    )
     for phase in seq:
+        # An interrupted caller can resume from a finished phase without
+        # overwriting its coordinates or rerunning an equivalent command.
+        if phase in completed_phases and (Path(workspace_dir) / "stage2_md" / f"{phase}.gro").exists():
+            continue
         # Explicit System Builder controls are part of the protocol contract
         # and take precedence over caller/agent overrides.  This makes an
         # attempted LLM parameter change observable as a contract violation

@@ -58,14 +58,49 @@ _TECH_LINE = re.compile(
     re.IGNORECASE,
 )
 
+_ANSI_ESCAPE = re.compile(r"\x1b(?:\][^\x07]*(?:\x07|\x1b\\)|\[[0-?]*[ -/]*[@-~]|.)")
+_CHAT_TUI_LINE = re.compile(
+    r"^\s*(?:›|•\s*Booting|[╭╰│]|Tip:|model:|directory:|OpenAI Codex|Booting MCP server:|"
+    r"You have \d+ usage limit resets|/ps$|Background terminals$)",
+    re.IGNORECASE,
+)
+_CHAT_TOOL_EVENT = re.compile(
+    r"^\s*(?:•\s*(?:Ran|Waited|Explored|Edited|Read|Search|Interacted)|"
+    r"✔\s*You approved|↳|└|│)",
+    re.IGNORECASE,
+)
+
 _PRESETS_DIR = "presets"
 
 
 def _filter_chat_log(raw: str) -> str:
-    """Return only AI narrative text from runner.log, stripping GROMACS output."""
-    lines = raw.splitlines()
+    """Return user-facing agent updates, not raw terminal transcript."""
+    lines = _ANSI_ESCAPE.sub("", raw).splitlines()
     kept: list[str] = []
+    skipping_prompt = False
+    skipping_tool_output = False
     for line in lines:
+        if "You are a GROMACS molecular dynamics expert." in line:
+            skipping_prompt = True
+            continue
+        if skipping_prompt:
+            # Codex renders assistant updates as bullets.  The injected user
+            # prompt itself contains no such update, so do not expose it in
+            # the chat view.
+            if line.lstrip().startswith("• ") and not line.lstrip().startswith("•Booting"):
+                skipping_prompt = False
+            else:
+                continue
+        if _CHAT_TOOL_EVENT.search(line):
+            skipping_tool_output = True
+            continue
+        if skipping_tool_output:
+            if line.lstrip().startswith("• "):
+                skipping_tool_output = False
+            else:
+                continue
+        if _CHAT_TUI_LINE.search(line):
+            continue
         if _CHAT_STRIP.search(line):
             continue
         if _TECH_LINE.search(line):
@@ -392,6 +427,16 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="run plan not found")
         return plan
 
+    @app.get("/api/runs/{run_id}/activity")
+    def api_run_activity(run_id: str, hd: HarnessDir) -> dict:
+        """Structured, fact-only progress for the human-facing terminal/chat."""
+        workspace = _check_run_id(run_id, hd / "runs")
+        info = read_run(run_id, hd / "runs")
+        if info is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        from web.run_activity import build_activity
+        return {"status": info.status, "events": build_activity(workspace, info.status)}
+
     @app.post("/api/runs/{run_id}/literature/query")
     def api_query_literature(run_id: str, body: dict, hd: HarnessDir) -> dict:
         """Evidence-only PaperQA escalation for a run-local paper corpus.
@@ -410,6 +455,20 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         from lib.literature_retrieval import LiteratureRetrievalError, query_local_corpus
         try:
             return query_local_corpus(workspace, question, proposed_change)
+        except LiteratureRetrievalError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/api/runs/{run_id}/literature/search")
+    def api_search_literature(run_id: str, body: dict, hd: HarnessDir) -> dict:
+        """Add Europe PMC public abstract records to this run's evidence corpus."""
+        workspace = _check_run_id(run_id, hd / "runs")
+        if not workspace.is_dir():
+            raise HTTPException(status_code=404, detail="run not found")
+        query = body.get("query", "")
+        limit = body.get("limit", 5)
+        from lib.literature_retrieval import LiteratureRetrievalError, search_open_evidence
+        try:
+            return search_open_evidence(workspace, query, limit)
         except LiteratureRetrievalError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
 
@@ -577,6 +636,10 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
                 raise RunPlanError("missing required inputs: " + ", ".join(plan["missing_inputs"]))
             if (plan["compatibility"]["status"] == "warning"
                     and accept_experimental_overrides.lower() != "true"):
+                # The browser retries after the user explicitly approves the
+                # experimental override.  Do not leave this pre-approval
+                # workspace behind as a duplicate run in the sidebar.
+                shutil.rmtree(ws, ignore_errors=True)
                 raise HTTPException(
                     status_code=409,
                     detail={
@@ -588,6 +651,7 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
                 )
             materialize_contract(ws, plan["tutorial"]["id"])
         except (RunPlanError, ProtocolContractError) as exc:
+            shutil.rmtree(ws, ignore_errors=True)
             raise HTTPException(status_code=409, detail=str(exc))
 
         if llm and llm in ADAPTERS:
@@ -863,7 +927,7 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
             os.unlink(tmp_path)
 
     @app.get("/api/pdb/fetch")
-    async def api_pdb_fetch(pdb_id: str) -> dict:
+    async def api_pdb_fetch(pdb_id: str, hd: HarnessDir) -> dict:
         import urllib.request
         import urllib.error
         if not (len(pdb_id) == 4 and pdb_id.isalnum()):
@@ -877,8 +941,8 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail=f"PDB ID {pdb_id} not found in RCSB")
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"RCSB fetch failed: {exc}")
-        tmp_dir = harness_dir / "tmp"
-        tmp_dir.mkdir(exist_ok=True)
+        tmp_dir = hd / "tmp"
+        tmp_dir.mkdir(parents=True, exist_ok=True)
         (tmp_dir / f"{pdb_id}.pdb").write_text(content)
         return {"pdb_id": pdb_id, "content": content}
 
@@ -899,55 +963,63 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         finally:
             os.unlink(tmp_path)
 
-    # ── Ligand Parameterization ──────────────────────────────────────────────
+    # ── CHARMM36 / CGenFF Ligand Parameterization ───────────────────────────
     from lib import ligand_params as _lp
 
     @app.get("/api/ligand/status")
     def api_ligand_status() -> dict:
-        available = _lp.is_acpype_available()
+        from lib import cgenff as _cg
+        available = _cg.is_available()
         version: str | None = None
         if available:
             try:
                 r = subprocess.run(
-                    ["acpype", "--version"],
+                    [sys.executable, str(_cg.converter_path()), "--help"],
                     capture_output=True, text=True, timeout=5,
                 )
                 version = (r.stdout or r.stderr).strip()[:80] or None
             except Exception:
                 pass
-        return {"available": available, "version": version}
+        return {
+            "available": available,
+            "version": version,
+            "tool": "cgenff_charmm2gmx.py",
+            "install": None if available else {
+                "summary": "Install the CGenFF converter after obtaining a reviewed .str file from CGenFF.",
+                "command": "export CGENFF_CONVERTER=/absolute/path/to/cgenff_charmm2gmx.py",
+                "restart_required": True,
+            },
+        }
 
     @app.post("/api/ligand/parameterize")
     async def api_ligand_parameterize(
-        ligand: UploadFile,
-        charge: Annotated[int, Form(ge=-10, le=10)] = 0,
-        atom_type: Annotated[str, Form()] = "gaff2",
+        mol2: UploadFile,
+        cgenff_stream: UploadFile,
         residue_name: Annotated[str, Form()] = "LIG",
     ) -> dict:
-        if not _lp.is_acpype_available():
+        from lib import cgenff as _cg
+        if not _cg.is_available():
             raise HTTPException(
                 status_code=503,
-                detail="acpype not installed. Run: conda install -c conda-forge ambertools",
+                detail="CGenFF converter unavailable. Set CGENFF_CONVERTER and restart the server.",
             )
         import tempfile as _tmpfile
-        suffix = Path(ligand.filename or "ligand.pdb").suffix or ".pdb"
-        with _tmpfile.NamedTemporaryFile(delete=False, suffix=suffix) as f:
-            f.write(await ligand.read())
-            tmp_path = Path(f.name)
-        try:
-            result = _lp.run_acpype(tmp_path, charge=charge, atom_type=atom_type, residue_name=residue_name)
-            if result.get("error"):
-                raise HTTPException(status_code=500, detail=result["error"])
-            return result
-        finally:
-            if tmp_path.exists():
-                tmp_path.unlink()
+        with _tmpfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            mol2_path, stream_path = workspace / "ligand.mol2", workspace / "ligand.str"
+            mol2_path.write_bytes(await mol2.read())
+            stream_path.write_bytes(await cgenff_stream.read())
+            try:
+                return {"available": True, **_cg.convert(mol2_path, stream_path, residue_name)}
+            except (RuntimeError, ValueError) as exc:
+                raise HTTPException(status_code=422, detail=str(exc))
 
     @app.post("/api/ligand/assemble")
     async def api_ligand_assemble(
         protein_gro: UploadFile,
         ligand_gro: UploadFile,
         ligand_itp: UploadFile,
+        ligand_prm: UploadFile,
         topol_top: UploadFile,
     ) -> dict:
         import tempfile as _tmpfile2
@@ -962,11 +1034,76 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
             p_gro = await _save(protein_gro, "protein.gro")
             l_gro = await _save(ligand_gro, "LIG.gro")
             l_itp = await _save(ligand_itp, "LIG.itp")
+            l_prm = await _save(ligand_prm, "LIG.prm")
             t_top = await _save(topol_top, "topol.top")
 
-            return _lp.assemble_complex(p_gro, l_gro, l_itp, t_top, workspace)
+            return _lp.assemble_complex(p_gro, l_gro, l_itp, t_top, workspace, l_prm)
         finally:
             _shutil.rmtree(workspace, ignore_errors=True)
+
+    @app.post("/api/ligand/runs", status_code=201)
+    async def api_create_cgenff_ligand_run(
+        hd: HarnessDir,
+        protein_pdb: UploadFile,
+        mol2: UploadFile,
+        cgenff_stream: UploadFile,
+        residue_name: Annotated[str, Form()] = "LIG",
+        temperature_K: Annotated[float, Form(ge=200, le=500)] = 300,
+        concentration_M: Annotated[float, Form(ge=0, le=2)] = 0.15,
+    ) -> dict:
+        """Create a run whose Step 1 merges CGenFF ligand and CHARMM36 protein."""
+        from lib import cgenff as _cg
+        if not _cg.is_available():
+            raise HTTPException(status_code=503, detail="CGenFF converter unavailable; configure CGENFF_CONVERTER first")
+        protein = re.sub(r"[^a-z0-9\-]", "", Path(protein_pdb.filename or "complex").stem.lower())[:40] or "complex"
+        run_id = f"{protein}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        ws = hd / "runs" / run_id
+        inputs = ws / "inputs"
+        inputs.mkdir(parents=True)
+        pdb_path = inputs / "input.pdb"
+        pdb_path.write_bytes(await protein_pdb.read(_MAX_PDB_BYTES + 1))
+        if pdb_path.stat().st_size > _MAX_PDB_BYTES:
+            raise HTTPException(status_code=413, detail="PDB file too large (max 50 MB)")
+        import tempfile as _tmpfile
+        with _tmpfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            mol2_path, stream_path = tmp_dir / "ligand.mol2", tmp_dir / "ligand.str"
+            mol2_path.write_bytes(await mol2.read())
+            stream_path.write_bytes(await cgenff_stream.read())
+            try:
+                converted = _cg.convert(mol2_path, stream_path, residue_name)
+            except (RuntimeError, ValueError) as exc:
+                raise HTTPException(status_code=422, detail=str(exc))
+        res = residue_name.upper()
+        (inputs / f"{res}.itp").write_text(converted["itp"])
+        (inputs / f"{res}.prm").write_text(converted["prm"])
+        (inputs / f"{res}.gro").write_text(converted["gro"])
+        config = {
+            "build_type": "ligand",
+            "forcefield": {"name": "charmm36", "water_model": "tip3p"},
+            "box": {"type": "cubic", "edge_distance_nm": 1.2},
+            "ions": {"concentration_M": concentration_M, "neutralize": True},
+            "simulation": {"_expert_mode": True, "temperature_K": temperature_K},
+            "ligand": {"parameterization": "cgenff", "residue_name": res,
+                       "itp_file": f"inputs/{res}.itp", "prm_file": f"inputs/{res}.prm",
+                       "gro_file": f"inputs/{res}.gro"},
+        }
+        (ws / "system_config.json").write_text(json.dumps(config, indent=2))
+        (ws / "meta.json").write_text(json.dumps({"tutorial_id": "Protein_Ligand_Complex", "user_preferences": {
+            "forcefield": "charmm36", "water": "tip3p", "box_type": "cubic"}}, indent=2))
+        from lib.run_plan import materialize as materialize_run_plan
+        from lib.protocol_contract import materialize as materialize_contract
+        plan = materialize_run_plan(ws, pdb_path, "Protein_Ligand_Complex")
+        if plan["compatibility"]["status"] == "blocked":
+            raise HTTPException(status_code=409, detail="missing builder inputs: " + ", ".join(plan["missing_inputs"]))
+        materialize_contract(ws, "Protein_Ligand_Complex")
+        log_file = ws / "runner.log"
+        log_fd = open(log_file, "w")
+        proc = subprocess.Popen([sys.executable, str(RUNNER_PY), "--skill", "all", "--workspace", str(ws), "--pdb", str(pdb_path)],
+                                cwd=str(hd), stdout=log_fd, stderr=subprocess.STDOUT)
+        log_fd.close()
+        (ws / "runner.pid").write_text(str(proc.pid))
+        return {"run_id": run_id, "tutorial_id": "Protein_Ligand_Complex"}
 
     # ── Membrane Builder ────────────────────────────────────────────────────
     from lib import membrane_builder as _mb
@@ -984,7 +1121,16 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
                 version = (r.stdout or r.stderr).strip()[:80] or None
             except Exception:
                 pass
-        return {"available": available, "version": version}
+        return {
+            "available": available,
+            "version": version,
+            "tool": "packmol-memgen",
+            "install": None if available else {
+                "summary": "packmol-memgen (provided by AmberTools) is required to build membrane systems.",
+                "command": "conda install -c conda-forge ambertools",
+                "restart_required": True,
+            },
+        }
 
     @app.get("/api/membrane/lipids")
     def api_membrane_lipids() -> list[dict]:
@@ -1044,6 +1190,57 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         finally:
             if tmp_protein and tmp_protein.exists():
                 tmp_protein.unlink()
+
+    @app.post("/api/membrane/runs", status_code=201)
+    async def api_create_membrane_run(
+        hd: HarnessDir,
+        config_json: Annotated[str, Form()],
+        protein_pdb: UploadFile | None = None,
+    ) -> dict:
+        """Build a membrane, stage its GROMACS topology, and start its MD run."""
+        if not _mb.is_packmol_memgen_available():
+            raise HTTPException(status_code=503, detail="packmol-memgen is not installed")
+        try:
+            membrane = json.loads(config_json)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=422, detail="config_json is not valid JSON")
+        run_id = f"membrane_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        ws, inputs = hd / "runs" / run_id, hd / "runs" / run_id / "inputs"
+        inputs.mkdir(parents=True)
+        pdb_path = inputs / "input.pdb"
+        if protein_pdb:
+            pdb_path.write_bytes(await protein_pdb.read(_MAX_PDB_BYTES + 1))
+            if pdb_path.stat().st_size > _MAX_PDB_BYTES:
+                raise HTTPException(status_code=413, detail="PDB file too large (max 50 MB)")
+        else:
+            pdb_path.write_text("TITLE     MEMBRANE-ONLY SYSTEM\n")
+        try:
+            result = _mb.build_membrane(membrane, ws)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        if result.get("error") or not result.get("gro") or not result.get("top"):
+            raise HTTPException(status_code=422, detail=result.get("error") or "packmol-memgen produced no GROMACS topology")
+        config = {"build_type": "membrane", "forcefield": {"name": "charmm36", "water_model": "tip3p"},
+                  "box": {"type": "triclinic", "edge_distance_nm": 1.0},
+                  "ions": {"concentration_M": membrane.get("salt_M", 0.15), "neutralize": True},
+                  "membrane": membrane}
+        (ws / "system_config.json").write_text(json.dumps(config, indent=2))
+        (ws / "meta.json").write_text(json.dumps({"tutorial_id": "KALP15_in_DPPC", "user_preferences": {
+            "forcefield": "charmm36", "water": "tip3p", "box_type": "triclinic"}}, indent=2))
+        from lib.run_plan import materialize as materialize_run_plan
+        from lib.protocol_contract import materialize as materialize_contract
+        plan = materialize_run_plan(ws, pdb_path, "KALP15_in_DPPC")
+        if plan["compatibility"]["status"] == "blocked":
+            raise HTTPException(status_code=409, detail="missing builder inputs: " + ", ".join(plan["missing_inputs"]))
+        materialize_contract(ws, "KALP15_in_DPPC")
+        from skills.env_builder.env_builder import prepare_prebuilt_membrane
+        prepare_prebuilt_membrane(ws, result["gro"], result["top"])
+        log_fd = open(ws / "runner.log", "w")
+        proc = subprocess.Popen([sys.executable, str(RUNNER_PY), "--skill", "all", "--workspace", str(ws), "--pdb", str(pdb_path)],
+                                cwd=str(hd), stdout=log_fd, stderr=subprocess.STDOUT)
+        log_fd.close()
+        (ws / "runner.pid").write_text(str(proc.pid))
+        return {"run_id": run_id, "tutorial_id": "KALP15_in_DPPC"}
 
     if STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
