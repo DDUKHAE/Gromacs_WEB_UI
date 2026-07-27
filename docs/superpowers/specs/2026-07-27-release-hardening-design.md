@@ -44,6 +44,26 @@ corresponding contract is absent or malformed.  This prevents a seemingly
 successful single-window or single-lambda calculation from being reported as a
 complete PMF or free-energy calculation.
 
+## Browser Input Delivery
+
+The browser exposes an Advanced Workflow section only for umbrella and
+free-energy tutorial selections.  It submits the validated JSON contract plus
+the required uploaded files in the create-run request.
+
+- Umbrella accepts an index file and one coordinate file for each declared
+  window.  The server stores them under `inputs/umbrella/`, rewrites only the
+  user-supplied filenames to safe workspace-relative paths, and rejects an
+  undeclared, duplicate, missing, or oversized file.
+- Free-energy accepts a starting coordinate/topology bundle and materializes
+  the validated lambda schedule into `system_config.json`.  The server stores
+  the bundle under `inputs/free_energy/` and rejects topology includes that
+  escape the uploaded bundle.
+
+The API validates the configuration before persisting a run directory.  File
+paths exposed in the run plan are workspace-relative and are never accepted
+from the browser as absolute paths.  The normal single-PDB workflow remains
+unchanged for the other tutorials.
+
 ## Execution Model
 
 Standard variants retain the named stage directory `stage2_md/`.  Virtual
