@@ -2193,6 +2193,8 @@ body.light-theme #run-search {
           </div>
         </div>
 
+        <div id="failure-summary" role="alert" style="display:none;margin:0 0 12px;padding:12px;border:1px solid var(--accent-red);border-radius:var(--radius-sm);color:var(--text-primary);background:rgba(239,68,68,.08);"></div>
+
         <!-- Terminal panel -->
         <div id="terminal-panel" class="card" role="region" aria-label="Run terminal">
           <div id="terminal-container">
@@ -4602,6 +4604,14 @@ async function selectRun(runId, reconnectWs = true) {
       'Simulation: ' + (info.display_name || info.protein.toUpperCase());
     updateStepper(info);
     updateButtons(info.status);
+    const failure = document.getElementById('failure-summary');
+    if (info.failure_summary) {
+      failure.innerHTML = `<strong>실행 중단: ${escapeHtml(info.failure_summary.stage)}</strong><br>${escapeHtml(info.failure_summary.cause)}<br><span style="color:var(--text-secondary)">다음 조치: ${escapeHtml(info.failure_summary.next_action)}</span>`;
+      failure.style.display = '';
+    } else {
+      failure.style.display = 'none';
+      failure.textContent = '';
+    }
 
     // Real runs default to the same structured, fact-based presentation as
     // Virtual Run. Raw PTY output remains available through RAW LOG.

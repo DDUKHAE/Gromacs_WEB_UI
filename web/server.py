@@ -213,6 +213,22 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
     # Keep fire-and-forget runners strongly referenced and surface failures.
     app.state.background_tasks = set()
 
+    def _failure_summary(workspace: Path, status: str) -> dict | None:
+        if status not in {"failed", "aborted"}:
+            return None
+        try:
+            state = json.loads((workspace / "state.json").read_text())
+        except (OSError, json.JSONDecodeError):
+            state = {}
+        history = state.get("retry_history") or []
+        last = history[-1] if history else {}
+        phase = last.get("phase") or "execution"
+        stage = {"npt": "NPT equilibration", "nvt": "NVT equilibration", "em": "Energy minimization"}.get(phase, "Simulation execution")
+        cause = last.get("cause")
+        if cause == "pressure_coupling":
+            return {"stage": stage, "cause": "Pressure coupling was unstable.", "next_action": "Check the box, density, and pressure-coupling settings before retrying."}
+        return {"stage": stage, "cause": "The run stopped before completion.", "next_action": "Review the latest run log and correct the input before retrying."}
+
     def _track_task(coro):
         task = asyncio.create_task(coro)
         app.state.background_tasks.add(task)
@@ -255,6 +271,7 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         detail = _run_summary(info)
         detail["log_tail"] = log_tail
         detail["pending_warnings"] = info.pending_warnings
+        detail["failure_summary"] = _failure_summary(info.workspace, info.status)
         return detail
 
     @app.get("/api/llms")
