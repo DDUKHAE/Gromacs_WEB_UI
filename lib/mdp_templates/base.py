@@ -19,13 +19,18 @@ DEFAULTS = {
             # Initial equilibration: Berendsen (or C-rescale) barostat is
             # recommended before switching to Parrinello-Rahman, which can
             # oscillate wildly when started far from equilibrium.
-            "pcoupl": "Berendsen"},
+            "pcoupl": "Berendsen", "pcoupltype": "isotropic"},
+    # Keep the second NPT stage distinct. Reusing the ``npt`` name would
+    # overwrite files and make a restart falsely appear to have completed
+    # both barostat stages.
+    "npt_pr": {"nsteps": 50000, "dt": 0.002, "tau_t": 0.1, "ref_t": 300.0,
+               "tau_p": 2.0, "pcoupl": "Parrinello-Rahman", "pcoupltype": "isotropic"},
     "production": {"nsteps": 500000, "dt": 0.002, "tau_t": 0.1, "ref_t": 300.0,
                     "tau_p": 2.0,
                     # Production runs from an already-equilibrated NPT state,
                     # so Parrinello-Rahman (correct NPT ensemble sampling) is
                     # appropriate here.
-                    "pcoupl": "Parrinello-Rahman"},
+                    "pcoupl": "Parrinello-Rahman", "pcoupltype": "isotropic"},
     "ions": {},
     "umbrella": {"nsteps": 500000, "dt": 0.002, "tau_t": 0.5, "ref_t": 300.0,
                   "tau_p": 2.0, "pull_group1": "Chain_A", "pull_group2": "Chain_B",
@@ -40,19 +45,20 @@ DEFAULTS = {
 # Common MDP controls intentionally exposed by the System Builder.  Keeping
 # them in template defaults makes a user choice executable rather than merely
 # an instruction in an LLM prompt.
-for _phase in ("nvt", "npt", "production"):
+for _phase in ("nvt", "npt", "npt_pr", "production"):
     DEFAULTS[_phase].update({
         "constraint_algorithm": "lincs", "constraints": "h-bonds",
         "rcoulomb": 1.0, "rvdw": 1.0, "coulombtype": "PME",
         "pme_order": 4, "fourierspacing": 0.16, "tcoupl": "V-rescale",
     })
-for _phase in ("npt", "production"):
+for _phase in ("npt", "npt_pr", "production"):
     DEFAULTS[_phase]["ref_p"] = 1.0
 
 _FILES = {
     "em": "em.mdp",
     "nvt": "nvt.mdp",
     "npt": "npt.mdp",
+    "npt_pr": "npt.mdp",
     "production": "production.mdp",
     "ions": "ions.mdp",
     "umbrella": "umbrella.mdp",
@@ -60,7 +66,7 @@ _FILES = {
 }
 
 
-_TC_GRPS_PHASES = ("nvt", "npt", "production")
+_TC_GRPS_PHASES = ("nvt", "npt", "npt_pr", "production")
 
 
 def render(phase: str, overrides: dict[str, Any], output_dir: Path) -> Path:

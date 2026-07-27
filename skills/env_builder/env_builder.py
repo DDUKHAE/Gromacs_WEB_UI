@@ -432,6 +432,37 @@ def build_environment(pdb_path: Path, prompt: str, workspace_dir: Path,
         decision = select_tutorial(workspace_dir, inputs_pdb, prompt,
                                    prerequisites or {})
     manifest = TR.load_manifest(decision.tutorial_id) or {}
+    if decision.pipeline_variant == "free_energy_alchemical":
+        workflow = ((load_config(Path(workspace_dir)) or {}).get("advanced_workflow") or {}).get("free_energy") or {}
+        coordinate = Path(workspace_dir) / workflow.get("coordinate", "")
+        topology = Path(workspace_dir) / workflow.get("topology", "")
+        if not coordinate.is_file() or not topology.is_file():
+            raise UnsupportedTutorialError("free-energy coordinate/topology files are required")
+        stage = Path(workspace_dir) / "stage1_env"
+        shutil.copy2(coordinate, stage / "processed.gro")
+        shutil.copy2(coordinate, stage / "ions.gro")
+        shutil.copy2(topology, stage / "topol.top")
+        top_text = (stage / "topol.top").read_text()
+        for include_name in workflow.get("topology_includes", []):
+            include = Path(workspace_dir) / include_name
+            if not include.is_file():
+                raise UnsupportedTutorialError(f"free-energy topology include missing: {include_name}")
+            destination = stage / include.name
+            if destination.name == "topol.top":
+                raise UnsupportedTutorialError("topology include cannot overwrite topol.top")
+            shutil.copy2(include, destination)
+            top_text = top_text.replace(include_name, include.name)
+        (stage / "topol.top").write_text(top_text)
+        s = state.read(workspace_dir)
+        s["step_outputs"].update({
+            "step_1": {"forcefield": manifest.get("defaults", {}).get("forcefield"), "water_model": manifest.get("defaults", {}).get("water_model"), "top_file": "stage1_env/topol.top", "gro_file": "stage1_env/processed.gro"},
+            "step_2": {"box_type": manifest.get("defaults", {}).get("box_type"), "box_distance": manifest.get("defaults", {}).get("box_distance_nm"), "box_gro": "stage1_env/processed.gro"},
+            "step_3": {"solv_gro": "stage1_env/processed.gro", "n_solvent_molecules": 0},
+            "step_5": {"ion_gro": "stage1_env/ions.gro", "n_na": 0, "n_cl": 0, "net_charge": 0.0},
+        })
+        s["current_step"], s["last_completed_stage"] = 5, "env"
+        state.write(workspace_dir, s)
+        return s
     defaults = manifest.get("defaults", {})
     user_prefs: dict = {}
     meta_file = Path(workspace_dir) / "meta.json"

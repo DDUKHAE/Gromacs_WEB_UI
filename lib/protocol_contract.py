@@ -24,12 +24,12 @@ CONTEXT_DIRNAME = "tutorial_context"
 _MAX_CHARS_PER_SOURCE = 6000
 
 PHASE_SEQUENCE_BY_VARIANT = {
-    "protein_aqueous_standard": ["em", "nvt", "npt", "production"],
-    "membrane_md_standard": ["em", "nvt", "npt", "npt", "production"],
-    "protein_ligand_complex": ["em", "nvt", "npt", "production"],
-    "umbrella_sampling": ["em", "nvt", "npt", "umbrella"],
-    "free_energy_alchemical": ["em", "nvt", "npt", "free_energy"],
-    "biphasic_system": ["em", "nvt", "npt", "production"],
+    "protein_aqueous_standard": ["em", "nvt", "npt", "npt_pr", "production"],
+    "membrane_md_standard": ["em", "nvt", "npt", "npt_pr", "production"],
+    "protein_ligand_complex": ["em", "nvt", "npt", "npt_pr", "production"],
+    "umbrella_sampling": ["em", "nvt", "npt", "npt_pr", "umbrella"],
+    "free_energy_alchemical": ["em", "nvt", "npt", "npt_pr", "free_energy"],
+    "biphasic_system": ["em", "nvt", "npt", "npt_pr", "production"],
     "virtual_sites_topology": ["em", "production"],
 }
 
@@ -325,7 +325,14 @@ def phase_overrides(workspace: Path, phase: str) -> dict[str, Any]:
     if phase == "nvt":
         values.pop("pcoupl", None)
         values.pop("ref_p", None)
-    elif phase not in ("npt", "production"):
+    elif phase == "npt":
+        # The first pressure-coupling segment is deliberately not a user or
+        # agent choice: it relaxes density before the production-quality
+        # barostat is enabled in the following, separately recorded phase.
+        values["pcoupl"] = "Berendsen"
+    elif phase == "npt_pr":
+        values["pcoupl"] = "Parrinello-Rahman"
+    elif phase not in ("npt", "npt_pr", "production"):
         # Current special-workflow templates do not expose the standard
         # expert fields.  They remain tutorial-locked, not silently applied.
         return {}

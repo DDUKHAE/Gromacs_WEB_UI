@@ -2315,6 +2315,15 @@ body.light-theme #run-search {
                   </select>
                 </div>
               </div>
+              <div class="ff-row" id="advanced-workflow-row" style="align-items:flex-start;">
+                <div class="ff-label-col"><span class="ff-title">Advanced Workflow</span></div>
+                <div class="ff-select-col">
+                  <textarea id="advanced-workflow-json" rows="4" placeholder="Umbrella/Free-energy workflow JSON (optional)"
+                    style="width:100%;box-sizing:border-box;background:var(--bg-input);border:1px solid var(--border-color);color:var(--text-primary);padding:6px;border-radius:4px;font:11px monospace;"></textarea>
+                  <input type="file" id="advanced-workflow-files" multiple style="margin-top:6px;font-size:11px;">
+                  <div style="font-size:10px;color:var(--text-muted);margin-top:3px;">For Umbrella/Free-energy, provide declared coordinate/index files and the JSON contract.</div>
+                </div>
+              </div>
 
               <!-- Water Model 선택 -->
               <div class="ff-row">
@@ -4006,6 +4015,11 @@ async function startRun(acceptExperimentalOverrides = false) {
 
   const form = document.getElementById('new-run-form');
   const config = _wizardCollectConfig();
+  const workflowJson = document.getElementById('advanced-workflow-json')?.value.trim();
+  if (workflowJson) {
+    try { config.advanced_workflow = JSON.parse(workflowJson); }
+    catch (_) { showToast('Advanced workflow JSON is invalid.', 'error'); return; }
+  }
   const data = new FormData();
   data.append('pdb_file', selectedPdb);
   data.append('forcefield', form.querySelector('[name="forcefield"]').value);
@@ -4018,6 +4032,8 @@ async function startRun(acceptExperimentalOverrides = false) {
   const protConfig = _collectProtonationConfig();
   if (protConfig) config.protonation = protConfig;
   data.append('system_config', JSON.stringify(config));
+  const workflowFiles = document.getElementById('advanced-workflow-files')?.files || [];
+  for (const file of workflowFiles) data.append('workflow_files', file);
 
   const btnStart = document.getElementById('btn-start');
   _startRunInFlight = true;

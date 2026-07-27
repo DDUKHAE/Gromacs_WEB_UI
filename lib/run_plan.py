@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from lib import tutorial_registry as TR
-from lib.system_config import load_config
+from lib.system_config import load_config, validate_advanced_workflow
 
 
 FILENAME = "resolved_run_plan.json"
@@ -45,6 +45,11 @@ def _provided_inputs(config: dict[str, Any]) -> set[str]:
     membrane = config.get("membrane", {})
     if membrane.get("lipids_upper") or membrane.get("lipids_lower"):
         provided.add("membrane_composition")
+    workflow = config.get("advanced_workflow") or {}
+    if (workflow.get("free_energy") or {}).get("coordinate"):
+        provided.update({"solute_topology", "lambda_schedule", "coulomb_vdw_lambda_schedule"})
+    if (workflow.get("umbrella") or {}).get("windows"):
+        provided.add("reaction_coordinate_definition")
     return provided
 
 
@@ -94,7 +99,14 @@ def compile_plan(workspace: Path, pdb_path: Path,
                                   "severity": "warning", "policy": "experimental_override"})
     required = set(entry.get("required_inputs", [])) - {"protein_pdb"}
     missing = sorted(required - _provided_inputs(config))
-    status = "blocked" if missing else ("warning" if compatibility else "pass")
+    workflow_errors = validate_advanced_workflow(config, tutorial_id)
+    if workflow_errors:
+        missing.extend(
+            error.rsplit(".", 1)[-1].replace(" is required", "")
+            for error in workflow_errors if error.endswith(" is required")
+        )
+    missing = sorted(set(missing))
+    status = "blocked" if missing or workflow_errors else ("warning" if compatibility else "pass")
     plan = {
         "schema_version": SCHEMA_VERSION,
         "tutorial": {"id": tutorial_id, "mode": tutorial_mode,
@@ -110,6 +122,7 @@ def compile_plan(workspace: Path, pdb_path: Path,
         "compatibility": {"status": status, "items": compatibility},
         "execution_policy": {"raw_shell": False,
                              "allowed_entry_points": ["build_environment", "run_simulation", "illustrate"]},
+        "execution_workflow": (config.get("advanced_workflow") or {}),
     }
     plan["plan_sha256"] = _digest(plan)
     return plan

@@ -15,31 +15,31 @@ _TUTORIAL_EXPECTATIONS: dict[str, dict[str, Any]] = {
         "forcefield": "charmm36",
         "water_model": "tip3p",
         "box_type": "dodecahedron",
-        "phase_sequence": ["em", "nvt", "npt", "production"],
+        "phase_sequence": ["em", "nvt", "npt", "npt_pr", "production"],
     },
     "KALP15_in_DPPC": {
         "forcefield": "charmm36",
         "water_model": "tip3p",
         "box_type": "triclinic",
-        "phase_sequence": ["em", "nvt", "npt", "npt", "production"],
+        "phase_sequence": ["em", "nvt", "npt", "npt_pr", "production"],
     },
     "Protein_Ligand_Complex": {
         "forcefield": "charmm36",
         "water_model": "tip3p",
         "box_type": "dodecahedron",
-        "phase_sequence": ["em", "nvt", "npt", "production"],
+        "phase_sequence": ["em", "nvt", "npt", "npt_pr", "production"],
     },
     "Umbrella_Sampling": {
         "forcefield": "charmm36",
         "water_model": "tip3p",
         "box_type": "dodecahedron",
-        "phase_sequence": ["em", "nvt", "npt", "umbrella"],
+        "phase_sequence": ["em", "nvt", "npt", "npt_pr", "umbrella"],
     },
     "Free_Energy_Calculations_Methane_in_Water": {
         "forcefield": "oplsaa",
         "water_model": "tip4p",
         "box_type": "dodecahedron",
-        "phase_sequence": ["em", "nvt", "npt", "free_energy"],
+        "phase_sequence": ["em", "nvt", "npt", "npt_pr", "free_energy"],
     },
 }
 

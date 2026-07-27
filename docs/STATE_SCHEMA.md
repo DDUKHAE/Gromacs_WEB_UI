@@ -59,6 +59,7 @@
     "em":   "a1c9de...",
     "nvt":  "902fbe...",
     "npt":  "77aa10...",
+    "npt_pr": "08be7a...",
     "production": "c4d001..."
   },
   "seed": {
@@ -72,7 +73,7 @@
 | `gmx_version` | string \| null | `gmx --version`의 `GROMACS version:` 라인 파싱 결과 (`lib.gmx_wrapper.get_version`). `gmx` 바이너리 부재/응답없음 시 `null` — 크래시하지 않음 |
 | `platform` | string \| null | `platform.platform()` 산출 OS/아키텍처 문자열 |
 | `force_field` | string \| null | Step 1(`pdb2gmx`)에 실제 사용된 포스필드 이름 (`lib.state.record_force_field`) |
-| `mdp_hashes` | object<string, string> | 렌더링된 `.mdp` 파일의 sha256 hex digest, phase(`ions`/`em`/`nvt`/`npt`/`production`/`umbrella`/`free_energy`)로 키잉 (`lib.state.record_mdp_hash`). 동일 입력(overrides) → 동일 해시 → 결정론적 재현성 증거 |
+| `mdp_hashes` | object<string, string> | 렌더링된 `.mdp` 파일의 sha256 hex digest, phase(`ions`/`em`/`nvt`/`npt`/`npt_pr`/`production`/`umbrella`/`free_energy`)로 키잉 (`lib.state.record_mdp_hash`). 동일 입력(overrides) → 동일 해시 → 결정론적 재현성 증거 |
 | `seed` | object<string, int> | 실제 렌더링된 mdp에서 사용된 `gen_seed` 값, phase로 키잉 (`lib.state.record_seed`). 현재는 `nvt`만 `gen_vel`을 사용하므로 채워짐 |
 
 **시드 처리 / 재현 모드:** 프로덕션 기본값은 `gen_seed = -1`(GROMACS가 매번
@@ -135,12 +136,26 @@ WARNING)로 남는다. `provenance.mdp_hashes`는 이를 대체하지 않고, "�
 {
   "em_gro": "stage2_md/em.gro",
   "nvt_gro": "stage2_md/nvt.gro",
-  "npt_gro": "stage2_md/npt.gro",
+  "npt_berendsen_gro": "stage2_md/npt.gro",
+  "npt_gro": "stage2_md/npt_pr.gro",
   "production_gro": "stage2_md/production.gro"
 }
 ```
 
-Umbrella/Free-Energy variant는 `production_gro`에 마지막 production phase 산출을 기록한다.
+`npt_berendsen_gro`는 초기 밀도 이완 단계, `npt_gro`는 뒤이은
+Parrinello–Rahman 단계 산출이다. 특수 workflow는 flat `production_gro` 대신
+아래처럼 완료된 독립 작업 ID를 기록한다.
+
+```json
+{
+  "umbrella_windows": ["000", "001"],
+  "free_energy_lambdas": ["00", "01"]
+}
+```
+
+Umbrella 산출은 `stage2_md/umbrella/window_<id>/`, Free-energy 산출은
+`stage2_md/lambda_<id>/`에 있다. 분석기는 이 목록과 해당 디렉터리의 필수
+산출물을 모두 확인하기 전에는 WHAM/BAR 성공을 보고하지 않는다.
 
 ### `step_8` — illustrator
 ```json

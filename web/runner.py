@@ -26,13 +26,8 @@ def _run_md(workspace: Path) -> dict:
 
 
 def _run_viz(workspace: Path) -> dict:
-    from skills.illustrator.illustrator import run_core_analyses
-    from lib import state
-    result = run_core_analyses(workspace_dir=workspace)
-    s = state.read(workspace)
-    s["last_completed_stage"] = "viz"
-    state.write(workspace, s)
-    return result
+    from skills.illustrator.illustrator import illustrate
+    return illustrate(workspace_dir=workspace, interactive=False)
 
 
 def main() -> int:

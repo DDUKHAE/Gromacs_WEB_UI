@@ -20,7 +20,7 @@ from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from lib import xvg_parser
-from lib.system_config import validate_solution_config
+from lib.system_config import validate_advanced_workflow, validate_solution_config
 from web.llm_adapters import ADAPTERS
 from web import llm_runner
 from web.run_reader import RunInfo, list_runs, read_run
@@ -124,9 +124,55 @@ RUNNER_PY: Path = Path(__file__).parent / "runner.py"
 STATIC_DIR: Path = Path(__file__).parent / "static"
 _NEXT_SKILL: dict[str, str] = {"env": "md", "md": "viz"}
 _MAX_PDB_BYTES: int = 50 * 1024 * 1024  # 50 MB
+_MAX_WORKFLOW_FILE_BYTES: int = 100 * 1024 * 1024
 _MAX_LITERATURE_BYTES: int = 20 * 1024 * 1024  # 20 MB per local paper
 _LITERATURE_EXTENSIONS = {".pdf", ".txt", ".md"}
 _RUN_ID_RE = re.compile(r"^[a-z0-9][a-z0-9\-]*_\d{8}_\d{6}$")
+
+
+def _workflow_paths(config: dict) -> set[Path]:
+    workflow = config.get("advanced_workflow") or {}
+    paths: set[Path] = set()
+    umbrella = workflow.get("umbrella") or {}
+    if umbrella.get("index"):
+        paths.add(Path(umbrella["index"]))
+    for window in umbrella.get("windows") or []:
+        if isinstance(window, dict) and window.get("coordinate"):
+            paths.add(Path(window["coordinate"]))
+    free_energy = workflow.get("free_energy") or {}
+    if free_energy.get("coordinate"):
+        paths.add(Path(free_energy["coordinate"]))
+    if free_energy.get("topology"):
+        paths.add(Path(free_energy["topology"]))
+    for include in free_energy.get("topology_includes") or []:
+        paths.add(Path(include))
+    return paths
+
+
+async def _materialize_workflow_uploads(ws: Path, config: dict,
+                                        uploads: list[UploadFile]) -> None:
+    declared = _workflow_paths(config)
+    by_name = {path.name: path for path in declared}
+    if len(by_name) != len(declared):
+        raise HTTPException(status_code=400, detail="workflow input filenames must be unique")
+    uploaded_names = set()
+    for upload in uploads:
+        name = Path(upload.filename or "").name
+        target_rel = by_name.get(name)
+        if not target_rel:
+            raise HTTPException(status_code=400, detail=f"undeclared workflow file: {name or '(unnamed)'}")
+        if name in uploaded_names:
+            raise HTTPException(status_code=400, detail=f"duplicate workflow file: {name}")
+        payload = await upload.read(_MAX_WORKFLOW_FILE_BYTES + 1)
+        if len(payload) > _MAX_WORKFLOW_FILE_BYTES:
+            raise HTTPException(status_code=413, detail=f"workflow file too large: {name}")
+        target = ws / target_rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(payload)
+        uploaded_names.add(name)
+    missing = [str(path) for path in declared if not (ws / path).is_file()]
+    if missing:
+        raise HTTPException(status_code=400, detail="missing workflow files: " + ", ".join(missing))
 
 
 def get_harness_dir() -> Path:
@@ -572,6 +618,7 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         auto_approve: str = Form("false"),
         accept_experimental_overrides: str = Form("false"),
         system_config: str = Form(""),
+        workflow_files: list[UploadFile] = File(default=[]),
     ) -> dict:
         # An external CLI has its own shell/tool layer.  Until it is launched
         # inside a real OS/container sandbox, silently approving that layer
@@ -611,10 +658,19 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
             try:
                 config_data = json.loads(system_config)
             except json.JSONDecodeError:
+                shutil.rmtree(ws, ignore_errors=True)
                 raise HTTPException(status_code=400, detail="system_config is not valid JSON")
             errors = validate_solution_config(config_data)
+            if tutorial_id:
+                errors.extend(validate_advanced_workflow(config_data, tutorial_id))
             if errors:
+                shutil.rmtree(ws, ignore_errors=True)
                 raise HTTPException(status_code=400, detail="; ".join(errors))
+            try:
+                await _materialize_workflow_uploads(ws, config_data, workflow_files)
+            except HTTPException:
+                shutil.rmtree(ws, ignore_errors=True)
+                raise
             (ws / "system_config.json").write_text(json.dumps(config_data, indent=2))
 
             # Apply protonation preprocessing if HIS states are specified
