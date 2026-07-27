@@ -10,6 +10,7 @@ from lib.mdp_templates import base as MDP
 from lib import validators as V
 from lib import xvg_parser
 from lib import protocol_contract as PC
+from lib.system_config import load_config
 
 
 REQUIRED_KEYS = ["step_1", "step_2", "step_3", "step_5"]
@@ -33,31 +34,51 @@ def assert_ready(workspace_dir: Path) -> dict[str, Any]:
 
 
 PHASE_SEQUENCES = {
-    "protein_aqueous_standard": ["em", "nvt", "npt", "production"],
-    "membrane_md_standard": ["em", "nvt", "npt", "npt", "production"],
-    "protein_ligand_complex": ["em", "nvt", "npt", "production"],
-    "umbrella_sampling": ["em", "nvt", "npt", "umbrella"],
-    "free_energy_alchemical": ["em", "nvt", "npt", "free_energy"],
-    "biphasic_system": ["em", "nvt", "npt", "production"],
+    "protein_aqueous_standard": ["em", "nvt", "npt", "npt_pr", "production"],
+    "membrane_md_standard": ["em", "nvt", "npt", "npt_pr", "production"],
+    "protein_ligand_complex": ["em", "nvt", "npt", "npt_pr", "production"],
+    "umbrella_sampling": ["em", "nvt", "npt", "npt_pr", "umbrella"],
+    "free_energy_alchemical": ["em", "nvt", "npt", "npt_pr", "free_energy"],
+    "biphasic_system": ["em", "nvt", "npt", "npt_pr", "production"],
     "virtual_sites_topology": ["em", "production"],
 }
 
 
 def phase_sequence_for_variant(variant: str | None) -> list[str]:
-    return PHASE_SEQUENCES.get(variant or "", ["em", "nvt", "npt", "production"])
+    return PHASE_SEQUENCES.get(variant or "", ["em", "nvt", "npt", "npt_pr", "production"])
 
 
 PHASE_INPUT_GRO = {
     "em":         ("stage1_env", "ions.gro"),
     "nvt":        ("stage2_md", "em.gro"),
     "npt":        ("stage2_md", "nvt.gro"),
-    "production": ("stage2_md", "npt.gro"),
-    "umbrella":   ("stage2_md", "npt.gro"),
-    "free_energy":("stage2_md", "npt.gro"),
+    "npt_pr":     ("stage2_md", "npt.gro"),
+    "production": ("stage2_md", "npt_pr.gro"),
+    "umbrella":   ("stage2_md", "npt_pr.gro"),
+    "free_energy":("stage2_md", "npt_pr.gro"),
+}
+
+
+def phase_input_for(variant: str | None, phase: str) -> tuple[str, str]:
+    """Return the coordinate handoff for a phase in a tutorial variant."""
+    if variant == "virtual_sites_topology" and phase == "production":
+        return ("stage2_md", "em.gro")
+    return PHASE_INPUT_GRO[phase]
+
+# Preserve the extended-system state (thermostat/barostat variables) across
+# equilibration stages when GROMACS produced a checkpoint. The coordinate file
+# remains the mandatory fallback for an imported or older partial workspace.
+PHASE_INPUT_CPT = {
+    "npt": "nvt.cpt",
+    "npt_pr": "npt.cpt",
+    "production": "npt_pr.cpt",
+    "umbrella": "npt_pr.cpt",
+    "free_energy": "npt_pr.cpt",
 }
 
 PHASE_TO_STATE_KEY = {
-    "em": "em_gro", "nvt": "nvt_gro", "npt": "npt_gro",
+    "em": "em_gro", "nvt": "nvt_gro", "npt": "npt_berendsen_gro",
+    "npt_pr": "npt_gro",
     "production": "production_gro",
     "umbrella": "production_gro", "free_energy": "production_gro",
 }
@@ -85,13 +106,14 @@ def run_phase(workspace_dir: Path, phase: str,
     ws = Path(workspace_dir)
     out_dir = ws / "stage2_md"
     render_overrides = dict(overrides or {})
+    grompp_maxwarn = int(render_overrides.pop("grompp_maxwarn", 1))
     if "has_protein" not in render_overrides and "tc_grps" not in render_overrides:
         s_for_render = state.read(ws)
         render_overrides["has_protein"] = (
             s_for_render.get("tutorial") or {}
         ).get("has_protein", True)
     mdp_path = MDP.render(phase, render_overrides, output_dir=out_dir)
-    contract_errors = PC.validate_rendered_mdp(ws, mdp_path)
+    contract_errors = PC.validate_rendered_mdp(ws, mdp_path, phase)
     if contract_errors:
         raise StateContractError("; ".join(contract_errors))
     state.record_mdp_hash(ws, phase, mdp_path)
@@ -99,15 +121,20 @@ def run_phase(workspace_dir: Path, phase: str,
         seed_match = _GEN_SEED_RE.search(mdp_path.read_text())
         if seed_match:
             state.record_seed(ws, phase, int(seed_match.group(1)))
-    in_dir_rel, in_gro = PHASE_INPUT_GRO[phase]
+    variant = (state.read(ws).get("tutorial") or {}).get("variant")
+    in_dir_rel, in_gro = phase_input_for(variant, phase)
     in_gro_path = ws / in_dir_rel / in_gro
     top_path = ws / "stage1_env" / "topol.top"
     tpr_path = out_dir / f"{phase}.tpr"
+    grompp_args = ["grompp", "-f", mdp_path.name,
+                   "-c", str(in_gro_path)]
+    input_cpt = PHASE_INPUT_CPT.get(phase)
+    if input_cpt and (out_dir / input_cpt).is_file():
+        grompp_args.extend(["-t", input_cpt])
+    grompp_args.extend(["-p", str(top_path), "-o", tpr_path.name,
+                        "-maxwarn", str(grompp_maxwarn)])
     grompp_result = GW.run(
-        ["grompp", "-f", mdp_path.name,
-         "-c", str(in_gro_path),
-         "-p", str(top_path),
-         "-o", tpr_path.name, "-maxwarn", "1"],
+        grompp_args,
         cwd=out_dir,
     )
     _record_grompp_warnings(ws, phase, grompp_result.stdout + grompp_result.stderr)
@@ -152,7 +179,7 @@ MUTATION_BY_CAUSE = {
                         {"nsteps": 400, "dt": 0.0005}],
     "pressure_coupling": [{"tau_p": 5.0}, {"tau_p": 8.0}, {"tau_p": 10.0}],
     "temperature_coupling": [{"tau_t": 0.5}, {"tau_t": 1.0}, {"tau_t": 2.0}],
-    "command_error": [{"-maxwarn": 2}, {"-maxwarn": 3}, {"-maxwarn": 4}],
+    "command_error": [{"grompp_maxwarn": 2}, {"grompp_maxwarn": 3}, {"grompp_maxwarn": 4}],
 }
 
 
@@ -176,7 +203,11 @@ def run_phase_with_recovery(workspace_dir: Path, phase: str,
         s = state.read(workspace_dir)
         budget = V.retryable_budget_remaining(
             s["retry_history"], step=7, phase=phase)
-        judgment = phase_runner(workspace_dir, phase, overrides)
+        try:
+            judgment = phase_runner(workspace_dir, phase, overrides)
+        except RuntimeError as exc:
+            judgment = V.Judgment(tier="retryable", metric="execution",
+                                  cause="command_error", observed=str(exc))
         if judgment.tier == "pass":
             return judgment
         if judgment.tier == "fatal":
@@ -321,7 +352,7 @@ def _validate_phase(workspace_dir: Path, phase: str) -> V.Judgment:
     # request density for npt, temperature for nvt, potential for em/production
     if phase == "nvt":
         return _judge_temperature(workspace_dir, phase)
-    if phase == "npt":
+    if phase in ("npt", "npt_pr"):
         return _judge_density(workspace_dir, phase)
     if phase in ("production", "umbrella", "free_energy"):
         return _judge_energy_drift(workspace_dir, phase)
@@ -418,6 +449,122 @@ def _validating_phase_runner(workspace_dir: Path, phase: str,
     return _validate_phase(workspace_dir, phase)
 
 
+def _free_energy_directives(item: dict[str, Any], couple_moltype: str) -> str:
+    """MDP directives shared by every lambda-specific phase."""
+    return "\n".join((
+        "free_energy = yes",
+        f"init_lambda_state = {item['init_lambda_state']}",
+        "coul_lambdas = " + " ".join(map(str, item["coul_lambdas"])),
+        "vdw_lambdas = " + " ".join(map(str, item["vdw_lambdas"])),
+        f"couple_moltype = {couple_moltype}",
+        "couple_lambda0 = vdw-q",
+        "couple_lambda1 = none",
+        "couple_intramol = no",
+        "nstdhdl = 100",
+        "",
+    ))
+
+
+def _run_local_phase(workspace_dir: Path, phase: str, out_dir: Path,
+                     input_gro: Path, overrides: dict[str, Any],
+                     input_cpt: Path | None = None,
+                     index: Path | None = None,
+                     free_energy: dict[str, Any] | None = None) -> Path:
+    """Run a phase in an isolated workflow directory without global state writes."""
+    ws, out_dir = Path(workspace_dir), Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    template_phase = "free_energy" if phase == "free_energy" else phase
+    render_overrides = dict(overrides)
+    if free_energy and phase == "free_energy":
+        item = free_energy["item"]
+        render_overrides.update({
+            "init_lambda_state": item["init_lambda_state"],
+            "coul_lambdas": " ".join(map(str, item["coul_lambdas"])),
+            "vdw_lambdas": " ".join(map(str, item["vdw_lambdas"])),
+            "couple_moltype": free_energy["couple_moltype"],
+        })
+    mdp = MDP.render(template_phase, render_overrides, out_dir)
+    if free_energy and phase != "free_energy":
+        mdp.write_text(mdp.read_text() + _free_energy_directives(
+            free_energy["item"], free_energy["couple_moltype"]
+        ))
+    args = ["grompp", "-f", mdp.name, "-c", str(input_gro),
+            "-p", str(ws / "stage1_env" / "topol.top"), "-o", f"{phase}.tpr"]
+    if input_cpt and input_cpt.is_file():
+        args.extend(["-t", str(input_cpt)])
+    if index:
+        args.extend(["-n", str(index)])
+    grompp = GW.run(args, cwd=out_dir)
+    if not grompp.ok:
+        raise RuntimeError(f"grompp ({phase}) failed [{grompp.classification}]: {grompp.stderr[-500:]}")
+    ntomp = str((state.read(ws).get("hardware") or {}).get("ntomp", 1))
+    mdrun = GW.run(["mdrun", "-deffnm", phase, "-ntomp", ntomp], cwd=out_dir,
+                   progress_log=out_dir / f"{phase}_progress.log")
+    if not mdrun.ok:
+        raise RuntimeError(f"mdrun ({phase}) failed [{mdrun.classification}]: {mdrun.stderr[-500:]}")
+    return out_dir / f"{phase}.gro"
+
+
+def run_free_energy_workflow(workspace_dir: Path, workflow: dict[str, Any]) -> dict[str, Any]:
+    """Run independent EM→NVT→NPT→production calculations for each lambda."""
+    ws = Path(workspace_dir)
+    coordinate = ws / workflow["coordinate"]
+    if not coordinate.is_file():
+        raise StateContractError(f"free-energy coordinate missing: {workflow['coordinate']}")
+    completed: list[str] = []
+    for item in workflow["lambda_schedule"]:
+        ident = item["id"]
+        out = ws / "stage2_md" / f"lambda_{ident}"
+        final = out / "free_energy.gro"
+        if final.is_file():
+            completed.append(ident)
+            continue
+        common = {"has_protein": False}
+        fep = {"item": item, "couple_moltype": workflow["couple_moltype"]}
+        em = _run_local_phase(ws, "em", out, coordinate, common, free_energy=fep)
+        nvt = _run_local_phase(ws, "nvt", out, em, common, free_energy=fep)
+        npt = _run_local_phase(ws, "npt", out, nvt, common, out / "nvt.cpt", free_energy=fep)
+        _run_local_phase(ws, "free_energy", out, npt, common, out / "npt.cpt", free_energy=fep)
+        completed.append(ident)
+    s = state.read(ws)
+    step7 = s["step_outputs"].setdefault("step_7", {})
+    step7["free_energy_lambdas"] = completed
+    s["current_step"] = 7
+    state.write(ws, s)
+    return {"completed_lambdas": completed}
+
+
+def run_umbrella_workflow(workspace_dir: Path, workflow: dict[str, Any]) -> dict[str, Any]:
+    """Run independent NPT and restrained-production phases for every window."""
+    ws = Path(workspace_dir)
+    index = ws / workflow.get("index", "")
+    if not index.is_file():
+        raise StateContractError("umbrella index file missing")
+    completed: list[str] = []
+    for window in workflow["windows"]:
+        ident = window["id"]
+        coordinate = ws / window["coordinate"]
+        if not coordinate.is_file():
+            raise StateContractError(f"umbrella window coordinate missing: {window['coordinate']}")
+        out = ws / "stage2_md" / "umbrella" / f"window_{ident}"
+        final = out / "umbrella.gro"
+        if final.is_file():
+            completed.append(ident)
+            continue
+        npt = _run_local_phase(ws, "npt", out, coordinate, {"has_protein": True}, index=index)
+        _run_local_phase(ws, "umbrella", out, npt, {
+            "pull_group1": workflow["group1"], "pull_group2": workflow["group2"],
+            "pull_coord_k": window.get("force_constant", 1000.0),
+        }, out / "npt.cpt", index=index)
+        completed.append(ident)
+    s = state.read(ws)
+    step7 = s["step_outputs"].setdefault("step_7", {})
+    step7["umbrella_windows"] = completed
+    s["current_step"] = 7
+    state.write(ws, s)
+    return {"completed_windows": completed}
+
+
 def run_simulation(workspace_dir: Path,
                    phase_overrides: dict[str, dict[str, Any]] | None = None,
                    interactive: bool = True,
@@ -433,9 +580,36 @@ def run_simulation(workspace_dir: Path,
 
     s = assert_ready(workspace_dir)
     variant = (s.get("tutorial") or {}).get("variant")
+    if variant == "free_energy_alchemical":
+        workflow = ((load_config(Path(workspace_dir)) or {}).get("advanced_workflow") or {}).get("free_energy")
+        if not workflow:
+            raise StateContractError("advanced_workflow.free_energy is required")
+        result = run_free_energy_workflow(workspace_dir, workflow)
+        s = state.read(workspace_dir)
+        s["last_completed_stage"] = "md"
+        state.write(workspace_dir, s)
+        return {"status": "complete", **result}
+    if variant == "umbrella_sampling":
+        workflow = ((load_config(Path(workspace_dir)) or {}).get("advanced_workflow") or {}).get("umbrella")
+        if not workflow:
+            raise StateContractError("advanced_workflow.umbrella is required")
+        result = run_umbrella_workflow(workspace_dir, workflow)
+        s = state.read(workspace_dir)
+        s["last_completed_stage"] = "md"
+        state.write(workspace_dir, s)
+        return {"status": "complete", **result}
     seq = phase_sequence_for_variant(variant)
     phase_overrides = phase_overrides or {}
+    completed_phases = set(
+        (s.get("step_outputs", {}).get("step_7", {}) or {}).get(
+            "phase_sequence", []
+        )
+    )
     for phase in seq:
+        # An interrupted caller can resume from a finished phase without
+        # overwriting its coordinates or rerunning an equivalent command.
+        if phase in completed_phases and (Path(workspace_dir) / "stage2_md" / f"{phase}.gro").exists():
+            continue
         # Explicit System Builder controls are part of the protocol contract
         # and take precedence over caller/agent overrides.  This makes an
         # attempted LLM parameter change observable as a contract violation
@@ -444,6 +618,8 @@ def run_simulation(workspace_dir: Path,
             **phase_overrides.get(phase, {}),
             **PC.phase_overrides(workspace_dir, phase),
         }
+        if variant == "membrane_md_standard" and phase in ("npt", "npt_pr", "production"):
+            requested_overrides["pcoupltype"] = "semiisotropic"
         judgment = run_phase_with_recovery(
             workspace_dir, phase=phase,
             phase_runner=_validating_phase_runner,

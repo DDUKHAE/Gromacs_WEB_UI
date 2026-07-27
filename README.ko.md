@@ -388,6 +388,7 @@ python -c "from lib.tutorial_registry import load_manifest; print(load_manifest(
 | [`docs/WARNING_FLOW.md`](docs/WARNING_FLOW.md)                               | 사용자 결정형 WARNING 분기 로직    |
 | [`docs/runbook.md`](docs/runbook.md)                                         | 수동 복구 절차                     |
 | [`docs/tutorial/LLM_TUTORIAL_GUIDE.md`](docs/tutorial/LLM_TUTORIAL_GUIDE.md) | 튜토리얼 라우팅 결정 트리          |
+| [`docs/tutorial/EXECUTION_GUIDE.md`](docs/tutorial/EXECUTION_GUIDE.md)       | 튜토리얼별 입력과 실행 산출물      |
 | [`TESTING_WITH_TUTORIAL_DATA.md`](TESTING_WITH_TUTORIAL_DATA.md)             | 튜토리얼 데이터 회귀 테스트 가이드 |
 
 ---
@@ -400,7 +401,7 @@ python -c "from lib.tutorial_registry import load_manifest; print(load_manifest(
 - **LLM의 프로토콜 이탈 전반에 대한 구조적 방어는 없습니다.** `run_llm_agent`(`web/llm_runner.py`)는 PTY 출력과 종료코드만 기록하며, 에이전트가 튜토리얼이 의도한 명령을 실제로 실행했는지, 의도한 mdp 값을 썼는지, "완료" 상태를 조작하지 않았는지는 검증하지 않습니다. 실제로 실행되는 물리 검증은 `lib/validators.py`의 단계별 게이트(중성화·밀도·에너지 드리프트·RMSD 평탄화)뿐이며, 이 게이트들이 측정하지 않는 것은 검증되지 않습니다.
 - **에너지 드리프트 게이트는 거칠고 시스템 크기로 정규화되지 않습니다.** `_judge_energy_drift`(`skills/md_runner/md_runner.py`)는 **전체(total)** 에너지의 시뮬레이션 시간(ns) 대비 선형회귀 기울기를 계산합니다(이전의 "퍼텐셜 에너지 ÷ 프레임 수" 버그는 수정됨). pass/warning/retryable 임계값(`lib/validators.py`의 `ENERGY_DRIFT_WARNING`/`ENERGY_DRIFT_RETRY`)은 고정된 절대 kJ/mol/ns 값이며 원자 수로 정규화되지 않습니다 — 같은 원자당 안정성이라도 큰 용매화 시스템은 작은 시스템보다 절대 에너지 변동이 크게 나타납니다. 이 게이트는 정밀 진단이 아니라 명백한 적분 불안정을 걸러내는 거친 필터입니다.
 - **밀도 게이트는 단일 벌크 밀도가 물리적으로 의미 있는 계에만 적용됩니다.** 막(membrane), biphasic 등 단일상 수용성 벌크가 아닌 계에서는 게이트가 건너뛰어집니다(`skills/md_runner/md_runner.py`의 `_density_expected_range`, `density_gate_not_applicable_for_system_type`로 pass 처리).
-- **런 재현성/프로버넌스 기록이 없습니다.** `nvt.mdp`는 `gen_seed = -1`(비재현 초기 속도)을 사용하며, `state.json`에는 `gmx` 바이너리 버전, mdp 파일 해시, 실제 사용된 시드가 기록되지 않습니다. 동일 튜토리얼의 두 런이 동일하거나 통계적으로 동등함이 보장되거나 검증되지 않습니다. 이 프로버넌스 기록은 계획 중이나 아직 구현되지 않았습니다.
+- **재현성은 비트단위가 아니라 통계적 수준입니다.** `state.json.provenance`에는 GROMACS 버전, 플랫폼, 렌더링된 MDP 해시, NVT 시드가 기록됩니다. 기본 production은 계속 `gen_seed = -1`이므로 독립 실행은 비트단위로 동일하지 않습니다. 고정 초기 속도가 필요하면 문서화된 reproducible NVT 모드를 사용하세요.
 - **분석 결과에 불확실도 정량화가 없습니다.** RMSD/RMSF/Rg/SASA/에너지 요약(`lib/xvg_parser.py`)은 궤적에 대한 원시 평균/표준편차이며, 블록 평균·자기상관 시간 추정·신뢰구간이 없습니다.
 - **막/단백질-리간드 분석 2종은 스텁입니다.** `_run_membrane_analysis`, `_run_protein_ligand_analysis`(`skills/illustrator/illustrator.py`)는 `{"status": "stub"}`만 반환합니다 — 해당 튜토리얼 변형에 대한 이중층 두께/면적당지질/order parameter 또는 리간드 RMSD/접촉맵 출력이 아직 없습니다.
 

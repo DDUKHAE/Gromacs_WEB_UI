@@ -25,7 +25,7 @@ include = ["lib", "lib.*", "web", "web.*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-asyncio_mode = "auto"
+pythonpath = ["."]
 markers = [
     "integration: requires gmx on PATH",
     "renderer: requires PyMOL or VMD",

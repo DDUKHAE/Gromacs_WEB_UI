@@ -69,15 +69,18 @@
 - 상태: `step_outputs.step_5 = {ion_gro, n_na, n_cl, net_charge}`, `last_completed_stage = "env"`
 
 ### Step 6 — Phase prep (`grompp`, per phase)
-- 입력: phase별 `.mdp` (`em`, `nvt`, `npt`, `production`, `umbrella`, `free_energy`)
-- 출력: `stage2_md/{phase}.tpr`
+- 입력: phase별 `.mdp` (`em`, `nvt`, `npt`, `npt_pr`, `production`, `umbrella`, `free_energy`)
+- 출력: 표준 variant는 `stage2_md/{phase}.tpr`; Umbrella는
+  `stage2_md/umbrella/window_<id>/`, Free-energy는 `stage2_md/lambda_<id>/`
 - 상태: `current_step = 6` (per-phase metadata는 `retry_history`로 추적)
 
 ### Step 7 — Run (`mdrun`, per phase)
 - 입력: `stage2_md/{phase}.tpr`
-- 출력: `stage2_md/{phase}.{gro,xtc,edr,trr,log,cpt}`
+- 출력: 표준 variant는 `stage2_md/{phase}.{gro,xtc,edr,trr,log,cpt}`;
+  특수 workflow는 각 독립 directory에 같은 산출을 기록
 - 검증: phase별 validator gate (`lib/validators.py`)
-- 상태: `step_outputs.step_7 = {em_gro, nvt_gro, npt_gro, production_gro}`, `last_completed_stage = "md"`
+- 상태: 표준 variant는 `step_outputs.step_7 = {em_gro, nvt_gro, npt_berendsen_gro, npt_gro, production_gro}`;
+  Umbrella/Free-energy는 각각 `umbrella_windows`/`free_energy_lambdas` 완료 ID를 기록, `last_completed_stage = "md"`
 
 ### Step 8 — Analysis & Illustration
 - 입력: Step 7 trajectory + edr

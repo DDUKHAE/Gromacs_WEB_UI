@@ -189,7 +189,17 @@ def run_advanced_analyses(workspace_dir: Path) -> dict[str, Any]:
 
 
 def _run_wham(workspace_dir: Path) -> dict[str, Any]:
-    # Caller must have produced tpr-files.dat and pullf-files.dat in stage2_md/.
+    ws, md = Path(workspace_dir), _md_dir(workspace_dir)
+    completed = (state.read(ws).get("step_outputs", {}).get("step_7", {})
+                 .get("umbrella_windows", []))
+    pairs = [(md / "umbrella" / f"window_{ident}" / "umbrella.tpr",
+              md / "umbrella" / f"window_{ident}" / "pullf.xvg")
+             for ident in completed]
+    missing = [str(path.relative_to(md)) for pair in pairs for path in pair if not path.is_file()]
+    if not pairs or missing:
+        return {"status": "incomplete", "reason": "missing umbrella outputs", "missing": missing}
+    (md / "tpr-files.dat").write_text("\n".join(str(tpr.relative_to(md)) for tpr, _ in pairs) + "\n")
+    (md / "pullf-files.dat").write_text("\n".join(str(pull.relative_to(md)) for _, pull in pairs) + "\n")
     out = _viz_dir(workspace_dir) / "pmf.xvg"
     GW.run(
         ["wham", "-it", "tpr-files.dat", "-if", "pullf-files.dat",
@@ -201,12 +211,16 @@ def _run_wham(workspace_dir: Path) -> dict[str, Any]:
 
 
 def _run_bar(workspace_dir: Path) -> dict[str, Any]:
-    # Caller must have produced per-lambda md.edr files in stage2_md/.
+    ws = Path(workspace_dir)
     out_log = _viz_dir(workspace_dir) / "bar.log"
     md = _md_dir(workspace_dir)
-    edrs = sorted(str(p.name) for p in md.glob("md_l*.edr"))
-    if not edrs:
-        return {"status": "skipped", "reason": "no md_l*.edr files"}
+    lambdas = (state.read(ws).get("step_outputs", {}).get("step_7", {})
+               .get("free_energy_lambdas", []))
+    edr_paths = [md / f"lambda_{ident}" / "free_energy.edr" for ident in lambdas]
+    missing = [str(path.relative_to(md)) for path in edr_paths if not path.is_file()]
+    if not edr_paths or missing:
+        return {"status": "incomplete", "reason": "missing lambda outputs", "missing": missing}
+    edrs = [str(path.relative_to(md)) for path in edr_paths]
     result = GW.run(["bar", "-f", *edrs, "-o", str(out_log)], cwd=md)
     dG = None
     for line in (result.stdout + result.stderr).splitlines():

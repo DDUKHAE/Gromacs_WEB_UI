@@ -58,7 +58,7 @@ keys are preserved exactly; the user-facing stage labels
 | `gmx_wrapper.py` | `gmx` subprocess with error classification + topology backup |
 | `xvg_parser.py` | downsampled JSON for `.xvg` files |
 | `tutorial_registry.py` | tutorial index/manifest loader + routing decision |
-| `mdp_templates/` | base `.mdp` templates for all phases (em/nvt/npt/production/ions/umbrella/free_energy) |
+| `mdp_templates/` | base `.mdp` templates for all phases (em/nvt/npt/npt_pr/production/ions/umbrella/free_energy) |
 
 ## Versioning
 

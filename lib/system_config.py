@@ -2,6 +2,88 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+
+_FREE_ENERGY_TUTORIALS = {
+    "Free_Energy_Calculations_Methane_in_Water",
+    "Free_Energy_calculations_Hydration_Free_Energy_of_Ethanol",
+}
+
+
+def _is_safe_relative_path(value: object) -> bool:
+    if not isinstance(value, str) or not value.strip():
+        return False
+    path = Path(value)
+    return not path.is_absolute() and ".." not in path.parts
+
+
+def validate_advanced_workflow(config: dict, tutorial_id: str) -> list[str]:
+    """Validate scientific inputs required by multi-run tutorial workflows."""
+    workflow = config.get("advanced_workflow") or {}
+    if tutorial_id == "Umbrella_Sampling":
+        umbrella = workflow.get("umbrella") or {}
+        errors = []
+        for key in ("group1", "group2"):
+            if not isinstance(umbrella.get(key), str) or not umbrella[key].strip():
+                errors.append(f"advanced_workflow.umbrella.{key} is required")
+        if not _is_safe_relative_path(umbrella.get("index")):
+            errors.append("advanced_workflow.umbrella.index must be a relative path")
+        windows = umbrella.get("windows")
+        if not isinstance(windows, list) or not windows:
+            errors.append("advanced_workflow.umbrella.windows is required")
+            return errors
+        ids: set[str] = set()
+        for index, window in enumerate(windows):
+            prefix = f"advanced_workflow.umbrella.windows[{index}]"
+            if not isinstance(window, dict) or not isinstance(window.get("id"), str) or not window["id"].strip():
+                errors.append(f"{prefix}.id is required")
+                continue
+            if window["id"] in ids:
+                errors.append(f"{prefix}.id must be unique")
+            ids.add(window["id"])
+            if not _is_safe_relative_path(window.get("coordinate")):
+                errors.append(f"{prefix}.coordinate must be a relative path")
+        return errors
+    if tutorial_id in _FREE_ENERGY_TUTORIALS:
+        free_energy = workflow.get("free_energy") or {}
+        errors = []
+        if not _is_safe_relative_path(free_energy.get("coordinate")):
+            errors.append("advanced_workflow.free_energy.coordinate must be a relative path")
+        if not _is_safe_relative_path(free_energy.get("topology")):
+            errors.append("advanced_workflow.free_energy.topology must be a relative path")
+        includes = free_energy.get("topology_includes", [])
+        if not isinstance(includes, list):
+            errors.append("advanced_workflow.free_energy.topology_includes must be a list")
+        else:
+            for index, include in enumerate(includes):
+                if not _is_safe_relative_path(include):
+                    errors.append(f"advanced_workflow.free_energy.topology_includes[{index}] must be a relative path")
+        if not isinstance(free_energy.get("couple_moltype"), str) or not free_energy["couple_moltype"].strip():
+            errors.append("advanced_workflow.free_energy.couple_moltype is required")
+        schedule = free_energy.get("lambda_schedule")
+        if not isinstance(schedule, list) or not schedule:
+            errors.append("advanced_workflow.free_energy.lambda_schedule is required")
+            return errors
+        ids: set[str] = set()
+        for index, item in enumerate(schedule):
+            prefix = f"advanced_workflow.free_energy.lambda_schedule[{index}]"
+            if not isinstance(item, dict):
+                errors.append(f"{prefix} must be an object")
+                continue
+            item_id = item.get("id")
+            if not isinstance(item_id, str) or not item_id.strip():
+                errors.append(f"{prefix}.id is required")
+            elif item_id in ids:
+                errors.append(f"{prefix}.id must be unique")
+            else:
+                ids.add(item_id)
+            if not isinstance(item.get("init_lambda_state"), int) or item["init_lambda_state"] < 0:
+                errors.append(f"{prefix}.init_lambda_state must be a non-negative integer")
+            for vector in ("coul_lambdas", "vdw_lambdas"):
+                if not isinstance(item.get(vector), list) or not item[vector]:
+                    errors.append(f"{prefix}.{vector} must be a non-empty list")
+        return errors
+    return []
+
 VALID_BOX_TYPES = {"cubic", "dodecahedron", "octahedron"}
 VALID_THERMOSTATS = {"V-rescale", "Nosé-Hoover"}
 VALID_BAROSTATS = {"Parrinello-Rahman", "Berendsen"}

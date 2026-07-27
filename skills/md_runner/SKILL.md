@@ -36,7 +36,7 @@ run_simulation(workspace_dir, phase_overrides=None, interactive=False)
 ## Output Contract
 
 Files under `workspace/stage2_md/`:
-`{em,nvt,npt,production}.{tpr,xtc,trr,edr,gro,log,cpt}` or
+`{em,nvt,npt,npt_pr,production}.{tpr,xtc,trr,edr,gro,log,cpt}` or
 variant-specific analogues. `workspace/state.json` is updated with
 `step_outputs.step_7`, `retry_history[]`, and `last_completed_stage="md"`.
 

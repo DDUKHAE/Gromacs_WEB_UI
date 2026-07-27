@@ -118,6 +118,7 @@ def assemble_complex(
     ligand_itp: Path,
     topol_top: Path,
     workspace: Path,
+    ligand_prm: Path | None = None,
 ) -> dict:
     """Merge protein GRO + ligand GRO and update topol.top.
 
@@ -150,6 +151,16 @@ def assemble_complex(
     top_text = topol_top.read_text()
     itp_name = ligand_itp.name
 
+    if ligand_prm is not None and ligand_prm.exists():
+        prm_name = ligand_prm.name
+        if f'#include "{prm_name}"' not in top_text:
+            # CGenFF bonded parameters must be read after the parent CHARMM
+            # force field but before any molecule type definitions.
+            marker = '#include "charmm36.ff/forcefield.itp"'
+            if marker in top_text:
+                top_text = top_text.replace(marker, marker + f'\n#include "{prm_name}"', 1)
+            else:
+                top_text = f'#include "{prm_name}"\n' + top_text
     if f'#include "{itp_name}"' not in top_text:
         top_text = top_text.replace(
             "[ system ]",
@@ -164,5 +175,9 @@ def assemble_complex(
     complex_gro_path.write_text(complex_gro)
     new_top_path = workspace / "topol_complex.top"
     new_top_path.write_text(top_text)
+
+    shutil.copy2(ligand_itp, workspace / itp_name)
+    if ligand_prm is not None and ligand_prm.exists():
+        shutil.copy2(ligand_prm, workspace / ligand_prm.name)
 
     return {"complex_gro": complex_gro, "topol_top": top_text}

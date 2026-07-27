@@ -24,12 +24,12 @@ CONTEXT_DIRNAME = "tutorial_context"
 _MAX_CHARS_PER_SOURCE = 6000
 
 PHASE_SEQUENCE_BY_VARIANT = {
-    "protein_aqueous_standard": ["em", "nvt", "npt", "production"],
-    "membrane_md_standard": ["em", "nvt", "npt", "npt", "production"],
-    "protein_ligand_complex": ["em", "nvt", "npt", "production"],
-    "umbrella_sampling": ["em", "nvt", "npt", "umbrella"],
-    "free_energy_alchemical": ["em", "nvt", "npt", "free_energy"],
-    "biphasic_system": ["em", "nvt", "npt", "production"],
+    "protein_aqueous_standard": ["em", "nvt", "npt", "npt_pr", "production"],
+    "membrane_md_standard": ["em", "nvt", "npt", "npt_pr", "production"],
+    "protein_ligand_complex": ["em", "nvt", "npt", "npt_pr", "production"],
+    "umbrella_sampling": ["em", "nvt", "npt", "npt_pr", "umbrella"],
+    "free_energy_alchemical": ["em", "nvt", "npt", "npt_pr", "free_energy"],
+    "biphasic_system": ["em", "nvt", "npt", "npt_pr", "production"],
     "virtual_sites_topology": ["em", "production"],
 }
 
@@ -262,8 +262,8 @@ def render_prompt(workspace: Path) -> str:
         packs or "- no derived context pack available",
         "- Do not substitute another tutorial, force field, water model, box, or phase sequence.",
         "- Do not run raw gmx commands or create ad-hoc scripts; use the three skill entry points.",
-        "- If an unsupported case needs literature evidence, do not search or alter the contract yourself;",
-        "  stop and request a PaperQA evidence-only escalation for operator approval.",
+        "- If an unsupported case needs literature evidence, request the approved Europe PMC evidence",
+        "  retrieval/PaperQA escalation. Do not alter this contract; all resulting changes need operator approval.",
         "",
     ]
     if contract["locked_mdp_parameters"]:
@@ -296,19 +296,17 @@ def _same_mdp_value(expected: Any, actual: str) -> bool:
         return False
 
 
-def validate_rendered_mdp(workspace: Path, mdp_path: Path) -> list[str]:
-    """Return contract violations in an MDP rendered for this workspace."""
+def validate_rendered_mdp(workspace: Path, mdp_path: Path, phase: str | None = None) -> list[str]:
+    """Return contract violations applicable to the rendered MDP phase."""
     contract = assert_valid(workspace)
     if not contract or not contract["locked_mdp_parameters"]:
         return []
+    phase_name = (phase or Path(mdp_path).stem).lower()
+    expected_parameters = phase_overrides(workspace, phase_name)
     actual = _parse_mdp(mdp_path)
     errors = []
-    for key, expected in contract["locked_mdp_parameters"].items():
+    for key, expected in expected_parameters.items():
         observed = actual.get(key)
-        # Not every expert control is meaningful in every phase (e.g. a
-        # barostat is intentionally absent from NVT and EM).  Validate the
-        # parameters rendered by that phase; the contract prevents a changed
-        # value without incorrectly demanding a barostat in NVT.
         if observed is None:
             continue
         elif not _same_mdp_value(expected, observed):
@@ -327,7 +325,14 @@ def phase_overrides(workspace: Path, phase: str) -> dict[str, Any]:
     if phase == "nvt":
         values.pop("pcoupl", None)
         values.pop("ref_p", None)
-    elif phase not in ("npt", "production"):
+    elif phase == "npt":
+        # The first pressure-coupling segment is deliberately not a user or
+        # agent choice: it relaxes density before the production-quality
+        # barostat is enabled in the following, separately recorded phase.
+        values["pcoupl"] = "Berendsen"
+    elif phase == "npt_pr":
+        values["pcoupl"] = "Parrinello-Rahman"
+    elif phase not in ("npt", "npt_pr", "production"):
         # Current special-workflow templates do not expose the standard
         # expert fields.  They remain tutorial-locked, not silently applied.
         return {}
