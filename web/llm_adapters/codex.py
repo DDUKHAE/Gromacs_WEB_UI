@@ -15,7 +15,7 @@ class CodexAdapter(LLMAdapter):
     def build_command(self, auto_approve: bool) -> list[str]:
         # Do not grant an external agent unattended host command execution.
         # The API always launches this adapter with interactive approvals.
-        return ["codex", "--ask-for-approval", "on-request"]
+        return ["codex", "--approval-mode", "suggest"]
 
     @property
     def accepts_initial_prompt_argument(self) -> bool:

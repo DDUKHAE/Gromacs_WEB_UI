@@ -11,7 +11,7 @@ def test_contract_uses_manifest_defaults_and_hashes_grounding_docs(tmp_path):
 
     assert contract["locked_parameters"]["forcefield"] == "charmm36"
     assert contract["locked_parameters"]["box_type"] == "cubic"
-    assert contract["phase_sequence"] == ["em", "nvt", "npt", "production"]
+    assert contract["phase_sequence"] == ["em", "nvt", "npt", "npt_pr", "production"]
     assert contract["grounding_documents"]
     assert {p["stage"] for p in contract["context_packs"]} == {
         "environment", "simulation", "analysis"

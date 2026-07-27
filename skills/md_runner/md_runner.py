@@ -132,7 +132,9 @@ def run_phase(workspace_dir: Path, phase: str,
     if input_cpt and (out_dir / input_cpt).is_file():
         grompp_args.extend(["-t", input_cpt])
     grompp_args.extend(["-p", str(top_path), "-o", tpr_path.name,
-                        "-maxwarn", str(grompp_maxwarn)])
+                        "-maxwarn", "1"])
+    if grompp_maxwarn != 1:
+        grompp_args[-1] = str(grompp_maxwarn)
     grompp_result = GW.run(
         grompp_args,
         cwd=out_dir,
