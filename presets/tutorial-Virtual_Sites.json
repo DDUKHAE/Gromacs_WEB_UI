@@ -1,0 +1,8 @@
+{
+  "version": "1.0",
+  "forcefield": {"name": "oplsaa", "water_model": "tip3p", "terminal_patches": "auto"},
+  "box": {"type": "cubic", "edge_distance_nm": 1.0},
+  "ions": {"salt_type": "NaCl", "concentration_M": 0.0, "neutralize": false},
+  "simulation": {"_expert_mode": true, "temperature_K": 300, "pressure_bar": 1.0, "sim_time_ns": 1.0, "thermostat": "V-rescale", "barostat": "Parrinello-Rahman"},
+  "notes": {"tutorial_id": "Virtual_Sites", "required_files": ["co2.pdb", "manual topol.top with virtual_sites2"], "source": "generate_topology/introduction_and_topology.md; simulation_and_analysis/simulation_and_summary.md", "tutorial_specific_settings": ["OPLS-AA", "10 CO2 molecules in a 10 x 10 x 10 nm box", "two 22.0049 amu mass centers", "0.213173 nm constraint", "virtual-site coefficients 0.5 and 1.0851116"], "wizard_limitations": ["The virtual-site topology must be manually prepared before running; no water, salt, or NPT protocol is prescribed by this tutorial."]}
+}

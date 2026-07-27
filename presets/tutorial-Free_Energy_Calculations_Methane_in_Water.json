@@ -1,0 +1,8 @@
+{
+  "version": "1.0",
+  "forcefield": {"name": "oplsaa", "water_model": "tip3p", "terminal_patches": "auto"},
+  "box": {"type": "cubic", "edge_distance_nm": 1.0},
+  "ions": {"salt_type": "NaCl", "concentration_M": 0.0, "neutralize": false},
+  "simulation": {"_expert_mode": true, "temperature_K": 300, "pressure_bar": 1.0, "sim_time_ns": 1.0, "thermostat": "V-rescale", "barostat": "Parrinello-Rahman"},
+  "notes": {"tutorial_id": "Free_Energy_Calculations_Methane_in_Water", "required_files": ["methane_water.gro", "topol.top", "lambda-specific MDP profile"], "source": "theory_and_topology/theory_and_topology.md; energy_minimization/energy_minimization.md; production_MD/production_MD.md", "tutorial_specific_settings": ["OPLS-AA with TIP3P", "one uncharged ALAB methane in 596 TIP3P waters", "independent EM/NVT/NPT/production for every init_lambda_state", "van der Waals decoupling"], "wizard_limitations": ["Provide advanced_workflow.free_energy with couple_moltype MET and a complete lambda schedule; the preset does not infer lambda windows."]}
+}

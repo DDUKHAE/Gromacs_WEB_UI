@@ -1,0 +1,8 @@
+{
+  "version": "1.0",
+  "forcefield": {"name": "gromos43a1", "water_model": "spc", "terminal_patches": "auto"},
+  "box": {"type": "triclinic", "edge_distance_nm": 1.0},
+  "ions": {"salt_type": "NaCl", "concentration_M": 0.0, "neutralize": false},
+  "simulation": {"_expert_mode": true, "temperature_K": 298, "pressure_bar": 1.0, "sim_time_ns": 10.0, "thermostat": "V-rescale", "barostat": "Parrinello-Rahman"},
+  "notes": {"tutorial_id": "Building_Biphasic_Systems", "required_files": ["chx.gro", "chx.top", "equilibrated cyclohexane layer"], "source": "generate_topology/prepare_the_hydrophobic_layer.md; define_box_and_solvate/construct_the_box.md", "tutorial_specific_settings": ["GROMOS96 43A1 cyclohexane topology", "zero united-atom CH2 charges", "4.30795 x 4.30795 x 8.6159 nm two-phase box", "298 K and 1 bar equilibration", "10 ns NPT"], "wizard_limitations": ["The System Builder cannot assemble a two-phase box; supply the prebuilt cyclohexane-water coordinates and topology."]}
+}

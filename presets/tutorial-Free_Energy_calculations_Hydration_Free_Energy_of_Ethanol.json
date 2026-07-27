@@ -1,0 +1,8 @@
+{
+  "version": "1.0",
+  "forcefield": {"name": "charmm36", "water_model": "tip3p", "terminal_patches": "auto"},
+  "box": {"type": "cubic", "edge_distance_nm": 1.0},
+  "ions": {"salt_type": "NaCl", "concentration_M": 0.0, "neutralize": false},
+  "simulation": {"_expert_mode": true, "temperature_K": 300, "pressure_bar": 1.0, "sim_time_ns": 1.0, "thermostat": "V-rescale", "barostat": "Parrinello-Rahman"},
+  "notes": {"tutorial_id": "Free_Energy_calculations_Hydration_Free_Energy_of_Ethanol", "required_files": ["etoh.pdb", "etoh_solv.gro", "topol.top", "CGenFF ethanol include files"], "source": "theory_and_workflow/theory_and_workflow.md; running_calculations/running_calculations.md", "tutorial_specific_settings": ["CHARMM/CGenFF ethanol", "4.0 nm cubic water box", "independent EM/NVT/NPT/production per lambda", "staged Coulomb and Lennard-Jones decoupling"], "wizard_limitations": ["Provide advanced_workflow.free_energy with couple_moltype ETH plus Coulomb and VDW lambda arrays."]}
+}

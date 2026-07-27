@@ -1,0 +1,8 @@
+{
+  "version": "1.0",
+  "forcefield": {"name": "charmm36", "water_model": "tip3p", "terminal_patches": "auto"},
+  "box": {"type": "cubic", "edge_distance_nm": 1.2},
+  "ions": {"salt_type": "NaCl", "concentration_M": 0.0, "neutralize": true},
+  "simulation": {"_expert_mode": true, "temperature_K": 298, "pressure_bar": 1.0, "sim_time_ns": 10.0, "thermostat": "V-rescale", "barostat": "Parrinello-Rahman"},
+  "notes": {"tutorial_id": "Lysozyme_in_water", "required_files": ["1AKI_clean.pdb"], "source": "generate_topology/prepare_the_topology.md; define_box_and_solvate/defining_the_unit_cell_and_adding_solvent.md; Equilibration/equilibration.md; production_MD/production_MD.md", "tutorial_specific_settings": ["CHARMM36 with TIP3P", "cubic box, 1.2 nm edge distance", "neutralizing NA/CL ions", "100 ps NVT and 500 ps NPT before 10 ns production"], "wizard_limitations": ["The tutorial's C-rescale barostat is not an available System Builder option; the displayed Parrinello-Rahman value is the runner-supported production barostat."]}
+}

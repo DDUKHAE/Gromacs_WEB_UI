@@ -1,0 +1,8 @@
+{
+  "version": "1.0",
+  "forcefield": {"name": "gromos53a6", "water_model": "spc", "terminal_patches": "none"},
+  "box": {"type": "cubic", "edge_distance_nm": 1.2},
+  "ions": {"salt_type": "NaCl", "concentration_M": 0.0, "neutralize": true},
+  "simulation": {"_expert_mode": true, "temperature_K": 300, "pressure_bar": 1.0, "sim_time_ns": 1.0, "thermostat": "V-rescale", "barostat": "Parrinello-Rahman"},
+  "notes": {"tutorial_id": "Umbrella_Sampling", "required_files": ["2BEG_model1_capped.pdb", "index.ndx", "one .gro coordinate per umbrella window"], "source": "generate_topology/prepare_the_topology.md; define_box_and_solvate/defining_the_unit_cell_and_adding_solvent.md; production_MD/generating_configurations.md", "tutorial_specific_settings": ["GROMOS96 53A6 with SPC", "6.560 x 4.362 x 12 nm box", "Chain_A and Chain_B pull groups", "z-distance coordinate", "pull rate 0.01 nm ps^-1", "force constant 1000 kJ mol^-1 nm^-2", "window spacing 0.1-0.2 nm"], "wizard_limitations": ["Upload index.ndx and every window coordinate, then provide advanced_workflow.umbrella; the wizard does not create windows."]}
+}

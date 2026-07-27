@@ -1,0 +1,8 @@
+{
+  "version": "1.0",
+  "forcefield": {"name": "gromos53a6", "water_model": "spc", "terminal_patches": "none"},
+  "box": {"type": "triclinic", "edge_distance_nm": 1.0},
+  "ions": {"salt_type": "NaCl", "concentration_M": 0.0, "neutralize": true},
+  "simulation": {"_expert_mode": true, "temperature_K": 323, "pressure_bar": 1.0, "sim_time_ns": 1.0, "thermostat": "Nosé-Hoover", "barostat": "Parrinello-Rahman"},
+  "notes": {"tutorial_id": "KALP15_in_DPPC", "required_files": ["KALP-15_princ.pdb", "DPPC membrane definition/topology", "protein-lipid index group"], "source": "generate_topology/prepare_the_topology.md; equilibration/equilibration.md; production_MD/production_MD.md", "tutorial_specific_settings": ["GROMOS96 53A6 with SPC", "323 K", "rcoulomb=rvdw=1.2 nm", "tc-grps=Protein_DPPC Water_and_ions", "semiisotropic pressure coupling", "1 ns production"], "wizard_limitations": ["The System Builder has no membrane composition, index-group, cutoff, or semiisotropic control; supply the membrane prerequisite through the membrane workflow."]}
+}

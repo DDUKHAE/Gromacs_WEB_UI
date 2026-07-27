@@ -1,0 +1,8 @@
+{
+  "version": "1.0",
+  "forcefield": {"name": "charmm36", "water_model": "tip3p", "terminal_patches": "auto"},
+  "box": {"type": "cubic", "edge_distance_nm": 1.2},
+  "ions": {"salt_type": "NaCl", "concentration_M": 0.0, "neutralize": true},
+  "simulation": {"_expert_mode": true, "temperature_K": 300, "pressure_bar": 1.0, "sim_time_ns": 10.0, "thermostat": "V-rescale", "barostat": "Parrinello-Rahman"},
+  "notes": {"tutorial_id": "Protein_Ligand_Complex", "required_files": ["3HTB_clean.pdb", "jz4.mol2", "jz4.itp", "jz4.prm", "ligand coordinates"], "source": "generate_topology/prepare_the_protein_topology.md; generate_topology/prepare_the_ligand_topology.md; production_MD/production_MD.md", "tutorial_specific_settings": ["CHARMM36 and CHARMM-modified TIP3P", "CGenFF ligand parameters", "10 ns production"], "wizard_limitations": ["The tutorial requires CGenFF topology assembly and Protein_JZ4/Water_and_ions coupling groups, which must be supplied with the ligand workflow."]}
+}
