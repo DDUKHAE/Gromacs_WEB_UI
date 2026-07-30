@@ -403,7 +403,7 @@ python -c "from lib.tutorial_registry import load_manifest; print(load_manifest(
 - **밀도 게이트는 단일 벌크 밀도가 물리적으로 의미 있는 계에만 적용됩니다.** 막(membrane), biphasic 등 단일상 수용성 벌크가 아닌 계에서는 게이트가 건너뛰어집니다(`skills/md_runner/md_runner.py`의 `_density_expected_range`, `density_gate_not_applicable_for_system_type`로 pass 처리).
 - **재현성은 비트단위가 아니라 통계적 수준입니다.** `state.json.provenance`에는 GROMACS 버전, 플랫폼, 렌더링된 MDP 해시, NVT 시드가 기록됩니다. 기본 production은 계속 `gen_seed = -1`이므로 독립 실행은 비트단위로 동일하지 않습니다. 고정 초기 속도가 필요하면 문서화된 reproducible NVT 모드를 사용하세요.
 - **분석 결과에 불확실도 정량화가 없습니다.** RMSD/RMSF/Rg/SASA/에너지 요약(`lib/xvg_parser.py`)은 궤적에 대한 원시 평균/표준편차이며, 블록 평균·자기상관 시간 추정·신뢰구간이 없습니다.
-- **막/단백질-리간드 분석 2종은 스텁입니다.** `_run_membrane_analysis`, `_run_protein_ligand_analysis`(`skills/illustrator/illustrator.py`)는 `{"status": "stub"}`만 반환합니다 — 해당 튜토리얼 변형에 대한 이중층 두께/면적당지질/order parameter 또는 리간드 RMSD/접촉맵 출력이 아직 없습니다.
+- **변형별 막/단백질-리간드 분석은 현재 제공되지 않습니다.** 해당 튜토리얼 변형에 대한 이중층 두께/면적당 지질/order parameter 또는 리간드 RMSD/접촉맵 출력은 현재 생성되지 않습니다.
 
 ---
 

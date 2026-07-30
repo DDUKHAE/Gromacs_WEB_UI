@@ -1,4 +1,5 @@
 from __future__ import annotations
+import math
 import shutil
 import subprocess
 import tempfile
@@ -37,6 +38,20 @@ def _leaflet_cmd(lipids: list[dict]) -> tuple[str, str]:
     return names, ratios
 
 
+def _validate_leaflet(label: str, leaflet: list[dict]) -> None:
+    for index, lipid in enumerate(leaflet):
+        if "fraction" not in lipid:
+            raise ValueError(f"{label}[{index}].fraction is required")
+        fraction = lipid["fraction"]
+        if (
+            isinstance(fraction, bool)
+            or not isinstance(fraction, (int, float))
+            or not math.isfinite(fraction)
+            or not 0 <= fraction <= 1
+        ):
+            raise ValueError(f"{label}[{index}].fraction must be a number between 0 and 1")
+
+
 def build_membrane(config: dict, workspace: Path) -> dict:
     """Run packmol-memgen to build a lipid bilayer system.
 
@@ -64,6 +79,7 @@ def build_membrane(config: dict, workspace: Path) -> dict:
 
     for label, leaflet in (("lipids_upper", upper), ("lipids_lower", lower)):
         if leaflet:
+            _validate_leaflet(label, leaflet)
             total = sum(e["fraction"] for e in leaflet)
             if abs(total - 1.0) > 0.001:
                 raise ValueError(

@@ -511,7 +511,7 @@ This section states, precisely, what the automated checks in this codebase do an
 - **Density gate applies only where a single bulk density is physically meaningful.** It is skipped (reported as `pass`/`density_gate_not_applicable_for_system_type`) for membrane, biphasic, and other non-single-phase-aqueous systems, per `_density_expected_range` in `skills/md_runner/md_runner.py`.
 - **Reproducibility remains statistical, not bitwise.** `state.json.provenance` records the GROMACS version, platform, rendered MDP hashes, and NVT seed. The production default remains `gen_seed = -1`, so independently started runs are not bit-identical; enable the documented reproducible NVT mode when a fixed initial-velocity seed is required.
 - **No uncertainty quantification on analysis outputs.** RMSD/RMSF/Rg/SASA/energy summaries (`lib/xvg_parser.py`) are raw mean/stdev over the trajectory; there is no block averaging, autocorrelation-time estimate, or confidence interval.
-- **Two membrane/protein-ligand analyses are stubs.** `_run_membrane_analysis` and `_run_protein_ligand_analysis` (`skills/illustrator/illustrator.py`) return `{"status": "stub"}` — no bilayer thickness/area-per-lipid/order-parameter or ligand-RMSD/contact-map output for those tutorial variants yet.
+- **Variant-specific membrane and protein-ligand analyses are unavailable.** No bilayer thickness/area-per-lipid/order-parameter or ligand-RMSD/contact-map output is currently produced for those tutorial variants.
 
 ---
 

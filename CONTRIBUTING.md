@@ -44,7 +44,7 @@ GROMACS가 없어도 unit/contract 테스트는 모두 실행된다(integration�
 ### 3.3 새 derived tutorial 자동화 활성화
 1. `docs/tutorial/<tutorial_id>/tutorial.manifest.json` 작성 — 기존 manifest 형식 참조 (`pipeline_variant`, `architecture_steps`, `documents`, `defaults`).
 2. `lib/tutorial_registry.py`의 manifest 로딩이 자동 인식.
-3. md-runner의 `PHASE_SEQUENCES`에 variant가 없으면 추가.
+3. `lib.protocol_contract.PHASE_SEQUENCE_BY_VARIANT`에 variant가 없으면 추가. 이 맵이 phase sequence의 단일 권한입니다.
 4. illustrator의 `VARIANT_DISPATCH`에 variant별 분석이 필요하면 등록.
 5. `scripts/regression/<id>.sh` 회귀 스크립트 추가.
 
