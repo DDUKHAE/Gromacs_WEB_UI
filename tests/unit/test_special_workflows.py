@@ -90,3 +90,7 @@ def test_local_phase_uses_hardware_thread_count(tmp_path, monkeypatch):
     md_runner._run_local_phase(ws, "em", ws / "phase", source, {})
 
     assert commands[1] == ["mdrun", "-deffnm", "em", "-ntomp", "3"]
+
+
+def test_standard_variant_has_no_stub_summary(tmp_path):
+    assert illustrator.run_variant_analyses(tmp_path) == {}

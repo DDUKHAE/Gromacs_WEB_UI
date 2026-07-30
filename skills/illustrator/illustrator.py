@@ -232,16 +232,6 @@ def _run_bar(workspace_dir: Path) -> dict[str, Any]:
     return {"dG_kJ_per_mol": dG, "log": str(out_log)}
 
 
-def _run_membrane_analysis(workspace_dir: Path) -> dict[str, Any]:
-    return {"status": "stub",
-            "note": "membrane thickness, area per lipid, order parameters"}
-
-
-def _run_protein_ligand_analysis(workspace_dir: Path) -> dict[str, Any]:
-    return {"status": "stub",
-            "note": "ligand RMSD, binding distance, interaction map"}
-
-
 def compose_report(workspace_dir: Path) -> Path:
     ws = Path(workspace_dir)
     viz = _viz_dir(ws)
@@ -287,18 +277,6 @@ def compose_report(workspace_dir: Path) -> Path:
         str(report)
     state.write(ws, s)
     return report
-
-
-def compose_html_report(workspace_dir: Path) -> Path | None:
-    try:
-        import plotly  # noqa: F401
-    except ImportError:
-        return None
-    # Plotly HTML rendering left as future extension; emit a placeholder.
-    viz = _viz_dir(workspace_dir)
-    html = viz / "report.html"
-    html.write_text("<html><body>See report.md (plotly HTML stub)</body></html>")
-    return html
 
 
 def select_renderer() -> str:
@@ -454,10 +432,8 @@ def plot_all(workspace_dir: Path) -> list[Path]:
     return pngs
 
 def illustrate(workspace_dir: Path,
-               analyses: list[str] | None = None,
                render_frames: list = None,
                animation: dict | None = None,
-               report_html: bool = True,
                interactive: bool = True) -> dict[str, Any]:
     assert_ready(workspace_dir)
     run_core_analyses(workspace_dir)
@@ -480,13 +456,11 @@ def illustrate(workspace_dir: Path,
             stride=anim_cfg.get("stride", 10),
         )
     report = compose_report(workspace_dir)
-    html = compose_html_report(workspace_dir) if report_html else None
     s = state.read(workspace_dir)
     s["last_completed_stage"] = "viz"
     state.write(workspace_dir, s)
     return {
         "report_path": str(report),
-        "report_html_path": str(html) if html else None,
         "rendered_frames": rendered,
         "animation_path": str(anim_path) if anim_path else None,
     }
@@ -495,12 +469,12 @@ def illustrate(workspace_dir: Path,
 VARIANT_DISPATCH = {
     "umbrella_sampling": "_run_wham",
     "free_energy_alchemical": "_run_bar",
-    "membrane_md_standard": "_run_membrane_analysis",
-    "protein_ligand_complex": "_run_protein_ligand_analysis",
 }
 
 
 def run_variant_analyses(workspace_dir: Path) -> dict[str, Any]:
+    if not state.path(workspace_dir).exists():
+        return {}
     s = state.read(workspace_dir)
     variant = (s.get("tutorial") or {}).get("variant", "")
     fn_name = VARIANT_DISPATCH.get(variant)

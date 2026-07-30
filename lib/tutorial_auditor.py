@@ -9,41 +9,6 @@ from lib import protocol_contract as PC
 from lib import tutorial_registry as TR
 
 
-# Expected configuration per tutorial_id
-_TUTORIAL_EXPECTATIONS: dict[str, dict[str, Any]] = {
-    "Lysozyme_in_water": {
-        "forcefield": "charmm36",
-        "water_model": "tip3p",
-        "box_type": "dodecahedron",
-        "phase_sequence": ["em", "nvt", "npt", "npt_pr", "production"],
-    },
-    "KALP15_in_DPPC": {
-        "forcefield": "charmm36",
-        "water_model": "tip3p",
-        "box_type": "triclinic",
-        "phase_sequence": ["em", "nvt", "npt", "npt_pr", "production"],
-    },
-    "Protein_Ligand_Complex": {
-        "forcefield": "charmm36",
-        "water_model": "tip3p",
-        "box_type": "dodecahedron",
-        "phase_sequence": ["em", "nvt", "npt", "npt_pr", "production"],
-    },
-    "Umbrella_Sampling": {
-        "forcefield": "charmm36",
-        "water_model": "tip3p",
-        "box_type": "dodecahedron",
-        "phase_sequence": ["em", "nvt", "npt", "npt_pr", "umbrella"],
-    },
-    "Free_Energy_Calculations_Methane_in_Water": {
-        "forcefield": "oplsaa",
-        "water_model": "tip4p",
-        "box_type": "dodecahedron",
-        "phase_sequence": ["em", "nvt", "npt", "npt_pr", "free_energy"],
-    },
-}
-
-
 @dataclass
 class AuditItem:
     key: str
@@ -122,9 +87,8 @@ def audit_run(workspace: Path) -> AuditReport:
             ],
         )
 
-    # The materialized contract is the authoritative protocol for a run.  For
-    # old workspaces without one, derive expectations from the checked-in
-    # manifest rather than the stale hand-maintained duplicate table above.
+    # The materialized contract is the authoritative protocol for a run. For
+    # old workspaces without one, derive expectations from the checked-in manifest.
     contract_error = ""
     try:
         contract = PC.assert_valid(workspace)
