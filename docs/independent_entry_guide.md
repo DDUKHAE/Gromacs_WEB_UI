@@ -136,10 +136,8 @@ state.write(ws, s)
 from skills.illustrator import illustrate
 result = illustrate(
     workspace_dir=ws,
-    analyses=["rmsd", "rmsf", "gyrate", "energy"],
     render_frames=[0, "last"],
     animation={"enabled": False},  # PyMOL/ffmpeg 없으면 비활성
-    report_html=False,
 )
 # result == {"report_path": ".../report.md", ...}
 ```
