@@ -1,4 +1,25 @@
+import json
+
+from fastapi.testclient import TestClient
+
 from lib.system_config import validate_advanced_workflow
+from web.server import create_app
+
+
+def test_membrane_build_returns_builder_fraction_error(tmp_path, monkeypatch):
+    monkeypatch.setattr("lib.membrane_builder.is_packmol_memgen_available", lambda: True)
+    monkeypatch.setattr(
+        "lib.membrane_builder.build_membrane",
+        lambda *_: (_ for _ in ()).throw(ValueError("fraction error")),
+    )
+
+    response = TestClient(create_app(tmp_path)).post(
+        "/api/membrane/build",
+        data={"config_json": json.dumps({"lipids_upper": [{"fraction": 0.5}]})},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "fraction error"
 
 
 def test_free_energy_requires_a_nonempty_lambda_schedule():

@@ -1226,16 +1226,6 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         except Exception:
             raise HTTPException(status_code=422, detail="config_json is not valid JSON")
 
-        for leaflet_key in ("lipids_upper", "lipids_lower"):
-            leaflet = config.get(leaflet_key, [])
-            if leaflet:
-                total = sum(e.get("fraction", 0) for e in leaflet)
-                if abs(total - 1.0) > 0.001:
-                    raise HTTPException(
-                        status_code=422,
-                        detail=f"{leaflet_key} fractions must sum to 1.0, got {total:.4f}",
-                    )
-
         tmp_dir = hd / "tmp"
         tmp_dir.mkdir(exist_ok=True)
         tmp_protein: Path | None = None
