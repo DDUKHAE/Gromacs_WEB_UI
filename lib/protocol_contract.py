@@ -33,6 +33,14 @@ PHASE_SEQUENCE_BY_VARIANT = {
     "virtual_sites_topology": ["em", "production"],
 }
 
+MDP_LOCK_MAP = {
+    "temperature_K": "ref_t", "pressure_bar": "ref_p", "dt_ps": "dt",
+    "thermostat": "tcoupl", "barostat": "pcoupl", "rcoulomb_nm": "rcoulomb",
+    "rvdw_nm": "rvdw", "coulombtype": "coulombtype", "constraints": "constraints",
+    "constraint_algorithm": "constraint_algorithm", "pme_order": "pme_order",
+    "fourierspacing_nm": "fourierspacing", "lincs_order": "lincs_order",
+}
+
 
 class ProtocolContractError(RuntimeError):
     """A run does not have a valid, untampered protocol contract."""
@@ -154,25 +162,10 @@ def compile_contract(workspace: Path, tutorial_id: str,
     # free to evolve with the versioned MDP templates.
     mdp = {}
     if plan is not None:
-        mapping = {
-            "temperature_K": "ref_t", "pressure_bar": "ref_p", "dt_ps": "dt",
-            "thermostat": "tcoupl", "barostat": "pcoupl", "rcoulomb_nm": "rcoulomb",
-            "rvdw_nm": "rvdw", "coulombtype": "coulombtype", "constraints": "constraints",
-            "constraint_algorithm": "constraint_algorithm", "pme_order": "pme_order",
-            "fourierspacing_nm": "fourierspacing", "lincs_order": "lincs_order",
-        }
         mdp = {output: plan["user_locked_mdp_settings"][key]
-               for key, output in mapping.items() if key in plan["user_locked_mdp_settings"]}
+               for key, output in MDP_LOCK_MAP.items() if key in plan["user_locked_mdp_settings"]}
     elif sim.get("_expert_mode"):
-        mapping = {
-            "temperature_K": "ref_t", "pressure_bar": "ref_p",
-            "dt_ps": "dt", "thermostat": "tcoupl", "barostat": "pcoupl",
-            "rcoulomb_nm": "rcoulomb", "rvdw_nm": "rvdw",
-            "coulombtype": "coulombtype", "constraints": "constraints",
-            "constraint_algorithm": "constraint_algorithm", "pme_order": "pme_order",
-            "fourierspacing_nm": "fourierspacing", "lincs_order": "lincs_order",
-        }
-        mdp = {out: sim[key] for key, out in mapping.items() if key in sim}
+        mdp = {out: sim[key] for key, out in MDP_LOCK_MAP.items() if key in sim}
 
     contract = {
         "schema_version": SCHEMA_VERSION,

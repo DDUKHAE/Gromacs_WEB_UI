@@ -3,6 +3,10 @@ from skills.md_runner import md_runner as MR
 from lib import gmx_wrapper as GW
 
 
+def test_phase_sequence_uses_protocol_contract():
+    assert MR.phase_sequence_for_variant("virtual_sites_topology") == ["em", "production"]
+
+
 def _fake_gw_run_writing(xvg_content: str, requested_term: dict):
     """Return a stand-in for GW.run that writes xvg_content to the -o file
     and records the energy term (2nd positional after -f, i.e. args[3]

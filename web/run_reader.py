@@ -26,7 +26,7 @@ def _process_alive(pid: int) -> bool:
         return False
 
 
-def _production_finished(workspace: Path) -> bool:
+def production_finished(workspace: Path) -> bool:
     """Return whether GROMACS wrote its normal production completion marker.
 
     A live LLM terminal is not evidence that MD is still running.  Read only
@@ -50,7 +50,7 @@ def derive_status(workspace: Path) -> str:
 
     # Keep the MD state distinct from a still-open (or stalled) LLM terminal.
     # This prevents the UI from claiming "MD Running" after mdrun has ended.
-    if _production_finished(workspace):
+    if production_finished(workspace):
         try:
             state = json.loads(state_file.read_text()) if state_file.exists() else {}
         except Exception:

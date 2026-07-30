@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from web.run_reader import production_finished
+
 
 _STAGES = {
     1: "Topology",
@@ -16,17 +18,6 @@ _STAGES = {
     7: "Production MD",
     8: "Analysis",
 }
-
-
-def _production_finished(workspace: Path) -> bool:
-    log = workspace / "stage2_md" / "production.log"
-    try:
-        with log.open("rb") as handle:
-            handle.seek(0, 2)
-            handle.seek(max(0, handle.tell() - 65536))
-            return b"Finished mdrun on rank" in handle.read()
-    except OSError:
-        return False
 
 
 def build_activity(workspace: Path, status: str) -> list[dict[str, Any]]:
@@ -62,7 +53,7 @@ def build_activity(workspace: Path, status: str) -> list[dict[str, Any]]:
     if s7.get("em_gro"):
         add(6, "Energy minimization and NVT/NPT equilibration output generated.")
     if s7.get("production_gro"):
-        if _production_finished(workspace):
+        if production_finished(workspace):
             add(7, "Production MD finished. Results await analysis.")
         else:
             add(7, "Production MD output has been created.", "running")

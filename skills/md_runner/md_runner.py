@@ -33,19 +33,8 @@ def assert_ready(workspace_dir: Path) -> dict[str, Any]:
     return s
 
 
-PHASE_SEQUENCES = {
-    "protein_aqueous_standard": ["em", "nvt", "npt", "npt_pr", "production"],
-    "membrane_md_standard": ["em", "nvt", "npt", "npt_pr", "production"],
-    "protein_ligand_complex": ["em", "nvt", "npt", "npt_pr", "production"],
-    "umbrella_sampling": ["em", "nvt", "npt", "npt_pr", "umbrella"],
-    "free_energy_alchemical": ["em", "nvt", "npt", "npt_pr", "free_energy"],
-    "biphasic_system": ["em", "nvt", "npt", "npt_pr", "production"],
-    "virtual_sites_topology": ["em", "production"],
-}
-
-
 def phase_sequence_for_variant(variant: str | None) -> list[str]:
-    return PHASE_SEQUENCES.get(variant or "", ["em", "nvt", "npt", "npt_pr", "production"])
+    return PC.PHASE_SEQUENCE_BY_VARIANT.get(variant or "", ["em", "nvt", "npt", "npt_pr", "production"])
 
 
 PHASE_INPUT_GRO = {
@@ -161,11 +150,6 @@ def run_phase(workspace_dir: Path, phase: str,
     step7 = s["step_outputs"].setdefault("step_7", {})
     step7[PHASE_TO_STATE_KEY[phase]] = f"stage2_md/{phase}.gro"
     s["current_step"] = 7
-    state.write(ws, s)
-
-    # Record completed phase in sequence for audit
-    s = state.read(ws)
-    step7 = s["step_outputs"].setdefault("step_7", {})
     phase_seq = step7.setdefault("phase_sequence", [])
     if phase not in phase_seq:
         phase_seq.append(phase)
