@@ -20,6 +20,7 @@ from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from lib import xvg_parser
+from lib import tutorial_registry as TR
 from lib.system_config import validate_advanced_workflow, validate_solution_config
 from web.llm_adapters import ADAPTERS
 from web import llm_runner
@@ -300,6 +301,10 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         return result
 
     # ── Force field endpoints ─────────────────────────────────────────────────
+    @app.get("/api/system-protocol-matrix")
+    def api_system_protocol_matrix() -> dict:
+        return TR.combo_matrix_response()
+
     @app.get("/api/forcefields")
     def api_list_forcefields() -> list[str]:
         from lib.gmx_wrapper import get_gmxlib
