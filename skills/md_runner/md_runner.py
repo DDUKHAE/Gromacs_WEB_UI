@@ -1,7 +1,7 @@
 # skills/md_runner/md_runner.py
 from pathlib import Path
 from typing import Any
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 import re
 from lib import state
 from lib.state import StateContractError
@@ -11,6 +11,7 @@ from lib import validators as V
 from lib import xvg_parser
 from lib import protocol_contract as PC
 from lib.system_config import load_config
+from lib import llm_assist
 
 
 REQUIRED_KEYS = ["step_1", "step_2", "step_3", "step_5"]
@@ -160,6 +161,10 @@ class PhaseFatal(Exception):
     pass
 
 
+class PhaseRejectedByReview(Exception):
+    """Raised when the LLM checkpoint rejects a completed phase."""
+
+
 MUTATION_BY_CAUSE = {
     "unstable_energy": [{"nsteps": 100}, {"nsteps": 200, "dt": 0.001},
                         {"nsteps": 400, "dt": 0.0005}],
@@ -278,6 +283,49 @@ def handle_phase_result(workspace_dir: Path, phase: str,
     state.write(workspace_dir, s)
     return {"status": "warning_declined",
             "warning_id": payload["warning_id"]}
+
+
+def _apply_review_outcome(workspace_dir: Path, phase: str, judgment: V.Judgment,
+                          overrides: dict[str, Any]) -> V.Judgment:
+    """Call the LLM checkpoint for a just-completed phase and act on its
+    verdict. Returns the judgment to proceed with — either the original one,
+    or the judgment from a retried phase run if the LLM accepted a suggested
+    mutation."""
+    xvg_summary = {"metric": judgment.metric, "observed": judgment.observed,
+                   "expected_range": judgment.expected_range}
+    verdict = llm_assist.review_md_phase(
+        phase, asdict(judgment), xvg_summary, overrides)
+    if not verdict.proceed:
+        raise PhaseRejectedByReview(
+            f"LLM review rejected phase '{phase}' (tier={judgment.tier}): "
+            f"{verdict.diagnosis}"
+        )
+    if judgment.tier != "warning":
+        return judgment
+    s = state.read(workspace_dir)
+    if verdict.accept_mutation:
+        mutation = judgment.suggested_mutation or {}
+        new_overrides = dict(overrides)
+        for k, v in (mutation.get("changes") or {}).items():
+            new_overrides[k] = _parse_change_value(mutation.get("target", ""), str(v))
+        s["retry_history"].append({
+            "step": 7, "phase": phase, "tier": "warning", "cause": judgment.cause,
+            "warning_id": judgment.warning_id,
+            "remediation": f"llm_accepted: {new_overrides}",
+        })
+        state.write(workspace_dir, s)
+        return run_phase_with_recovery(
+            workspace_dir, phase=phase,
+            phase_runner=_validating_phase_runner,
+            overrides=new_overrides,
+        )
+    s["retry_history"].append({
+        "step": 7, "phase": phase, "tier": "warning", "cause": "llm_declined",
+        "warning_id": judgment.warning_id,
+        "remediation": "llm declined; proceeding to next step",
+    })
+    state.write(workspace_dir, s)
+    return judgment
 
 
 def _pop_warning(workspace_dir: Path, warning_id: str) -> dict[str, Any] | None:
@@ -611,12 +659,7 @@ def run_simulation(workspace_dir: Path,
             phase_runner=_validating_phase_runner,
             overrides=requested_overrides,
         )
-        if judgment.tier == "warning":
-            outcome = handle_phase_result(workspace_dir, phase, judgment,
-                                          interactive=interactive)
-            if outcome["status"] == "warning_pending_decision":
-                return outcome
-            # else: declined -> proceed
+        _apply_review_outcome(workspace_dir, phase, judgment, requested_overrides)
     s = state.read(workspace_dir)
     s["last_completed_stage"] = "md"
     state.write(workspace_dir, s)

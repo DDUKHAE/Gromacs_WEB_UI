@@ -1,6 +1,8 @@
 from pathlib import Path
+import pytest
 from skills.md_runner import md_runner as MR
 from lib import gmx_wrapper as GW
+from lib import validators as V
 
 
 def test_phase_sequence_uses_protocol_contract():
@@ -160,3 +162,78 @@ def test_density_gate_applies_water_range_for_aqueous_variant(tmp_path, monkeypa
     monkeypatch.setattr(GW, "run", _fake_gw_run_writing(xvg_content, requested))
     judgment = MR._judge_density(tmp_path, "npt")
     assert judgment.tier != "pass"
+
+
+from lib import llm_assist
+from lib import state
+
+
+def _init_ws(tmp_path):
+    tmp_path.mkdir(exist_ok=True)
+    state.write(tmp_path, state.initial(tmp_path))
+
+
+def test_apply_review_outcome_pass_tier_proceeds(tmp_path, monkeypatch):
+    _init_ws(tmp_path)
+    called = {}
+    monkeypatch.setattr(
+        llm_assist, "review_md_phase",
+        lambda phase, judgment, xvg, mdp: called.update(phase=phase, judgment=judgment) or
+        llm_assist.PhaseVerdict(proceed=True, accept_mutation=False, diagnosis="fine"))
+    judgment = V.Judgment(tier="pass", metric="temperature", observed=300.0)
+    result = MR._apply_review_outcome(tmp_path, "nvt", judgment, {})
+    assert result is judgment
+    assert called["phase"] == "nvt"
+
+
+def test_apply_review_outcome_pass_tier_can_reject(tmp_path, monkeypatch):
+    _init_ws(tmp_path)
+    monkeypatch.setattr(
+        llm_assist, "review_md_phase",
+        lambda phase, judgment, xvg, mdp: llm_assist.PhaseVerdict(
+            proceed=False, accept_mutation=False, diagnosis="density looks unphysical"))
+    judgment = V.Judgment(tier="pass", metric="density", observed=1200.0)
+    with pytest.raises(MR.PhaseRejectedByReview, match="density looks unphysical"):
+        MR._apply_review_outcome(tmp_path, "npt", judgment, {})
+
+
+def test_apply_review_outcome_warning_declined_proceeds_unchanged(tmp_path, monkeypatch):
+    _init_ws(tmp_path)
+    monkeypatch.setattr(
+        llm_assist, "review_md_phase",
+        lambda phase, judgment, xvg, mdp: llm_assist.PhaseVerdict(
+            proceed=True, accept_mutation=False, diagnosis="minor, ignore"))
+    judgment = V.Judgment(tier="warning", metric="temperature", observed=306.0,
+                          cause="temperature_coupling",
+                          suggested_mutation={"target": "nvt.mdp",
+                                              "changes": {"tau_t": "0.1 → 0.5"}})
+    result = MR._apply_review_outcome(tmp_path, "nvt", judgment, {})
+    assert result is judgment
+    s = state.read(tmp_path)
+    assert s["retry_history"][-1]["cause"] == "llm_declined"
+
+
+def test_apply_review_outcome_warning_accepted_retries_phase(tmp_path, monkeypatch):
+    _init_ws(tmp_path)
+    monkeypatch.setattr(
+        llm_assist, "review_md_phase",
+        lambda phase, judgment, xvg, mdp: llm_assist.PhaseVerdict(
+            proceed=True, accept_mutation=True, diagnosis="apply the fix"))
+    judgment = V.Judgment(tier="warning", metric="temperature", observed=306.0,
+                          cause="temperature_coupling",
+                          suggested_mutation={"target": "nvt.mdp",
+                                              "changes": {"tau_t": "0.1 → 0.5"}})
+    retried = V.Judgment(tier="pass", metric="temperature", observed=300.0)
+    captured_overrides = {}
+
+    def _fake_recovery(workspace_dir, phase, phase_runner, overrides):
+        captured_overrides.update(overrides)
+        return retried
+
+    monkeypatch.setattr(MR, "run_phase_with_recovery", _fake_recovery)
+    result = MR._apply_review_outcome(tmp_path, "nvt", judgment, {})
+    assert result is retried
+    assert captured_overrides["tau_t"] == 0.5
+    s = state.read(tmp_path)
+    assert s["retry_history"][-1]["cause"] == "temperature_coupling"
+    assert "llm_accepted" in s["retry_history"][-1]["remediation"]
