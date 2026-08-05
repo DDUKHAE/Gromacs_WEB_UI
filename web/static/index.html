@@ -2347,7 +2347,7 @@ body.light-theme #run-search {
                   </div>
                 </div>
                 <div class="ff-select-col">
-                  <select name="box_type" id="box-type-select">
+                  <select name="box_type" id="box-type-select" onchange="update3dBoxPreview()">
                     <option value="dodecahedron">Dodecahedron (recommended)</option>
                     <option value="cubic">Cubic</option>
                     <option value="octahedron">Octahedron</option>
@@ -2365,7 +2365,7 @@ body.light-theme #run-search {
                   </div>
                 </div>
                 <div class="ff-select-col">
-                  <input type="number" id="edge-distance" name="edge_distance_nm" value="1.0" min="0.5" max="5.0" step="0.1">
+                  <input type="number" id="edge-distance" name="edge_distance_nm" value="1.0" min="0.5" max="5.0" step="0.1" onchange="update3dBoxPreview()" oninput="update3dBoxPreview()">
                 </div>
               </div>
             </div>
@@ -3254,6 +3254,30 @@ body.light-theme #run-search {
         </div>
       </div>
 
+      <!-- 🧊 [3D Minimap Viewport] UI 오른쪽 상단 미니맵 연동 위젯 -->
+      <div id="ngl-minimap-widget" style="position:fixed;top:70px;right:24px;z-index:1040;width:380px;height:320px;min-width:280px;min-height:220px;max-width:800px;max-height:600px;resize:both;overflow:hidden;background:var(--bg-surface,#0b0f24);backdrop-filter:blur(12px);border:1px solid var(--border-color,rgba(255,255,255,0.12));border-radius:12px;box-shadow:var(--shadow-lg,0 12px 32px rgba(0,0,0,0.4));display:flex;flex-direction:column;transition:background 0.3s ease, border-color 0.3s ease;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--bg-card-header,rgba(255,255,255,0.03));border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));flex-shrink:0;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#10b981;box-shadow:0 0 8px #10b981;"></span>
+            <span style="font-size:12px;font-weight:700;color:var(--text-primary);letter-spacing:0.5px;">3D LIVE MINIMAP</span>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <button type="button" onclick="toggleMinimapExpand()" title="Expand 3D Modal" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:13px;padding:2px 4px;">⛶</button>
+            <button type="button" onclick="toggleMinimapCollapse()" id="minimap-toggle-btn" title="Minimize Minimap" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:12px;padding:2px 4px;">−</button>
+          </div>
+        </div>
+        <div id="minimap-body" style="position:relative;width:100%;flex:1;min-height:0;background:var(--bg-main,#04060f);">
+          <div id="ngl-minimap-viewport" style="width:100%;height:100%;"></div>
+          <div id="ngl-minimap-placeholder" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:11px;color:var(--text-muted,rgba(255,255,255,0.4));pointer-events:none;padding:12px;text-align:center;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:6px;opacity:0.6;"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+            Upload PDB to activate 3D Live View
+          </div>
+          <div id="ngl-minimap-label" style="position:absolute;bottom:6px;left:8px;font-size:10px;color:var(--text-primary,#fff);background:var(--bg-card-header,rgba(0,0,0,0.6));padding:2px 6px;border-radius:4px;backdrop-filter:blur(4px);pointer-events:none;border:1px solid var(--border-color);">
+            Ready
+          </div>
+        </div>
+      </div>
+
       <!-- [3D 분자 구조 뷰어 모달] NGL Library를 활용해 .gro/.pdb 분자 구조 및 .xtc 궤적을 3D 애니메이션으로 출력하는 팝업창 -->
       <div id="ngl-viewer-modal" style="display:none;position:fixed;inset:0;background:rgba(6, 8, 19, 0.8);backdrop-filter:blur(8px);z-index:1060;align-items:center;justify-content:center;padding:16px;">
         <div style="background:var(--bg-surface,#0b0f24);border:1px solid var(--border-color);border-radius:14px;width:100%;max-width:860px;height:80vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:var(--shadow-lg);pointer-events:auto;margin:auto;">
@@ -3386,7 +3410,10 @@ async function handleMolStructFile(file) {
     _nglComp = await _nglStage.loadFile(url, { ext });
     _nglComp.addRepresentation('cartoon', { colorScheme: 'residueindex' });
     _nglStage.autoView();
-    setTimeout(() => { if (_nglStage) _nglStage.handleResize(); }, 150);
+    setTimeout(() => {
+      if (_nglStage) _nglStage.handleResize();
+      update3dBoxPreview();
+    }, 150);
   } catch (e) {
     showToast('Failed to load structure file: ' + e.message, 'error');
   } finally {
@@ -3490,19 +3517,166 @@ async function refreshRun3dStructure(runId) {
     const blob = new Blob([buf]);
     const url = URL.createObjectURL(blob);
     try {
-      if (_run3dComp) { _run3dStage.removeComponent(_run3dComp); _run3dComp = null; }
       _run3dComp = await _run3dStage.loadFile(url, { ext: 'gro' });
       _run3dComp.addRepresentation('cartoon', { colorScheme: 'residueindex' });
+      _run3dComp.addRepresentation('ball+stick', { sele: 'hetero or ion or SOL', opacity: 0.7 });
       _run3dStage.autoView();
       _run3dLoadedFile = structName;
+      updateMinimapStructure(url, 'gro', structName);
       const placeholder = document.getElementById('run-3d-placeholder');
       if (placeholder) placeholder.style.display = 'none';
-      if (label) label.textContent = structName;
+      if (label) label.textContent = `${structName} (Live 3D View)`;
       setTimeout(() => { if (_run3dStage) _run3dStage.handleResize(); }, 150);
     } finally {
       URL.revokeObjectURL(url);
     }
   } catch (_) {}
+}
+
+let _nglBoxShapeComp = null;
+let _minimapBoxShapeComp = null;
+
+function renderBoxShapeOnStage(stageObj, compObj, distNm) {
+  if (!stageObj || !compObj || !compObj.structure) return null;
+  const dist = parseFloat(distNm || '1.0');
+  
+  // 1. Add native unitcell if structure contains Periodic Box Vectors
+  try {
+    if (compObj.structure.unitcell && !compObj._unitcellAdded) {
+      compObj.addRepresentation("unitcell", { color: "#3b82f6", wireframe: true });
+      compObj._unitcellAdded = true;
+    }
+  } catch (_) {}
+  
+  // 2. Build 3D Bounding Box Wireframe with Edge Distance offset
+  try {
+    const bb = compObj.structure.getBoundingBox();
+    const min = bb.min;
+    const max = bb.max;
+    const dA = dist * 10; // nm -> Angstroms
+    
+    const p1 = [min.x - dA, min.y - dA, min.z - dA];
+    const p2 = [max.x + dA, max.y + dA, max.z + dA];
+    
+    const shape = new NGL.Shape("box-preview");
+    const wireColor = [0.23, 0.51, 0.96]; // #3b82f6 cyan-blue
+    
+    shape.addLine(p1, [p2[0], p1[1], p1[2]], wireColor, 3);
+    shape.addLine(p1, [p1[0], p2[1], p1[2]], wireColor, 3);
+    shape.addLine(p1, [p1[0], p1[1], p2[2]], wireColor, 3);
+    
+    shape.addLine(p2, [p1[0], p2[1], p2[2]], wireColor, 3);
+    shape.addLine(p2, [p2[0], p1[1], p2[2]], wireColor, 3);
+    shape.addLine(p2, [p2[0], p2[1], p1[2]], wireColor, 3);
+    
+    shape.addLine([p1[0], p2[1], p1[2]], [p2[0], p2[1], p1[2]], wireColor, 3);
+    shape.addLine([p1[0], p2[1], p1[2]], [p1[0], p2[1], p2[2]], wireColor, 3);
+    
+    shape.addLine([p2[0], p1[1], p1[2]], [p2[0], p2[1], p1[2]], wireColor, 3);
+    shape.addLine([p2[0], p1[1], p1[2]], [p2[0], p1[1], p2[2]], wireColor, 3);
+    
+    shape.addLine([p1[0], p1[1], p2[2]], [p2[0], p1[1], p2[2]], wireColor, 3);
+    shape.addLine([p1[0], p1[1], p2[2]], [p1[0], p2[1], p2[2]], wireColor, 3);
+    
+    const shapeComp = stageObj.addComponentFromObject(shape);
+    shapeComp.addRepresentation("buffer");
+    if (stageObj.viewer) stageObj.viewer.requestRender();
+    return shapeComp;
+  } catch (e) {
+    console.warn('Box render failed:', e);
+    return null;
+  }
+}
+
+function update3dBoxPreview() {
+  const dist = document.getElementById('edge-distance')?.value || '1.0';
+  
+  if (_nglBoxShapeComp) {
+    try { (_nglStage || _run3dStage)?.removeComponent(_nglBoxShapeComp); } catch (_) {}
+    _nglBoxShapeComp = null;
+  }
+  if (_minimapBoxShapeComp) {
+    try { _minimapStage?.removeComponent(_minimapBoxShapeComp); } catch (_) {}
+    _minimapBoxShapeComp = null;
+  }
+  
+  const mainStage = _nglStage || _run3dStage;
+  const mainComp = _nglComp || _run3dComp;
+  if (mainStage && mainComp) {
+    _nglBoxShapeComp = renderBoxShapeOnStage(mainStage, mainComp, dist);
+  }
+  if (_minimapStage && _minimapComp) {
+    _minimapBoxShapeComp = renderBoxShapeOnStage(_minimapStage, _minimapComp, dist);
+  }
+}
+
+let _minimapStage = null;
+let _minimapComp = null;
+
+function initMinimapStage() {
+  const vp = document.getElementById('ngl-minimap-viewport');
+  if (!vp) return;
+  const isDark = !document.body.classList.contains('light-theme');
+  const bgColor = isDark ? '#04060f' : '#ffffff';
+  if (_minimapStage) {
+    try { _minimapStage.setParameters({ backgroundColor: bgColor }); } catch (_) {}
+    return;
+  }
+  _minimapStage = new NGL.Stage(vp, { backgroundColor: bgColor });
+  window.addEventListener('resize', () => { if (_minimapStage) _minimapStage.handleResize(); });
+}
+
+function updateMinimapStructure(fileOrUrl, ext = 'pdb', nameLabel = '') {
+  initMinimapStage();
+  const ph = document.getElementById('ngl-minimap-placeholder');
+  const lb = document.getElementById('ngl-minimap-label');
+  if (ph) ph.style.display = 'none';
+  if (lb && nameLabel) lb.textContent = nameLabel;
+  
+  if (_minimapComp) {
+    try { _minimapStage.removeComponent(_minimapComp); } catch(_) {}
+    _minimapComp = null;
+  }
+  
+  _minimapStage.loadFile(fileOrUrl, { ext }).then(comp => {
+    _minimapComp = comp;
+    _minimapComp.addRepresentation('cartoon', { colorScheme: 'residueindex' });
+    _minimapComp.addRepresentation('ball+stick', { sele: 'hetero or ion or SOL', opacity: 0.7 });
+    _minimapStage.autoView();
+    setTimeout(() => { if (_minimapStage) _minimapStage.handleResize(); }, 150);
+  }).catch(err => {
+    console.warn('Minimap render failed:', err);
+  });
+}
+
+function toggleMinimapCollapse() {
+  const body = document.getElementById('minimap-body');
+  const btn = document.getElementById('minimap-toggle-btn');
+  if (body.style.display === 'none') {
+    body.style.display = 'block';
+    btn.textContent = '−';
+    setTimeout(() => { if (_minimapStage) _minimapStage.handleResize(); }, 100);
+  } else {
+    body.style.display = 'none';
+    btn.textContent = '+';
+  }
+}
+
+async function toggleMinimapExpand() {
+  const modal = document.getElementById('ngl-viewer-modal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  
+  if (selectedPdb) {
+    await handleMolStructFile(selectedPdb);
+  } else if (currentRunId && currentRunId !== 'virtual_sandbox') {
+    await refreshRun3dStructure(currentRunId);
+  }
+  
+  setTimeout(() => {
+    if (_nglStage) _nglStage.handleResize();
+    update3dBoxPreview();
+  }, 150);
 }
 
 const CHART_COLORS = ['#06b6d4', '#6366f1', '#10b981', '#f59e0b', '#ef4444'];
@@ -3517,6 +3691,8 @@ function handleFileSelect(file) {
   document.getElementById('selected-file').textContent = `✓ ${file.name}`;
   document.getElementById('btn-start').disabled = false;
   _analyzePDBStructure(file);
+  // Render on 3D Live Minimap automatically without opening large modal
+  updateMinimapStructure(file, file.name.split('.').pop().toLowerCase(), file.name);
 }
 
 async function _analyzePDBStructure(file) {
@@ -3534,11 +3710,14 @@ async function _analyzePDBStructure(file) {
 function _renderStructureAnalysis(a) {
   const panel = document.getElementById('structure-analysis-panel');
   const content = document.getElementById('structure-analysis-content');
-  let html = `<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:6px;">
+  let html = `<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-bottom:6px;">
     <span>Chains: <b>${a.chains.join(', ')}</b></span>
     <span>Residues: <b>${a.residue_count}</b></span>
     <span>Atoms: <b>${a.atom_count.toLocaleString()}</b></span>
     <span>Net charge: <b>${a.net_charge >= 0 ? '+' : ''}${a.net_charge}</b></span>
+    <button type="button" onclick="if(selectedPdb) handleMolStructFile(selectedPdb)" style="margin-left:auto;background:var(--accent-primary,#3b82f6);color:#fff;border:none;border-radius:4px;padding:4px 10px;font-size:12px;cursor:pointer;font-weight:600;display:inline-flex;align-items:center;gap:4px;">
+      👁 3D Viewport
+    </button>
   </div>`;
   if (a.hetatm && a.hetatm.length > 0) {
     html += `<div style="margin-bottom:4px;">HETATM: ${a.hetatm.map(h => `${h.resname}(${h.chain})`).join(', ')}</div>`;
@@ -4212,9 +4391,13 @@ function toggleTheme() {
   if (isLight) {
     body.classList.add('light-theme');
     localStorage.setItem('theme', 'light');
+    if (_minimapStage) { try { _minimapStage.setParameters({ backgroundColor: '#ffffff' }); } catch(_) {} }
+    if (_run3dStage) { try { _run3dStage.setParameters({ backgroundColor: '#f0f2f5' }); } catch(_) {} }
   } else {
     body.classList.remove('light-theme');
     localStorage.setItem('theme', 'dark');
+    if (_minimapStage) { try { _minimapStage.setParameters({ backgroundColor: '#04060f' }); } catch(_) {} }
+    if (_run3dStage) { try { _run3dStage.setParameters({ backgroundColor: '#0b0f24' }); } catch(_) {} }
   }
 }
 

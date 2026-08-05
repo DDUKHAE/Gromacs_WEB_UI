@@ -743,30 +743,18 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
             shutil.rmtree(ws, ignore_errors=True)
             raise HTTPException(status_code=409, detail=str(exc))
 
-        if llm and llm in ADAPTERS:
-            if not llm_runner.check_cli(ADAPTERS[llm]):
-                raise HTTPException(status_code=400, detail=f"'{ADAPTERS[llm].cli}' CLI not found. Install and log in first.")
-            (ws / "runner.log").write_text("")
-            _track_task(llm_runner.run_llm_agent(
-                run_id=run_id,
-                workspace=ws,
-                pdb_path=pdb_path,
-                harness_dir=hd,
-                llm_key=llm,
-                auto_approve=False,
-            ))
-        else:
-            log_file = ws / "runner.log"
-            log_fd = open(log_file, "w")
-            proc = subprocess.Popen(
-                [sys.executable, str(RUNNER_PY), "--skill", "all",
-                 "--workspace", str(ws), "--pdb", str(pdb_path)],
-                cwd=str(hd),
-                stdout=log_fd,
-                stderr=subprocess.STDOUT,
-            )
-            log_fd.close()
-            (ws / "runner.pid").write_text(str(proc.pid))
+        # Execute autonomous python runner pipeline for robust background simulation
+        log_file = ws / "runner.log"
+        log_fd = open(log_file, "w")
+        proc = subprocess.Popen(
+            [sys.executable, str(RUNNER_PY), "--skill", "all",
+             "--workspace", str(ws), "--pdb", str(pdb_path)],
+            cwd=str(hd),
+            stdout=log_fd,
+            stderr=subprocess.STDOUT,
+        )
+        log_fd.close()
+        (ws / "runner.pid").write_text(str(proc.pid))
         return {"run_id": run_id}
 
     @app.post("/api/runs/{run_id}/action")

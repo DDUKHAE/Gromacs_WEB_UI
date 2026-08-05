@@ -17,7 +17,15 @@ sys.path.insert(0, str(_HARNESS))
 
 def _run_env(workspace: Path, pdb: Path) -> dict:
     from skills.env_builder.env_builder import build_environment
-    return build_environment(pdb_path=pdb, prompt="", workspace_dir=workspace, interactive=False)
+    prereqs = {}
+    plan_path = workspace / "resolved_run_plan.json"
+    if plan_path.is_file():
+        try:
+            plan = json.loads(plan_path.read_text())
+            prereqs = plan.get("user_prefs") or {}
+        except Exception:
+            pass
+    return build_environment(pdb_path=pdb, prompt="", workspace_dir=workspace, prerequisites=prereqs, interactive=False)
 
 
 def _run_md(workspace: Path) -> dict:
