@@ -63,3 +63,6 @@ setup-gromacs-web-ui.sh
 
 # JCIM testing/validation working directory (local artifacts, not for git)
 /GROMACS_WEB_UI/
+
+# Local git worktrees (SDD isolated workspaces)
+.worktrees/
