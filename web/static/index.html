@@ -8,8 +8,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500;600&display=swap" rel="stylesheet">
-<!-- Fallback CDN for Xterm -->
-<link rel="stylesheet" href="/static/xterm.css">
 <style>
 :root {
   --bg-base: #060813;
@@ -654,8 +652,8 @@ body.light-theme .btn-toggle {
   transition: transform 0.2s ease;
 }
 
-/* Custom terminal design - Expanded to 450px */
-#terminal-panel {
+/* Live stage-by-stage 3D viewport - replaces the old terminal/chat panel */
+#run-3d-panel {
   height: 450px;
   flex: none; /* Fixed height so charts won't get cut off */
   display: flex;
@@ -664,92 +662,28 @@ body.light-theme .btn-toggle {
   background: #04060f;
   border-radius: var(--radius-md);
   transition: background 0.3s;
-}
-
-body.light-theme #terminal-panel {
-  background: #f9fafb;
-}
-
-#terminal-container {
-  flex: 1;
-  padding: 8px 10px;
-  background: #04060f; /* Keep terminal dark for best dev shell look */
-  overflow: hidden;
   position: relative;
-  font-family: var(--font-mono);
-  transition: background 0.3s;
 }
 
-body.light-theme #terminal-container {
+body.light-theme #run-3d-panel {
   background: #f9fafb;
 }
 
-#chat-panel {
-  transition: background 0.3s;
+#run-3d-viewport {
+  flex: 1;
+  width: 100%;
+  height: 100%;
 }
 
-body.light-theme #chat-panel {
-  background: #f9fafb !important;
-  border: 1px solid var(--border-color);
-}
-
-#fallback-terminal-text {
-  color: #ffffff !important;
-}
-
-body.light-theme #fallback-terminal-text {
-  color: #000000 !important;
-}
-
-/* Chat bubble styles */
-.chat-bubble {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  max-width: 100%;
-  animation: chatFadeIn 0.2s ease;
-}
-@keyframes chatFadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-.chat-bubble-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+#run-3d-placeholder {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
-  font-weight: 800;
-  flex-shrink: 0;
-  margin-top: 2px;
-  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-primary));
-  border: none;
-  color: #fff;
-}
-.chat-bubble-body {
-  flex: 1;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 0 10px 10px 10px;
-  padding: 10px 13px;
-  font-size: 12.5px;
-  line-height: 1.65;
-  color: var(--text-primary, #e0e6f0);
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-}
-body.light-theme .chat-bubble-body {
-  background: rgba(0,0,0,0.04);
-  border-color: rgba(0,0,0,0.1);
-  color: #1a1a2e;
-}
-body.light-theme .chat-bubble-icon {
-  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-primary));
-  border: none;
-  color: #fff;
+  font-size: 13px;
+  color: var(--text-muted);
+  pointer-events: none;
 }
 
 /* Actions - Relocated to top header, compact styling */
@@ -2177,35 +2111,25 @@ body.light-theme #run-search {
           </div>
         </div>
 
-        <!-- External Terminal Header (GROMACS TERMINAL) -->
+        <!-- Live 3D Viewport Header -->
         <div class="terminal-header-outer" style="display: flex; align-items: center; justify-content: space-between; margin: 16px 0 8px 4px; flex-shrink: 0;">
-          <span style="font-size: 11px; color: var(--text-primary); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;">GROMACS TERMINAL</span>
+          <span style="font-size: 11px; color: var(--text-primary); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;">LIVE 3D VIEWPORT</span>
           <div style="display: flex; align-items: center; gap: 8px;">
-            <button id="btn-terminal-mode" onclick="toggleTerminalMode()"
-              style="background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.25); color: var(--accent-cyan); font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 8px; border-radius: 6px; cursor: pointer; transition: all 0.2s;">
-              CHAT
-            </button>
             <div id="md-progress-badge" style="display:none; align-items:center; gap:6px; font-size:11px; font-weight:600; color:var(--accent-cyan); padding:4px 10px; border:1px solid rgba(6,182,212,0.3); border-radius:20px; background:rgba(6,182,212,0.08);">
               <span style="width:7px;height:7px;border-radius:50%;background:var(--accent-cyan);animation:pulse-dot 1.2s ease-in-out infinite;display:inline-block;"></span>
               <span id="md-progress-text">MD Running...</span>
             </div>
+            <span id="run-3d-stage-label" style="font-size:10px;color:var(--text-muted);"></span>
             <span id="term-status" class="run-item-badge badge-running" style="margin-top:0;">running</span>
           </div>
         </div>
 
         <div id="failure-summary" role="alert" style="display:none;margin:0 0 12px;padding:12px;border:1px solid var(--accent-red);border-radius:var(--radius-sm);color:var(--text-primary);background:rgba(239,68,68,.08);"></div>
 
-        <!-- Terminal panel -->
-        <div id="terminal-panel" class="card" role="region" aria-label="Run terminal">
-          <div id="terminal-container">
-            <pre id="fallback-terminal-text" style="font-size:11px; line-height: 1.4; padding: 6px; overflow-y: auto; height: 100%; white-space: pre-wrap; word-break: break-all; margin: 0;"></pre>
-          </div>
-        </div>
-
-        <!-- Chat log panel (shown when terminal mode = chat) -->
-        <div id="chat-panel" style="display: none; height: 450px; flex: none; background: var(--bg-secondary, #0d1117); border-radius: var(--radius-md); overflow-y: auto; padding: 12px 14px; display: none;">
-          <div id="chat-messages" style="display: flex; flex-direction: column; gap: 10px;"></div>
-          <div id="chat-typing" style="display:none; padding: 8px 12px; font-size: 11px; color: var(--text-muted); font-style: italic;">AI is responding...</div>
+        <!-- Live stage-by-stage 3D structure viewport (replaces the old terminal/chat panel) -->
+        <div id="run-3d-panel" class="card" role="region" aria-label="Live 3D structure viewport">
+          <div id="run-3d-viewport"></div>
+          <div id="run-3d-placeholder">Waiting for the first structure file...</div>
         </div>
 
         <!-- Results Gallery -->
@@ -3516,32 +3440,62 @@ function onTrajFrameChange(val) {
   traj.trajectory.setFrame(frame);
 }
 
+// ── Live stage-by-stage 3D viewport (run-view panel, replaces terminal/chat) ──
+let _run3dStage = null;
+let _run3dComp = null;
+let _run3dLoadedFile = null;
+
+// Most-advanced-phase first: whichever of these exists in the run's mol_files
+// is the current best structure to show.
+const STAGE_STRUCT_PRIORITY = [
+  'production.gro', 'npt_pr.gro', 'npt.gro', 'nvt.gro', 'em.gro',
+  'ions.gro', 'solv.gro', 'box.gro', 'processed.gro',
+];
+
+function initRun3dStage() {
+  const viewport = document.getElementById('run-3d-viewport');
+  if (!viewport || _run3dStage) return;
+  const isDark = !document.body.classList.contains('light-theme');
+  _run3dStage = new NGL.Stage(viewport, { backgroundColor: isDark ? '#0b0f24' : '#f0f2f5' });
+  window.addEventListener('resize', () => { if (_run3dStage) _run3dStage.handleResize(); });
+}
+
+async function refreshRun3dStructure(runId) {
+  if (!runId || runId === 'virtual_sandbox') return;
+  try {
+    const resp = await fetch('/api/runs/' + runId + '/mol_files');
+    if (!resp.ok || currentRunId !== runId) return;
+    const files = await resp.json();
+    const structName = STAGE_STRUCT_PRIORITY.find(name => files.includes(name));
+    const label = document.getElementById('run-3d-stage-label');
+    if (!structName || structName === _run3dLoadedFile) return;
+
+    initRun3dStage();
+    const fileResp = await fetch('/api/runs/' + runId + '/file/' + encodeURIComponent(structName));
+    if (!fileResp.ok || currentRunId !== runId) return;
+    const buf = await fileResp.arrayBuffer();
+    const blob = new Blob([buf]);
+    const url = URL.createObjectURL(blob);
+    try {
+      if (_run3dComp) { _run3dStage.removeComponent(_run3dComp); _run3dComp = null; }
+      _run3dComp = await _run3dStage.loadFile(url, { ext: 'gro' });
+      _run3dComp.addRepresentation('cartoon', { colorScheme: 'residueindex' });
+      _run3dStage.autoView();
+      _run3dLoadedFile = structName;
+      const placeholder = document.getElementById('run-3d-placeholder');
+      if (placeholder) placeholder.style.display = 'none';
+      if (label) label.textContent = structName;
+      setTimeout(() => { if (_run3dStage) _run3dStage.handleResize(); }, 150);
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  } catch (_) {}
+}
+
 const CHART_COLORS = ['#06b6d4', '#6366f1', '#10b981', '#f59e0b', '#ef4444'];
-let term = null;
-let fitAddon = null;
-let _fitTimer = null;
 let _sidebarDragging = false;
 
-function _fitTerminal() {
-  // Skip fit while sidebar is actively being dragged — layout is mid-flight
-  if (_sidebarDragging) return;
-  if (_fitTimer) clearTimeout(_fitTimer);
-  _fitTimer = setTimeout(() => {
-    _fitTimer = null;
-    requestAnimationFrame(() => {
-      if (!fitAddon || !term) return;
-      try {
-        fitAddon.fit();
-        if (wsConn && wsConn.readyState === WebSocket.OPEN) {
-          wsConn.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
-        }
-      } catch (_) {}
-    });
-  }, 80);
-}
 let selectedPdb = null;
-let terminalMode = 'structured'; // 'structured' | 'chat' | 'raw'
-let chatPollTimer = null;
 let _startRunInFlight = false;
 
 function handleFileSelect(file) {
@@ -4089,10 +4043,6 @@ function stopWs() {
   if (_mdProgressTimer) { clearInterval(_mdProgressTimer); _mdProgressTimer = null; }
   _mdProgressStart = null;
   if (wsConn) { wsConn.close(); wsConn = null; }
-  if (_fitTimer) { clearTimeout(_fitTimer); _fitTimer = null; }
-  if (term) { term.dispose(); term = null; fitAddon = null; }
-  clearTimeout(chatPollTimer);
-  chatPollTimer = null;
 }
 
 function showNewRunForm() {
@@ -4246,22 +4196,6 @@ function toggleTheme() {
     body.classList.remove('light-theme');
     localStorage.setItem('theme', 'dark');
   }
-  
-  if (term) {
-    const termBg = isLight ? '#f9fafb' : '#04060f';
-    const termFg = isLight ? '#000000' : '#ffffff';
-    const termCursor = isLight ? '#1f2937' : '#06b6d4';
-    term.options.theme = { background: termBg, foreground: termFg, cursor: termCursor };
-  }
-  
-  const fallback = document.getElementById('fallback-terminal-text');
-  if (fallback) {
-    fallback.style.color = isLight ? '#000000' : '#ffffff';
-  }
-  const chatContent = document.getElementById('chat-content');
-  if (chatContent) {
-    chatContent.style.color = isLight ? '#000000' : '#ffffff';
-  }
 }
 
 
@@ -4271,21 +4205,9 @@ const toggle = document.getElementById('cyber-toggle');
 if (savedTheme === 'light') {
   document.body.classList.add('light-theme');
   if (toggle) toggle.checked = true;
-  document.addEventListener('DOMContentLoaded', () => {
-    const fallback = document.getElementById('fallback-terminal-text');
-    if (fallback) fallback.style.color = '#000000';
-    const chatContent = document.getElementById('chat-content');
-    if (chatContent) chatContent.style.color = '#000000';
-  });
 } else {
   document.body.classList.remove('light-theme');
   if (toggle) toggle.checked = false;
-  document.addEventListener('DOMContentLoaded', () => {
-    const fallback = document.getElementById('fallback-terminal-text');
-    if (fallback) fallback.style.color = '#ffffff';
-    const chatContent = document.getElementById('chat-content');
-    if (chatContent) chatContent.style.color = '#ffffff';
-  });
 }
 
 // Tool availability badges for Membrane Builder and Ligand Builder cards
@@ -4428,49 +4350,6 @@ function updateMdProgressBadge(status, currentStep) {
   }
 }
 
-function initTerminal() {
-  const container = document.getElementById('terminal-container');
-  // fallback pre 요소 숨기기
-  const fallback = document.getElementById('fallback-terminal-text');
-  if (fallback) fallback.style.display = 'none';
-
-  if (_fitTimer) { clearTimeout(_fitTimer); _fitTimer = null; }
-  if (term) { term.dispose(); term = null; fitAddon = null; }
-
-  if (typeof Terminal === 'undefined') {
-    // xterm.js 미로드 시 fallback
-    if (fallback) {
-      fallback.style.display = 'block';
-      fallback.textContent = '';
-      if (document.body.classList.contains('light-theme')) {
-        fallback.style.color = '#000000';
-      } else {
-        fallback.style.color = '#ffffff';
-      }
-    }
-    return;
-  }
-
-  const isLight = document.body.classList.contains('light-theme');
-  const termBg = isLight ? '#f9fafb' : '#04060f';
-  const termFg = isLight ? '#000000' : '#ffffff';
-  const termCursor = isLight ? '#1f2937' : '#06b6d4';
-
-  term = new Terminal({
-    theme: { background: termBg, foreground: termFg, cursor: termCursor },
-    cursorBlink: true,
-    fontSize: 11,
-    fontFamily: '"Fira Code", "SF Mono", "Menlo", monospace',
-    scrollback: 5000,
-    convertEol: false,
-  });
-  fitAddon = new FitAddon.FitAddon();
-  term.loadAddon(fitAddon);
-  container.innerHTML = '';
-  term.open(container);
-  _fitTerminal();
-}
-
 function showPermissionRequest(detail) {
   const modal = document.getElementById("permission-modal");
   const body = document.getElementById("permission-detail");
@@ -4489,36 +4368,23 @@ function respondPermission(approved) {
 
 function connectWs(runId) {
   stopWs();
-  initTerminal();
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   wsConn = new WebSocket(`${proto}://${location.host}/ws/runs/${runId}`);
   wsConn.binaryType = 'arraybuffer';
 
-  wsConn.onopen = () => {
-    _fitTerminal();
-  };
-
   wsConn.onmessage = (e) => {
-    if (e.data instanceof ArrayBuffer) {
-      if (term) {
-        term.write(new Uint8Array(e.data));
-      } else {
-        const fallback = document.getElementById('fallback-terminal-text');
-        if (fallback) fallback.textContent += new TextDecoder().decode(e.data);
+    if (e.data instanceof ArrayBuffer) return; // raw log bytes, no terminal to render them into
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.type === "permission_request") {
+        showPermissionRequest(msg.detail || "Permission requested");
+      } else if (msg.type === 'exit') {
+        wsConn.close();
+        wsConn = null;
+        // 종료 후 런 상태 재조회
+        setTimeout(() => selectRun(runId, false), 500);
       }
-    } else {
-      try {
-        const msg = JSON.parse(e.data);
-        if (msg.type === "permission_request") {
-          showPermissionRequest(msg.detail || "Permission requested");
-        } else if (msg.type === 'exit') {
-          wsConn.close();
-          wsConn = null;
-          // 종료 후 런 상태 재조회
-          setTimeout(() => selectRun(runId, false), 500);
-        }
-      } catch {}
-    }
+    } catch {}
   };
 
   wsConn.onerror = () => {
@@ -4526,42 +4392,6 @@ function connectWs(runId) {
     if (termStatus) termStatus.textContent = 'ws error';
   };
   wsConn.onclose = () => { wsConn = null; };
-
-  if (term) {
-    term.onData((data) => {
-      if (wsConn && wsConn.readyState === WebSocket.OPEN) {
-        wsConn.send(new TextEncoder().encode(data));
-      }
-    });
-  }
-}
-
-function _writeStructuredTerminal(events) {
-  initTerminal();
-  const writeLine = (text) => {
-    if (term) term.write(text + '\r\n');
-    else {
-      const fallback = document.getElementById('fallback-terminal-text');
-      if (fallback) fallback.textContent += text + '\n';
-    }
-  };
-  writeLine('\x1b[1;36m[Run activity — fact-based]\x1b[0m');
-  for (const event of events) {
-    const marker = event.status === 'completed' ? '✓' : event.status === 'running' ? '●' : '○';
-    const color = event.status === 'completed' ? '1;32' : event.status === 'running' ? '1;36' : '33';
-    writeLine(`\x1b[${color}m${marker} Stage ${event.step}: ${event.stage}\x1b[0m`);
-    writeLine(`  ${event.text}`);
-  }
-}
-
-async function loadStructuredActivity(runId) {
-  try {
-    const resp = await fetch(`/api/runs/${runId}/activity`);
-    if (!resp.ok || currentRunId !== runId) return;
-    const payload = await resp.json();
-    if (terminalMode === 'structured') _writeStructuredTerminal(payload.events || []);
-    if (terminalMode === 'chat') _renderActivityBubbles(payload.events || []);
-  } catch (_) {}
 }
 
 async function selectRun(runId, reconnectWs = true) {
@@ -4613,17 +4443,13 @@ async function selectRun(runId, reconnectWs = true) {
       failure.textContent = '';
     }
 
-    // Real runs default to the same structured, fact-based presentation as
-    // Virtual Run. Raw PTY output remains available through RAW LOG.
-    terminalMode = 'structured';
-    const termPanel = document.getElementById('terminal-panel');
-    const chatPanel = document.getElementById('chat-panel');
-    termPanel.style.display = '';
-    chatPanel.style.display = 'none';
-    document.getElementById('btn-terminal-mode').textContent = 'CHAT';
-    document.getElementById('btn-terminal-mode').style.color = 'var(--accent-cyan)';
-    if (reconnectWs) stopWs();
-    loadStructuredActivity(runId);
+    _run3dLoadedFile = null;
+    const _placeholder = document.getElementById('run-3d-placeholder');
+    if (_placeholder) _placeholder.style.display = '';
+    const _stageLabel = document.getElementById('run-3d-stage-label');
+    if (_stageLabel) _stageLabel.textContent = '';
+    refreshRun3dStructure(runId);
+    if (reconnectWs) connectWs(runId);
 
     if (info.status === 'completed') {
       loadArtifacts(runId);
@@ -4789,6 +4615,7 @@ async function loadRuns() {
             const detail = await detailResp.json();
             updateStepper(detail);
             updateButtons(detail.status);
+            refreshRun3dStructure(runIdSnapshot);
             if (detail.status === 'completed') {
               loadArtifacts(runIdSnapshot);
               loadAudit(runIdSnapshot);
@@ -5686,10 +5513,10 @@ window.addEventListener('load', async () => {
         sidebar.style.width = '180px';
         setTimeout(() => {
           sidebar.classList.remove('sidebar-animating');
-          _fitTerminal();
+          if (_run3dStage) _run3dStage.handleResize();
         }, DURATION);
       } else {
-        _fitTerminal();
+        if (_run3dStage) _run3dStage.handleResize();
       }
     });
   }
@@ -5709,7 +5536,7 @@ window.addEventListener('load', async () => {
       sidebar.classList.remove('sidebar-collapsing');
       setTimeout(() => {
         sidebar.classList.remove('sidebar-animating');
-        _fitTerminal();
+        if (_run3dStage) _run3dStage.handleResize();
       }, DURATION);
     } else {
       // ── Collapse ────────────────────────────────────
@@ -5738,7 +5565,6 @@ window.addEventListener('load', async () => {
   }
   alignToggleBtn();
   window.addEventListener('resize', alignToggleBtn);
-  window.addEventListener('resize', _fitTerminal);
 });
 
 
@@ -5760,106 +5586,6 @@ async function doAction(action) {
   } catch (e) {
     showToast('Server connection error', 'error');
   }
-}
-
-function toggleTerminalMode() {
-  terminalMode = terminalMode === 'structured' ? 'chat' : terminalMode === 'chat' ? 'raw' : 'structured';
-  const btn = document.getElementById('btn-terminal-mode');
-  const termPanel = document.getElementById('terminal-panel');
-  const chatPanel = document.getElementById('chat-panel');
-
-  if (terminalMode === 'chat') {
-    btn.textContent = 'RAW LOG';
-    btn.style.color = 'var(--accent-green)';
-    termPanel.style.display = 'none';
-    chatPanel.style.display = 'flex';
-    chatPanel.style.flexDirection = 'column';
-    // Real runs render the same structured events as the terminal view.
-    if (currentRunId && currentRunId !== 'virtual_sandbox') {
-      loadStructuredActivity(currentRunId);
-    }
-    clearTimeout(chatPollTimer);
-    chatPollTimer = null;
-  } else if (terminalMode === 'raw') {
-    btn.textContent = 'TERMINAL';
-    btn.style.color = 'var(--accent-yellow)';
-    termPanel.style.display = '';
-    chatPanel.style.display = 'none';
-    if (currentRunId && currentRunId !== 'virtual_sandbox') connectWs(currentRunId);
-  } else {
-    btn.textContent = 'CHAT';
-    btn.style.color = 'var(--accent-cyan)';
-    termPanel.style.display = '';
-    chatPanel.style.display = 'none';
-    clearTimeout(chatPollTimer);
-    chatPollTimer = null;
-    if (currentRunId && currentRunId !== 'virtual_sandbox') loadStructuredActivity(currentRunId);
-  }
-}
-
-let _lastChatText = '';
-
-function _makeBubble(text) {
-  const bubble = document.createElement('div');
-  bubble.className = 'chat-bubble';
-  const icon = document.createElement('div');
-  icon.className = 'chat-bubble-icon';
-  icon.textContent = 'G';
-  const body = document.createElement('div');
-  body.className = 'chat-bubble-body';
-  body.textContent = text;
-  bubble.appendChild(icon);
-  bubble.appendChild(body);
-  return bubble;
-}
-
-function _addChatBubble(text) {
-  const container = document.getElementById('chat-messages');
-  if (!container) return;
-  container.appendChild(_makeBubble(text));
-  const panel = document.getElementById('chat-panel');
-  if (panel) panel.scrollTop = panel.scrollHeight;
-}
-
-function _renderChatBubbles(text) {
-  const container = document.getElementById('chat-messages');
-  if (!container || text === _lastChatText) return;
-  _lastChatText = text;
-
-  const paragraphs = text.split(/\n{2,}/).map(p => p.trim()).filter(p => p.length > 0);
-  container.innerHTML = '';
-  for (const para of paragraphs) {
-    container.appendChild(_makeBubble(para));
-  }
-  const panel = document.getElementById('chat-panel');
-  if (panel) panel.scrollTop = panel.scrollHeight;
-}
-
-async function pollChatLog() {
-  if (!currentRunId || terminalMode !== 'chat') return;
-  if (currentRunId === 'virtual_sandbox') return; // virtual run uses direct injection
-  try {
-    const resp = await fetch(`/api/runs/${currentRunId}/chat_log`);
-    if (resp.ok && terminalMode === 'chat') {
-      const text = await resp.text();
-      _renderChatBubbles(text);
-    }
-  } catch (_) {}
-  if (terminalMode === 'chat') {
-    chatPollTimer = setTimeout(pollChatLog, 3000);
-  }
-}
-
-function _renderActivityBubbles(events) {
-  const container = document.getElementById('chat-messages');
-  if (!container) return;
-  container.innerHTML = '';
-  for (const event of events) {
-    const prefix = event.status === 'completed' ? 'Completed' : event.status === 'running' ? 'Running' : 'Pending';
-    container.appendChild(_makeBubble(`${prefix} · ${event.stage}\n${event.text}`));
-  }
-  const panel = document.getElementById('chat-panel');
-  if (panel) panel.scrollTop = panel.scrollHeight;
 }
 
 // ── Force Field Manager ─────────────────────────────────────────────────────
@@ -6058,9 +5784,6 @@ function startVirtualRun() {
   if (_virtualRunInterval) { clearInterval(_virtualRunInterval); _virtualRunInterval = null; }
   _virtualRunTimeouts.forEach(t => clearTimeout(t));
   _virtualRunTimeouts = [];
-  _lastChatText = '';
-  const _chatMsgs = document.getElementById('chat-messages');
-  if (_chatMsgs) _chatMsgs.innerHTML = '';
 
   currentRunId = 'virtual_sandbox';
   document.getElementById('new-run-view').style.display = 'none';
@@ -6078,19 +5801,9 @@ function startVirtualRun() {
   updateStepper({ last_completed_stage: 'none', status: 'running', current_step: 1 });
   updateButtons('running');
 
-  // Initialize terminal mockup
-  initTerminal();
-  const writeLine = (text) => {
-    if (term) {
-      term.write(text + '\r\n');
-    } else {
-      const fallback = document.getElementById('fallback-terminal-text');
-      if (fallback) fallback.textContent += text + '\n';
-    }
-  };
-
-  writeLine('\x1b[1;36m[Virtual Run Mode Started]\x1b[0m Ready to simulate GROMACS execution workflow...');
-  writeLine('\x1b[33mInfo:\x1b[0m This is a simulated run for testing and modifying the frontend UI elements.');
+  // Terminal/chat log UI was removed in favor of the live 3D viewport; this
+  // sandbox has no real files to render there, so the stage log is a no-op.
+  const writeLine = () => {};
 
   const stages = [
     { name: 'Topology', step: 1, delay: 1500, log: 'gmx pdb2gmx -f 1aki.pdb -o 1aki_processed.gro -water spc' },
@@ -6231,32 +5944,6 @@ function startVirtualRun() {
     cumulativeDelay += st.delay;
   });
 
-  // Mock AI dialogue — injected into chat panel at realistic intervals
-  const mockDialogue = [
-    { delay: 400,   text: "Starting simulation for 1AKI (Lysozyme) using OPLS-AA force field and SPC/E water model at 300 K, 1 bar." },
-    { delay: 2200,  text: "Topology generated with pdb2gmx. Read 1960 ATOM records; C-terminus processed in standard form. 4 disulfide bonds detected and applied automatically (Cys6–Cys127, Cys30–Cys115, Cys64–Cys80, Cys76–Cys94)." },
-    { delay: 4000,  text: "Cubic simulation box defined with editconf. A minimum 1.0 nm clearance from the protein surface ensures no periodic boundary artifacts." },
-    { delay: 5700,  text: "Solvation complete. 8,501 SPC/E water molecules added to the system." },
-    { delay: 7400,  text: "Preparing ions. The system carries a net charge of +8e; genion will replace 8 solvent molecules with Cl⁻ to neutralize." },
-    { delay: 9200,  text: "Ionization complete. 8 Cl⁻ ions added. System is now electroneutral. Total atom count: ~26,000." },
-    { delay: 11200, text: "Running energy minimization with the steepest-descent algorithm (convergence criterion: Fmax < 1000 kJ/mol·nm).\n\nConverged in ~150 steps (Fmax ≈ 952 kJ/mol·nm). Structure is stable and ready for equilibration." },
-    { delay: 14500, text: "Launching production MD under NPT ensemble. Using V-rescale thermostat (τ = 0.1 ps) and Parrinello–Rahman barostat (τ = 2.0 ps). Running 5,000 steps (10 ps)." },
-    { delay: 19000, text: "Simulation complete! Average temperature 300.0 K and pressure 1.0 bar match target values well.\n\nRMSD vs. initial structure: 0.25 nm — the protein maintains a stable fold throughout. Output files (trajectory, energy, XVG plots) are ready." },
-  ];
-
-  mockDialogue.forEach(({ delay, text }) => {
-    const demoText = '[DEMO — synthetic, scripted dialogue, not a real AI response] ' + text;
-    const t = setTimeout(() => {
-      if (terminalMode === 'chat') {
-        _addChatBubble(demoText);
-      } else {
-        // Store for when user switches to chat mode
-        const container = document.getElementById('chat-messages');
-        if (container) container.appendChild(_makeBubble(demoText));
-      }
-    }, delay);
-    _virtualRunTimeouts.push(t);
-  });
 }
 
 // ── Membrane Builder ───────────────────────────────────────────────────────
@@ -6705,8 +6392,6 @@ async function lbAssemble() {
 }
 
 </script>
-<script src="/static/xterm.js"></script>
-<script src="/static/xterm-addon-fit.js"></script>
 
 </body>
 </html>
