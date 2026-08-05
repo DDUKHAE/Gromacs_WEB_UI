@@ -22,8 +22,6 @@ from fastapi.staticfiles import StaticFiles
 from lib import xvg_parser
 from lib import tutorial_registry as TR
 from lib.system_config import validate_advanced_workflow, validate_solution_config
-from web.llm_adapters import ADAPTERS
-from web import llm_runner
 from web.run_reader import RunInfo, list_runs, read_run
 
 # Lines matching this pattern are stripped from the chat view entirely
@@ -211,8 +209,6 @@ def _run_summary(info: RunInfo) -> dict:
 
 def create_app(harness_dir: Path | None = None) -> FastAPI:
     app = FastAPI(title="Gromacs Harness Web UI")
-    # Keep fire-and-forget runners strongly referenced and surface failures.
-    app.state.background_tasks = set()
 
     def _failure_summary(workspace: Path, status: str) -> dict | None:
         if status not in {"failed", "aborted"}:
@@ -229,18 +225,6 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         if cause == "pressure_coupling":
             return {"stage": stage, "cause": "Pressure coupling was unstable.", "next_action": "Check the box, density, and pressure-coupling settings before retrying."}
         return {"stage": stage, "cause": "The run stopped before completion.", "next_action": "Review the latest run log and correct the input before retrying."}
-
-    def _track_task(coro):
-        task = asyncio.create_task(coro)
-        app.state.background_tasks.add(task)
-        def _finish(done):
-            app.state.background_tasks.discard(done)
-            if not done.cancelled():
-                error = done.exception()
-                if error:
-                    logging.getLogger(__name__).exception("background run task failed", exc_info=error)
-        task.add_done_callback(_finish)
-        return task
 
     app.add_middleware(
         CORSMiddleware,
@@ -274,10 +258,6 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         detail["pending_warnings"] = info.pending_warnings
         detail["failure_summary"] = _failure_summary(info.workspace, info.status)
         return detail
-
-    @app.get("/api/llms")
-    def api_list_llms() -> list[dict]:
-        return [{"key": k, "name": a.name, "cli": a.cli} for k, a in ADAPTERS.items()]
 
     # ── Tutorial list ────────────────────────────────────────────────────────
     @app.get("/api/tutorials")
@@ -638,22 +618,10 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         tutorial_id: str = Form(""),
         system_type: str = Form(""),
         protocol: str = Form(""),
-        llm: str = Form(""),
-        auto_approve: str = Form("false"),
         accept_experimental_overrides: str = Form("false"),
         system_config: str = Form(""),
         workflow_files: list[UploadFile] = File(default=[]),
     ) -> dict:
-        # An external CLI has its own shell/tool layer.  Until it is launched
-        # inside a real OS/container sandbox, silently approving that layer
-        # would turn an uploaded structure or prompt injection into host-level
-        # command execution.  Keep the API gate here (not only in the UI).
-        if auto_approve.lower() == "true":
-            raise HTTPException(
-                status_code=403,
-                detail="LLM auto-approval is disabled until a sandboxed runner is configured. "
-                       "Use interactive approvals or the direct pipeline.",
-            )
         if system_type and protocol:
             resolved_tutorial_id = TR.resolve_tutorial_id(system_type, protocol, tutorial_id or None)
             if resolved_tutorial_id is None:
@@ -848,87 +816,40 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
             await websocket.close()
             return
 
-        run_state = llm_runner.get_run_state(run_id)
+        log_file = workspace / "runner.log"
+        for _ in range(30):
+            if log_file.exists():
+                break
+            await asyncio.sleep(0.5)
 
-        if run_state:
-            # ── LLM run: full bidirectional PTY proxy ────────────────────────
-            async def _send_output() -> None:
-                # Replay log history first so reconnects see prior output
-                log_file = workspace / "runner.log"
-                if log_file.exists():
-                    history = log_file.read_bytes()
-                    if history:
-                        await websocket.send_bytes(history)
+        async def _stream_log() -> None:
+            if not log_file.exists():
+                return
+            with open(log_file, "rb") as f:
                 while True:
-                    data = await run_state.output_queue.get()
-                    if data is None:
+                    data = f.read(4096)
+                    if data:
+                        await websocket.send_bytes(data)
+                        continue
+                    info = read_run(run_id, workspace.parent)
+                    if info and info.status not in ("running", "pending"):
                         await websocket.send_text(json.dumps({"type": "exit"}))
                         break
-                    if isinstance(data, str):
-                        await websocket.send_text(data)
-                    else:
-                        await websocket.send_bytes(data)
+                    await asyncio.sleep(0.1)
 
-            async def _recv_input() -> None:
-                while True:
-                    try:
-                        msg = await websocket.receive()
-                    except WebSocketDisconnect:
+        async def _recv_ignore() -> None:
+            while True:
+                try:
+                    msg = await websocket.receive()
+                    if msg.get("type") == "websocket.disconnect":
                         break
-                    if msg.get("bytes"):
-                        await run_state.input_queue.put(msg["bytes"])
-                    elif msg.get("text"):
-                        try:
-                            ctrl = json.loads(msg["text"])
-                            if ctrl.get("type") == "resize":
-                                llm_runner.set_winsize(
-                                    run_state.master_fd,
-                                    int(ctrl.get("rows", 50)),
-                                    int(ctrl.get("cols", 220)),
-                                )
-                        except Exception:
-                            pass
-
-            tasks = [
-                asyncio.create_task(_send_output()),
-                asyncio.create_task(_recv_input()),
-            ]
-        else:
-            # ── Direct run: stream runner.log (read-only) ─────────────────────
-            log_file = workspace / "runner.log"
-            for _ in range(30):
-                if log_file.exists():
+                except WebSocketDisconnect:
                     break
-                await asyncio.sleep(0.5)
 
-            async def _stream_log() -> None:
-                if not log_file.exists():
-                    return
-                with open(log_file, "rb") as f:
-                    while True:
-                        data = f.read(4096)
-                        if data:
-                            await websocket.send_bytes(data)
-                            continue
-                        info = read_run(run_id, workspace.parent)
-                        if info and info.status not in ("running", "pending"):
-                            await websocket.send_text(json.dumps({"type": "exit"}))
-                            break
-                        await asyncio.sleep(0.1)
-
-            async def _recv_ignore() -> None:
-                while True:
-                    try:
-                        msg = await websocket.receive()
-                        if msg.get("type") == "websocket.disconnect":
-                            break
-                    except WebSocketDisconnect:
-                        break
-
-            tasks = [
-                asyncio.create_task(_stream_log()),
-                asyncio.create_task(_recv_ignore()),
-            ]
+        tasks = [
+            asyncio.create_task(_stream_log()),
+            asyncio.create_task(_recv_ignore()),
+        ]
 
         try:
             done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)

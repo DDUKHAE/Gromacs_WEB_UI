@@ -1548,28 +1548,6 @@ body.light-theme .param-field select:focus, body.light-theme .param-field input:
   border-color: var(--accent-primary);
 }
 
-.llm-section {
-  background: rgba(255, 255, 255, 0.015);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-body.light-theme .llm-section {
-  background: rgba(0, 0, 0, 0.01);
-}
-
-.llm-section-title {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--accent-cyan);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
 #btn-start {
   padding: 10px;
   background: linear-gradient(135deg, var(--accent-green), #059669);
@@ -2703,27 +2681,6 @@ body.light-theme #run-search {
                 <select id="preset-load-select" onchange="wizardLoadPreset(this.value)">
                   <option value="">— select preset —</option>
                 </select>
-              </div>
-            </div>
-
-            <div class="llm-section">
-              <div class="llm-section-title">LLM AI Copilot Agent</div>
-              <div class="param-grid">
-                <div class="param-field">
-                  <label>Select Agent Model</label>
-                  <select name="llm" id="llm-select">
-                    <option value="">None (direct pipeline)</option>
-                    <option value="gemini">Gemini 3.5 Flash</option>
-                    <option value="claude">Claude 3.5 Sonnet</option>
-                  </select>
-                </div>
-                <div class="param-field">
-                  <label>Permission Mode</label>
-                  <select name="auto_approve">
-                    <option value="false">Interactive approvals (required)</option>
-                  </select>
-                  <small style="color:var(--text-secondary);display:block;margin-top:5px;line-height:1.35;">LLM automatic approval is unavailable until the runner is deployed in an OS/container sandbox.</small>
-                </div>
               </div>
             </div>
 
@@ -4181,8 +4138,6 @@ async function startRun(acceptExperimentalOverrides = false) {
   data.append('tutorial_id', form.querySelector('[name="tutorial_id"]').value);
   data.append('system_type', _selectedSystemType || '');
   data.append('protocol', _selectedProtocol || '');
-  data.append('llm', form.querySelector('[name="llm"]').value);
-  data.append('auto_approve', form.querySelector('[name="auto_approve"]').value);
   data.append('accept_experimental_overrides', String(acceptExperimentalOverrides));
   const protConfig = _collectProtonationConfig();
   if (protConfig) config.protonation = protConfig;
@@ -5510,24 +5465,6 @@ async function _confirmDelete() {
   }
 }
 
-async function loadLlms() {
-  try {
-    const resp = await fetch('/api/llms');
-    if (!resp.ok) return;
-    const llms = await resp.json();
-    const select = document.getElementById('llm-select');
-    select.innerHTML = '<option value="">None (direct pipeline)</option>';
-    llms.forEach(llm => {
-      const opt = document.createElement('option');
-      opt.value = llm.key;
-      opt.textContent = llm.name;
-      select.appendChild(opt);
-    });
-  } catch (e) {
-    console.error('loadLlms failed:', e);
-  }
-}
-
 async function loadWaterModels(ffName) {
   const select = document.getElementById('water-select');
   if (!ffName) {
@@ -5706,7 +5643,6 @@ function _applyRecommendedSystemType(a) {
 window.addEventListener('load', async () => {
   // 앱 초기화
   initFFManager();
-  loadLlms();
   loadSystemProtocolMatrix();
   loadForcefields();
   document.getElementById('forcefield-select').addEventListener('change', e => {

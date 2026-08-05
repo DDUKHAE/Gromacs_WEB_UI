@@ -1,8 +1,8 @@
 """Web entry paths must materialize the same verified grounding artifacts.
 
-These tests deliberately stop before GROMACS/LLM execution.  They verify the
-common API boundary where browser input becomes an immutable run plan and
-protocol contract, which is the point both runners depend on.
+These tests deliberately stop before GROMACS execution. They verify the
+API boundary where browser input becomes an immutable run plan and
+protocol contract, which the direct runner (web/runner.py) depends on.
 """
 from __future__ import annotations
 
@@ -13,7 +13,6 @@ from fastapi.testclient import TestClient
 
 from lib import protocol_contract as pc
 from lib import run_plan as rp
-from web.llm_adapters import ADAPTERS
 from web.server import create_app
 
 
@@ -25,37 +24,28 @@ class _FakeProcess:
 
 
 @pytest.mark.parametrize(
-    ("tutorial_id", "llm", "expected_mode"),
+    ("tutorial_id", "expected_mode"),
     [
-        ("", "", "auto"),
-        ("Lysozyme_in_water", "", "selected"),
-        ("", "fake", "auto"),
-        ("Lysozyme_in_water", "fake", "selected"),
+        ("", "auto"),
+        ("Lysozyme_in_water", "selected"),
     ],
 )
-def test_web_paths_share_verified_run_plan_and_contract(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tutorial_id: str, llm: str, expected_mode: str,
+def test_web_path_materializes_verified_run_plan_and_contract(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tutorial_id: str, expected_mode: str,
 ):
-    """Selected/auto x direct/LLM must cross the identical grounding gate."""
+    """Selected/auto tutorial routing must cross the identical grounding gate."""
     direct_calls: list[list[str]] = []
-    llm_calls: list[dict] = []
 
     def fake_popen(command, **_kwargs):
         direct_calls.append(command)
         return _FakeProcess()
 
-    async def fake_llm_agent(**kwargs):
-        llm_calls.append(kwargs)
-
     monkeypatch.setattr("web.server.subprocess.Popen", fake_popen)
-    monkeypatch.setattr("web.server.llm_runner.check_cli", lambda _adapter: True)
-    monkeypatch.setattr("web.server.llm_runner.run_llm_agent", fake_llm_agent)
-    monkeypatch.setitem(ADAPTERS, "fake", object())
 
     client = TestClient(create_app(tmp_path))
     response = client.post(
         "/api/runs",
-        data={"tutorial_id": tutorial_id, "llm": llm},
+        data={"tutorial_id": tutorial_id},
         files={"pdb_file": ("protein.pdb", PDB, "text/plain")},
     )
 
@@ -73,12 +63,6 @@ def test_web_paths_share_verified_run_plan_and_contract(
     assert plan_response.status_code == 200
     assert plan_response.json()["plan_sha256"] == plan["plan_sha256"]
 
-    if llm:
-        assert len(llm_calls) == 1
-        assert not direct_calls
-        assert llm_calls[0]["workspace"] == workspace
-    else:
-        assert len(direct_calls) == 1
-        assert "--skill" in direct_calls[0]
-        assert "all" in direct_calls[0]
-        assert not llm_calls
+    assert len(direct_calls) == 1
+    assert "--skill" in direct_calls[0]
+    assert "all" in direct_calls[0]
