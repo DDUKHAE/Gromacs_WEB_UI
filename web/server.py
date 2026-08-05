@@ -636,6 +636,8 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         water: str = Form("tip3p"),
         box_type: str = Form("dodecahedron"),
         tutorial_id: str = Form(""),
+        system_type: str = Form(""),
+        protocol: str = Form(""),
         llm: str = Form(""),
         auto_approve: str = Form("false"),
         accept_experimental_overrides: str = Form("false"),
@@ -652,6 +654,15 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
                 detail="LLM auto-approval is disabled until a sandboxed runner is configured. "
                        "Use interactive approvals or the direct pipeline.",
             )
+        if system_type and protocol:
+            resolved_tutorial_id = TR.resolve_tutorial_id(system_type, protocol, tutorial_id or None)
+            if resolved_tutorial_id is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail={"code": "unsupported_combination",
+                            "system_type": system_type, "protocol": protocol},
+                )
+            tutorial_id = resolved_tutorial_id
         raw_stem = Path(pdb_file.filename or "protein").stem
         protein = re.sub(r"[^a-z0-9\-]", "", re.sub(r"^\d+", "", raw_stem).lower())[:40] or "protein"
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
