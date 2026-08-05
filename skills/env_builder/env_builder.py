@@ -17,6 +17,8 @@ from lib import protocol_contract as PC
 from lib import run_plan as RP
 from lib.system_config import load_config
 from lib import ligand_params as LP
+from lib import llm_assist
+from lib.pdb_analyzer import PDBAnalyzer
 
 
 _NET_CHARGE_RE = re.compile(
@@ -326,10 +328,38 @@ def run_step5_genion(workspace_dir: Path, concentration: float = 0.15) -> None:
             f"{net_charge:+.3f} e after adding {n_na} NA / {n_cl} CL ions "
             f"(pre-neutralization charge was {initial_net_charge:+.3f} e)"
         )
+    if judgment.tier != "pass":
+        from dataclasses import asdict
+        verdict = llm_assist.review_gro(asdict(judgment))
+        if not verdict.proceed:
+            GW.restore_topology(top)
+            raise RuntimeError(
+                f"LLM review rejected GRO checkpoint (tier={judgment.tier}): "
+                f"{verdict.diagnosis}"
+            )
     s = state.read(ws)
     s["current_step"] = 5
     s["last_completed_stage"] = "env"
     state.write(ws, s)
+
+
+def _review_pdb_flags(pdb_path: Path) -> None:
+    """Run the deterministic PDB analyzer; if it flags anything, ask the LLM
+    checkpoint whether the pipeline should proceed. Raises RuntimeError if
+    the LLM rejects. No-op (and no LLM call) when nothing is flagged."""
+    pdb_summary = PDBAnalyzer(pdb_path).analyze()
+    pdb_flags = {
+        k: pdb_summary[k] for k in
+        ("missing_residues", "altloc_residues", "disulfide_candidates")
+        if pdb_summary.get(k)
+    }
+    if not pdb_flags:
+        return
+    verdict = llm_assist.review_pdb(pdb_flags, pdb_summary)
+    if not verdict.proceed:
+        raise RuntimeError(
+            f"LLM review rejected PDB checkpoint: {verdict.diagnosis}"
+        )
 
 
 def _strip_hetatm_water(pdb_path: Path) -> None:
@@ -378,6 +408,7 @@ def build_environment(pdb_path: Path, prompt: str, workspace_dir: Path,
     if Path(pdb_path).resolve() != inputs_pdb.resolve():
         shutil.copy(pdb_path, inputs_pdb)
     _strip_hetatm_water(inputs_pdb)
+    _review_pdb_flags(inputs_pdb)
     user_prefs: dict = {}
     meta: dict = {}
     meta_file = Path(workspace_dir) / "meta.json"

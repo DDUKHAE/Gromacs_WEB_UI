@@ -106,3 +106,82 @@ def test_select_tutorial_records_has_protein_true_for_lysozyme(tmp_path):
     EB.select_tutorial(tmp_path, pdb, prompt="lysozyme in water", prerequisites={})
     s = state.read(tmp_path)
     assert s["tutorial"]["has_protein"] is True
+
+
+from lib import llm_assist
+
+
+def test_review_pdb_flags_skips_llm_when_no_flags(tmp_path, monkeypatch):
+    pdb = tmp_path / "clean.pdb"
+    pdb.write_text(
+        "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00  0.00           C\n"
+    )
+    called = []
+    monkeypatch.setattr(llm_assist, "review_pdb", lambda *a, **k: called.append(1))
+    EB._review_pdb_flags(pdb)
+    assert called == []
+
+
+def test_review_pdb_flags_calls_llm_and_rejects(tmp_path, monkeypatch):
+    pdb = tmp_path / "altloc.pdb"
+    # altloc 'A' on the CA atom (column 17) triggers altloc_residues
+    pdb.write_text(
+        "ATOM      1  CA AALA A   1       0.000   0.000   0.000  1.00  0.00           C\n"
+    )
+    monkeypatch.setattr(
+        llm_assist, "review_pdb",
+        lambda flags, summary: llm_assist.CheckpointVerdict(
+            proceed=False, diagnosis="unresolved altloc conflict"))
+    with pytest.raises(RuntimeError, match="unresolved altloc conflict"):
+        EB._review_pdb_flags(pdb)
+
+
+def test_review_pdb_flags_calls_llm_and_proceeds(tmp_path, monkeypatch):
+    pdb = tmp_path / "altloc.pdb"
+    pdb.write_text(
+        "ATOM      1  CA AALA A   1       0.000   0.000   0.000  1.00  0.00           C\n"
+    )
+    monkeypatch.setattr(
+        llm_assist, "review_pdb",
+        lambda flags, summary: llm_assist.CheckpointVerdict(proceed=True, diagnosis="fine"))
+    EB._review_pdb_flags(pdb)  # must not raise
+
+
+def test_gro_checkpoint_skipped_on_pass(tmp_path, monkeypatch):
+    _init(tmp_path)
+    _seed_step4(tmp_path, initial_net_charge=0.0)
+    called = []
+    monkeypatch.setattr(llm_assist, "review_gro", lambda judgment: called.append(judgment) or llm_assist.CheckpointVerdict(proceed=True, diagnosis=""))
+    monkeypatch.setattr(GW, "run", _fake_gw_run({
+        "genion": {"stdout": "Will try to add 0 NA ions and 0 CL ions.\n"},
+    }))
+    EB.run_step5_genion(tmp_path)
+    assert called == []
+
+
+def test_gro_checkpoint_called_on_warning_and_rejects(tmp_path, monkeypatch):
+    _init(tmp_path)
+    _seed_step4(tmp_path, initial_net_charge=-2.95)
+    monkeypatch.setattr(
+        llm_assist, "review_gro",
+        lambda judgment: llm_assist.CheckpointVerdict(
+            proceed=False, diagnosis="residual charge too high for this ligand"))
+    monkeypatch.setattr(GW, "run", _fake_gw_run({
+        "genion": {"stdout": "Will try to add 3 NA ions and 0 CL ions.\n"},
+    }))
+    with pytest.raises(RuntimeError, match="residual charge too high for this ligand"):
+        EB.run_step5_genion(tmp_path)
+
+
+def test_gro_checkpoint_called_on_warning_and_accepts(tmp_path, monkeypatch):
+    _init(tmp_path)
+    _seed_step4(tmp_path, initial_net_charge=-2.95)
+    monkeypatch.setattr(
+        llm_assist, "review_gro",
+        lambda judgment: llm_assist.CheckpointVerdict(proceed=True, diagnosis="fine"))
+    monkeypatch.setattr(GW, "run", _fake_gw_run({
+        "genion": {"stdout": "Will try to add 3 NA ions and 0 CL ions.\n"},
+    }))
+    EB.run_step5_genion(tmp_path)
+    s = state.read(tmp_path)
+    assert s["step_outputs"]["step_5"]["neutrality_tier"] == "warning"
