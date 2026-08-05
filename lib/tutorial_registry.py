@@ -110,3 +110,63 @@ def route(prompt: str, pdb_hints: dict[str, bool],
         unsupported_reason=unsupported,
         selected_docs=docs,
     )
+
+
+# ── System Type × Protocol axis (browser wizard routing layer) ──────────────
+# Independent of the free-text route() above. Maps the 2-step System
+# Type / Protocol picker in the browser onto the existing fixed tutorial_id
+# presets. Membrane systems are deliberately excluded — they use the
+# separate /api/membrane/* pipeline, not this matrix.
+
+SYSTEM_TYPES = [
+    {"id": "aqueous_protein", "label": "Aqueous Protein / Peptide"},
+    {"id": "protein_ligand_complex", "label": "Protein-Ligand Complex"},
+    {"id": "small_molecule_solution", "label": "Small Molecule / Solution System"},
+]
+
+PROTOCOLS = [
+    {"id": "standard_md", "label": "Standard Equilibrium & Production MD"},
+    {"id": "umbrella_sampling", "label": "Pulling & Umbrella Sampling"},
+    {"id": "alchemical_fe", "label": "Alchemical Free Energy Calculation"},
+    {"id": "virtual_sites", "label": "Virtual Sites / High-Timestep MD"},
+]
+
+# (system_type_id, protocol_id) -> [tutorial_id, ...]. A missing key means
+# the combination is not supported yet.
+COMBO_MATRIX: dict[tuple[str, str], list[str]] = {
+    ("aqueous_protein", "standard_md"): ["Lysozyme_in_water"],
+    ("protein_ligand_complex", "standard_md"): ["Protein_Ligand_Complex"],
+    ("aqueous_protein", "umbrella_sampling"): ["Umbrella_Sampling"],
+    ("small_molecule_solution", "standard_md"): ["Building_Biphasic_Systems"],
+    ("small_molecule_solution", "alchemical_fe"): [
+        "Free_Energy_Calculations_Methane_in_Water",
+        "Free_Energy_calculations_Hydration_Free_Energy_of_Ethanol",
+    ],
+    ("small_molecule_solution", "virtual_sites"): ["Virtual_Sites"],
+}
+
+
+def resolve_tutorial_id(system_type: str, protocol: str,
+                        tutorial_id_hint: str | None = None) -> str | None:
+    """Resolve a (system_type, protocol) pair to a tutorial_id.
+
+    Returns None if the combination is not in COMBO_MATRIX. If the cell
+    has more than one tutorial_id (currently only the Free Energy cell)
+    and `tutorial_id_hint` names one of them, that one is returned;
+    otherwise the first entry in the cell is the default.
+    """
+    candidates = COMBO_MATRIX.get((system_type, protocol))
+    if not candidates:
+        return None
+    if tutorial_id_hint and tutorial_id_hint in candidates:
+        return tutorial_id_hint
+    return candidates[0]
+
+
+def combo_matrix_response() -> dict:
+    """JSON-serializable payload for GET /api/system-protocol-matrix."""
+    combos = [
+        {"system_type": st, "protocol": pr, "tutorial_ids": tids}
+        for (st, pr), tids in COMBO_MATRIX.items()
+    ]
+    return {"system_types": SYSTEM_TYPES, "protocols": PROTOCOLS, "combos": combos}
