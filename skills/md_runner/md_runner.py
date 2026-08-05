@@ -235,6 +235,8 @@ _NUM_RE = re.compile(r"(-?\d+(?:\.\d+)?)")
 
 def _parse_change_value(target: str, change_str: str) -> Any:
     # "2.0 → 5.0" -> 5.0
+    if "→" not in change_str and "->" not in change_str:
+        return None
     m = _NUM_RE.findall(change_str)
     if not m:
         return change_str
@@ -307,7 +309,10 @@ def _apply_review_outcome(workspace_dir: Path, phase: str, judgment: V.Judgment,
         mutation = judgment.suggested_mutation or {}
         new_overrides = dict(overrides)
         for k, v in (mutation.get("changes") or {}).items():
-            new_overrides[k] = _parse_change_value(mutation.get("target", ""), str(v))
+            parsed = _parse_change_value(mutation.get("target", ""), str(v))
+            if parsed is None:
+                continue
+            new_overrides[k] = parsed
         s["retry_history"].append({
             "step": 7, "phase": phase, "tier": "warning", "cause": judgment.cause,
             "warning_id": judgment.warning_id,
@@ -351,7 +356,10 @@ def accept_warning(workspace_dir: Path, warning_id: str) -> dict[str, Any]:
     mutation = payload["suggested_mutation"] or {}
     overrides: dict[str, Any] = {}
     for k, v in (mutation.get("changes") or {}).items():
-        overrides[k] = _parse_change_value(mutation.get("target", ""), str(v))
+        parsed = _parse_change_value(mutation.get("target", ""), str(v))
+        if parsed is None:
+            continue
+        overrides[k] = parsed
     s = state.read(workspace_dir)
     s["retry_history"].append({
         "step": payload["step"], "phase": payload["phase"],

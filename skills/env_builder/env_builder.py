@@ -347,7 +347,10 @@ def _review_pdb_flags(pdb_path: Path) -> None:
     """Run the deterministic PDB analyzer; if it flags anything, ask the LLM
     checkpoint whether the pipeline should proceed. Raises RuntimeError if
     the LLM rejects. No-op (and no LLM call) when nothing is flagged."""
-    pdb_summary = PDBAnalyzer(pdb_path).analyze()
+    try:
+        pdb_summary = PDBAnalyzer(pdb_path).analyze()
+    except Exception:
+        return  # advisory-only analyzer must never block the pipeline
     pdb_flags = {
         k: pdb_summary[k] for k in
         ("missing_residues", "altloc_residues", "disulfide_candidates")

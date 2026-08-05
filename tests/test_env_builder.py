@@ -147,6 +147,12 @@ def test_review_pdb_flags_calls_llm_and_proceeds(tmp_path, monkeypatch):
     EB._review_pdb_flags(pdb)  # must not raise
 
 
+def test_review_pdb_flags_never_raises_on_malformed_pdb(tmp_path):
+    pdb = tmp_path / "truncated.pdb"
+    pdb.write_text("ATOM      1  CA  ALA A\n")  # truncated — indexes past end of line
+    EB._review_pdb_flags(pdb)  # must not raise
+
+
 def test_gro_checkpoint_skipped_on_pass(tmp_path, monkeypatch):
     _init(tmp_path)
     _seed_step4(tmp_path, initial_net_charge=0.0)

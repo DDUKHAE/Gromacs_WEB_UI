@@ -181,10 +181,11 @@ sudo apt install ffmpeg
 conda install -c conda-forge pymol-open-source
 # VMD (structure / trajectory visualization): https://www.ks.uiuc.edu/Research/vmd/
 
-# LLM CLI (orchestrated execution) — requires Node.js
-npm install -g @anthropic-ai/claude-code    # Claude Code
-npm install -g @openai/codex                # Codex CLI  (https://github.com/openai/codex)
-npm install -g @google/gemini-cli           # Gemini CLI (https://github.com/google-gemini/gemini-cli)
+# Optional: Claude API review checkpoints (auxiliary, non-blocking)
+# Set ANTHROPIC_API_KEY to enable extra LLM review at a few pipeline
+# checkpoints. The pipeline runs fully without it — checkpoints simply
+# fall back to proceeding.
+export ANTHROPIC_API_KEY=sk-ant-...
 # ─────────────────────────────────────────────────────────────────────────
 
 # 5. Launch the server — browser opens automatically at http://localhost:8000
@@ -220,10 +221,11 @@ brew install ffmpeg
 conda install -c conda-forge pymol-open-source
 # VMD (structure / trajectory visualization): https://www.ks.uiuc.edu/Research/vmd/
 
-# LLM CLI — requires Node.js
-npm install -g @anthropic-ai/claude-code    # Claude Code
-npm install -g @openai/codex                # Codex CLI  (https://github.com/openai/codex)
-npm install -g @google/gemini-cli           # Gemini CLI (https://github.com/google-gemini/gemini-cli)
+# Optional: Claude API review checkpoints (auxiliary, non-blocking)
+# Set ANTHROPIC_API_KEY to enable extra LLM review at a few pipeline
+# checkpoints. The pipeline runs fully without it — checkpoints simply
+# fall back to proceeding.
+export ANTHROPIC_API_KEY=sk-ant-...
 # ─────────────────────────────────────────────────────────────────────────
 
 # 5. Launch the server — browser opens automatically at http://localhost:8000
@@ -259,10 +261,11 @@ python scripts/check_gromacs_env.py
 conda install -c conda-forge pymol-open-source
 # VMD (structure / trajectory visualization): https://www.ks.uiuc.edu/Research/vmd/
 
-# LLM CLI (orchestrated execution) — requires Node.js
-npm install -g @anthropic-ai/claude-code    # Claude Code
-npm install -g @openai/codex                # Codex CLI  (https://github.com/openai/codex)
-npm install -g @google/gemini-cli           # Gemini CLI (https://github.com/google-gemini/gemini-cli)
+# Optional: Claude API review checkpoints (auxiliary, non-blocking)
+# Set ANTHROPIC_API_KEY to enable extra LLM review at a few pipeline
+# checkpoints. The pipeline runs fully without it — checkpoints simply
+# fall back to proceeding.
+export ANTHROPIC_API_KEY=sk-ant-...
 # ─────────────────────────────────────────────────────────────────────────
 
 # 4. Launch the server — browser opens automatically at http://localhost:8000
@@ -420,10 +423,8 @@ After the pipeline completes, open the **Results Gallery** panel to inspect RMSD
 │
 ├── web/                       FastAPI web server
 │   ├── server.py              REST API + WebSocket endpoints
-│   ├── llm_runner.py          PTY-based LLM process manager
 │   ├── runner.py              Direct-execution subprocess wrapper
 │   ├── run_reader.py          Run state file parser
-│   ├── llm_adapters/          Claude / Codex / Gemini CLI adapters
 │   └── static/
 │       ├── index.html         Single-page frontend (vanilla JS)
 │       ├── xterm.js           Terminal emulator
@@ -506,7 +507,7 @@ python -c "from lib.tutorial_registry import load_manifest; print(load_manifest(
 This section states, precisely, what the automated checks in this codebase do and do not cover. Treat any claim elsewhere in this README that appears stronger than what's below as imprecise wording, not a different scope of behavior.
 
 - **Config audit checks 3 parameters, not "the run."** `lib/system_config_validator.py::validate_run_against_config` compares only force field prefix, water model, and box type against `state.json`. It does not check mdp parameters (temperature, pressure, `dt`, thermostat/barostat choice, cutoffs), ion concentration, or protonation state — an LLM agent can silently change any of those and the audit will still report pass on the 3 keys it does check. The constraint prompt built by `lib/system_config.py` is advisory text ("MUST FOLLOW") injected into the LLM's instructions; there is no programmatic enforcement behind it beyond the 3-key audit.
-- **No structural guard against LLM protocol deviation in general.** `run_llm_agent` (`web/llm_runner.py`) records the PTY transcript and exit code; it does not verify that the agent actually executed the tutorial's intended commands, used the intended mdp values, or didn't fabricate a "completed" status. The only physical checks that run are the per-step validator gates in `lib/validators.py` (neutrality, density, energy drift, RMSD plateau) — anything those gates don't measure is unverified.
+- **LLM involvement is now advisory-only, not an execution agent.** Every run executes the deterministic pipeline directly (`web/runner.py`); there is no interactive LLM agent driving GROMACS commands anymore. The Claude API is only consulted at a few structured review checkpoints (`lib/llm_assist.py`), and any checkpoint failure or missing `ANTHROPIC_API_KEY` falls back to proceeding rather than blocking. The only physical checks that run are the per-step validator gates in `lib/validators.py` (neutrality, density, energy drift, RMSD plateau) — anything those gates don't measure is unverified.
 - **Energy-drift gate is coarse and not size-normalized.** `_judge_energy_drift` (`skills/md_runner/md_runner.py`) computes a linear-regression slope of **total** energy vs. simulation time in ns (this was corrected from an earlier bug that used potential energy ÷ frame count). The pass/warning/retryable thresholds (`ENERGY_DRIFT_WARNING`/`ENERGY_DRIFT_RETRY` in `lib/validators.py`) are fixed absolute kJ/mol-per-ns cutoffs. They are not normalized by atom count, so a large solvated system will show larger absolute total-energy fluctuation than a small one at the same per-atom stability — the gate is a blunt fatal-instability filter, not a precision diagnostic.
 - **Density gate applies only where a single bulk density is physically meaningful.** It is skipped (reported as `pass`/`density_gate_not_applicable_for_system_type`) for membrane, biphasic, and other non-single-phase-aqueous systems, per `_density_expected_range` in `skills/md_runner/md_runner.py`.
 - **Reproducibility remains statistical, not bitwise.** `state.json.provenance` records the GROMACS version, platform, rendered MDP hashes, and NVT seed. The production default remains `gen_seed = -1`, so independently started runs are not bit-identical; enable the documented reproducible NVT mode when a fixed initial-velocity seed is required.

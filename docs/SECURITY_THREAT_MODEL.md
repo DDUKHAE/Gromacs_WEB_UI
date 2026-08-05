@@ -8,8 +8,10 @@ tool output can all contain attacker-controlled text.
 
 - Run identifiers are format-checked and resolved below the `runs/` directory.
 - Uploaded PDB files are size-limited and stored inside the run workspace.
-- Permission prompts are surfaced as explicit WebSocket events. The web API
-  rejects `auto_approve=true`; adapters never add permission-bypass flags.
+- The `llm`/`auto_approve` request fields and their associated approval gate
+  no longer exist: the interactive LLM-agent execution path was removed, and
+  every run now uses the direct, deterministic pipeline runner
+  (`web/runner.py`). There is no permission-bypass surface to reject.
 - Run logs and artifacts are served only through validated run paths.
 
 ## Residual risks

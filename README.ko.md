@@ -123,10 +123,11 @@ sudo apt install ffmpeg
 conda install -c conda-forge pymol-open-source
 # VMD (구조/트래젝토리 시각화): https://www.ks.uiuc.edu/Research/vmd/
 
-# LLM CLI (튜토리얼 실행 모드) — Node.js 필요
-npm install -g @anthropic-ai/claude-code    # Claude Code
-npm install -g @openai/codex                # Codex CLI  (https://github.com/openai/codex)
-npm install -g @google/gemini-cli           # Gemini CLI (https://github.com/google-gemini/gemini-cli)
+# 선택: Claude API 검토 체크포인트 (보조 용도, 파이프라인을 막지 않음)
+# ANTHROPIC_API_KEY를 설정하면 파이프라인의 일부 체크포인트에서 추가로
+# LLM 검토를 받습니다. 설정하지 않아도 파이프라인은 정상 동작하며,
+# 체크포인트는 자동으로 "진행"으로 처리됩니다.
+export ANTHROPIC_API_KEY=sk-ant-...
 # ─────────────────────────────────────────────────────────────────────────
 
 # 5. 서버 실행 → 브라우저 자동 오픈 (http://localhost:8000)
@@ -162,10 +163,11 @@ brew install ffmpeg
 conda install -c conda-forge pymol-open-source
 # VMD (구조/트래젝토리 시각화): https://www.ks.uiuc.edu/Research/vmd/
 
-# LLM CLI (튜토리얼 실행 모드) — Node.js 필요
-npm install -g @anthropic-ai/claude-code    # Claude Code
-npm install -g @openai/codex                # Codex CLI  (https://github.com/openai/codex)
-npm install -g @google/gemini-cli           # Gemini CLI (https://github.com/google-gemini/gemini-cli)
+# 선택: Claude API 검토 체크포인트 (보조 용도, 파이프라인을 막지 않음)
+# ANTHROPIC_API_KEY를 설정하면 파이프라인의 일부 체크포인트에서 추가로
+# LLM 검토를 받습니다. 설정하지 않아도 파이프라인은 정상 동작하며,
+# 체크포인트는 자동으로 "진행"으로 처리됩니다.
+export ANTHROPIC_API_KEY=sk-ant-...
 # ─────────────────────────────────────────────────────────────────────────
 
 # 5. 서버 실행 → 브라우저 자동 오픈 (http://localhost:8000)
@@ -201,10 +203,11 @@ python scripts/check_gromacs_env.py
 conda install -c conda-forge pymol-open-source
 # VMD (구조/트래젝토리 시각화): https://www.ks.uiuc.edu/Research/vmd/
 
-# LLM CLI (튜토리얼 실행 모드) — Node.js 필요
-npm install -g @anthropic-ai/claude-code    # Claude Code
-npm install -g @openai/codex                # Codex CLI  (https://github.com/openai/codex)
-npm install -g @google/gemini-cli           # Gemini CLI (https://github.com/google-gemini/gemini-cli)
+# 선택: Claude API 검토 체크포인트 (보조 용도, 파이프라인을 막지 않음)
+# ANTHROPIC_API_KEY를 설정하면 파이프라인의 일부 체크포인트에서 추가로
+# LLM 검토를 받습니다. 설정하지 않아도 파이프라인은 정상 동작하며,
+# 체크포인트는 자동으로 "진행"으로 처리됩니다.
+export ANTHROPIC_API_KEY=sk-ant-...
 # ─────────────────────────────────────────────────────────────────────────
 
 # 4. 서버 실행 → 브라우저 자동 오픈 (http://localhost:8000)
@@ -294,10 +297,8 @@ https://mackerell.umaryland.edu/charmm_ff.shtml
 │
 ├── web/                       FastAPI 웹 서버
 │   ├── server.py              REST API + WebSocket 엔드포인트
-│   ├── llm_runner.py          PTY 기반 LLM 프로세스 관리
 │   ├── runner.py              직접 실행 subprocess 래퍼
 │   ├── run_reader.py          실행 상태 파일 파서
-│   ├── llm_adapters/          Claude / Codex / Gemini CLI 어댑터
 │   └── static/
 │       ├── index.html         단일 페이지 프론트엔드 (vanilla JS)
 │       ├── xterm.js           터미널 에뮬레이터
@@ -398,7 +399,7 @@ python -c "from lib.tutorial_registry import load_manifest; print(load_manifest(
 이 절은 이 코드베이스의 자동 검증이 실제로 무엇을 커버하고 무엇을 커버하지 않는지 정확히 명시합니다. 이 README의 다른 곳에 이보다 더 강하게 들리는 표현이 있다면, 범위가 다르다는 뜻이 아니라 문구가 부정확한 것으로 간주해 주세요.
 
 - **Config audit는 3개 파라미터만 검사하며 "런 전체"를 검증하지 않습니다.** `lib/system_config_validator.py::validate_run_against_config`는 force field 접두사, water model, box type만 `state.json`과 비교합니다. mdp 파라미터(온도·압력·`dt`·thermostat/barostat 선택·cutoff), 이온 농도, 양성자화 상태는 검사하지 않습니다 — LLM 에이전트가 이 값들을 몰래 바꿔도 감사는 3개 항목에서만 pass를 보고합니다. `lib/system_config.py`가 생성하는 제약 프롬프트("MUST FOLLOW")는 어디까지나 LLM 지시문에 삽입되는 조언 텍스트이며, 위 3개 항목 감사 외에는 프로그램적 강제가 없습니다.
-- **LLM의 프로토콜 이탈 전반에 대한 구조적 방어는 없습니다.** `run_llm_agent`(`web/llm_runner.py`)는 PTY 출력과 종료코드만 기록하며, 에이전트가 튜토리얼이 의도한 명령을 실제로 실행했는지, 의도한 mdp 값을 썼는지, "완료" 상태를 조작하지 않았는지는 검증하지 않습니다. 실제로 실행되는 물리 검증은 `lib/validators.py`의 단계별 게이트(중성화·밀도·에너지 드리프트·RMSD 평탄화)뿐이며, 이 게이트들이 측정하지 않는 것은 검증되지 않습니다.
+- **LLM은 이제 실행 에이전트가 아니라 보조 검토 용도로만 관여합니다.** 모든 실행은 결정론적 파이프라인(`web/runner.py`)이 직접 수행하며, GROMACS 명령을 직접 구동하는 대화형 LLM 에이전트는 더 이상 존재하지 않습니다. Claude API는 몇몇 구조화된 검토 체크포인트(`lib/llm_assist.py`)에서만 호출되며, 체크포인트 실패나 `ANTHROPIC_API_KEY` 미설정 시에는 파이프라인을 막지 않고 자동으로 "진행"으로 처리됩니다. 실제로 실행되는 물리 검증은 `lib/validators.py`의 단계별 게이트(중성화·밀도·에너지 드리프트·RMSD 평탄화)뿐이며, 이 게이트들이 측정하지 않는 것은 검증되지 않습니다.
 - **에너지 드리프트 게이트는 거칠고 시스템 크기로 정규화되지 않습니다.** `_judge_energy_drift`(`skills/md_runner/md_runner.py`)는 **전체(total)** 에너지의 시뮬레이션 시간(ns) 대비 선형회귀 기울기를 계산합니다(이전의 "퍼텐셜 에너지 ÷ 프레임 수" 버그는 수정됨). pass/warning/retryable 임계값(`lib/validators.py`의 `ENERGY_DRIFT_WARNING`/`ENERGY_DRIFT_RETRY`)은 고정된 절대 kJ/mol/ns 값이며 원자 수로 정규화되지 않습니다 — 같은 원자당 안정성이라도 큰 용매화 시스템은 작은 시스템보다 절대 에너지 변동이 크게 나타납니다. 이 게이트는 정밀 진단이 아니라 명백한 적분 불안정을 걸러내는 거친 필터입니다.
 - **밀도 게이트는 단일 벌크 밀도가 물리적으로 의미 있는 계에만 적용됩니다.** 막(membrane), biphasic 등 단일상 수용성 벌크가 아닌 계에서는 게이트가 건너뛰어집니다(`skills/md_runner/md_runner.py`의 `_density_expected_range`, `density_gate_not_applicable_for_system_type`로 pass 처리).
 - **재현성은 비트단위가 아니라 통계적 수준입니다.** `state.json.provenance`에는 GROMACS 버전, 플랫폼, 렌더링된 MDP 해시, NVT 시드가 기록됩니다. 기본 production은 계속 `gen_seed = -1`이므로 독립 실행은 비트단위로 동일하지 않습니다. 고정 초기 속도가 필요하면 문서화된 reproducible NVT 모드를 사용하세요.

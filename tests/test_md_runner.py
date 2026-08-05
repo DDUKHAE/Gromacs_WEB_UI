@@ -237,3 +237,28 @@ def test_apply_review_outcome_warning_accepted_retries_phase(tmp_path, monkeypat
     s = state.read(tmp_path)
     assert s["retry_history"][-1]["cause"] == "temperature_coupling"
     assert "llm_accepted" in s["retry_history"][-1]["remediation"]
+
+
+def test_parse_change_value_ignores_non_arrow_mutation_text():
+    assert MR._parse_change_value("production.mdp", "extend by 50%") is None
+
+
+def test_apply_review_outcome_skips_unparseable_mutation_changes(tmp_path, monkeypatch):
+    _init_ws(tmp_path)
+    monkeypatch.setattr(
+        llm_assist, "review_md_phase",
+        lambda phase, judgment, xvg, mdp: llm_assist.PhaseVerdict(
+            proceed=True, accept_mutation=True, diagnosis="accept"))
+    judgment = V.Judgment(tier="warning", metric="rmsd_plateau", observed=0.1,
+                          cause="analysis_not_converged",
+                          suggested_mutation={"target": "production.mdp",
+                                              "changes": {"nsteps": "extend by 50%"}})
+    captured_overrides = {}
+
+    def _fake_recovery(workspace_dir, phase, phase_runner, overrides):
+        captured_overrides.update(overrides)
+        return V.Judgment(tier="pass", metric="rmsd_plateau", observed=0.02)
+
+    monkeypatch.setattr(MR, "run_phase_with_recovery", _fake_recovery)
+    MR._apply_review_outcome(tmp_path, "production", judgment, {})
+    assert "nsteps" not in captured_overrides
