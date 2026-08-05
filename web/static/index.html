@@ -3990,6 +3990,10 @@ async function startRun(acceptExperimentalOverrides = false) {
     try { config.advanced_workflow = JSON.parse(workflowJson); }
     catch (_) { showToast('Advanced workflow JSON is invalid.', 'error'); return; }
   }
+  if (_selectedSystemType && !_selectedProtocol) {
+    showToast('Select a Protocol for the chosen System Type.', 'error');
+    return;
+  }
   const data = new FormData();
   data.append('pdb_file', selectedPdb);
   data.append('forcefield', form.querySelector('[name="forcefield"]').value);

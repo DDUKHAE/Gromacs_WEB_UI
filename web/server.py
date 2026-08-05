@@ -300,11 +300,11 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
             })
         return result
 
-    # ── Force field endpoints ─────────────────────────────────────────────────
     @app.get("/api/system-protocol-matrix")
     def api_system_protocol_matrix() -> dict:
         return TR.combo_matrix_response()
 
+    # ── Force field endpoints ─────────────────────────────────────────────────
     @app.get("/api/forcefields")
     def api_list_forcefields() -> list[str]:
         from lib.gmx_wrapper import get_gmxlib
