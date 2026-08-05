@@ -2267,21 +2267,34 @@ body.light-theme #run-search {
                 </div>
               </div>
 
-              <!-- Tutorial 선택 -->
-              <div class="ff-row">
+              <!-- System Type -->
+              <div class="ff-row" style="align-items:flex-start;">
                 <div class="ff-label-col">
-                  <span class="ff-title">Tutorial</span>
+                  <span class="ff-title">System Type</span>
                   <div class="tooltip-container">
                     <span class="info-icon">?</span>
-                    <span class="tooltip-text">Auto-detects and configures workflow templates tailored for your molecular complex type.</span>
+                    <span class="tooltip-text">What kind of molecular system this run builds. Determines how the environment (box, solvent, ligand) is assembled.</span>
                   </div>
                 </div>
                 <div class="ff-select-col">
-                  <select name="tutorial_id" id="tutorial-select">
-                    <option value="">Auto-detect</option>
-                  </select>
+                  <div id="system-type-cards" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
                 </div>
               </div>
+              <!-- Protocol -->
+              <div class="ff-row" style="align-items:flex-start;">
+                <div class="ff-label-col">
+                  <span class="ff-title">Protocol</span>
+                  <div class="tooltip-container">
+                    <span class="info-icon">?</span>
+                    <span class="tooltip-text">The simulation workflow to run once the system is built. Options are limited to what the selected System Type currently supports.</span>
+                  </div>
+                </div>
+                <div class="ff-select-col">
+                  <div id="protocol-cards" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+                  <select id="tutorial-variant-select" style="display:none;margin-top:8px;width:100%;background:var(--bg-input);border:1px solid var(--border-color);color:var(--text-primary);padding:5px 8px;border-radius:4px;font-size:12px;"></select>
+                </div>
+              </div>
+              <input type="hidden" name="tutorial_id" id="tutorial-select-value" value="">
               <!-- FF-Water Compatibility Warning -->
               <div id="ff-water-warning" style="display:none;padding:8px;border-radius:4px;
                 background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.4);
@@ -3544,6 +3557,7 @@ function _renderStructureAnalysis(a) {
   content.innerHTML = html;
   panel.style.display = 'block';
   window._pdbAnalysis = a;
+  _applyRecommendedSystemType(a);
 }
 
 async function fetchPDBFromRCSB() {
@@ -3982,6 +3996,8 @@ async function startRun(acceptExperimentalOverrides = false) {
   data.append('water', form.querySelector('[name="water"]').value);
   data.append('box_type', form.querySelector('[name="box_type"]')?.value || config.box.type);
   data.append('tutorial_id', form.querySelector('[name="tutorial_id"]').value);
+  data.append('system_type', _selectedSystemType || '');
+  data.append('protocol', _selectedProtocol || '');
   data.append('llm', form.querySelector('[name="llm"]').value);
   data.append('auto_approve', form.querySelector('[name="auto_approve"]').value);
   data.append('accept_experimental_overrides', String(acceptExperimentalOverrides));
@@ -5392,25 +5408,111 @@ const TUTORIAL_LABELS = {
   'Virtual_Sites': 'Virtual Sites',
 };
 
-async function loadTutorials() {
-  const select = document.getElementById('tutorial-select');
+let _spMatrix = null;
+let _selectedSystemType = null;
+let _selectedProtocol = null;
+
+async function loadSystemProtocolMatrix() {
   try {
-    const resp = await fetch('/api/tutorials');
+    const resp = await fetch('/api/system-protocol-matrix');
     if (!resp.ok) return;
-    const tutorials = await resp.json();
-    select.innerHTML = '<option value="">Auto-detect</option>';
-    tutorials.forEach(t => {
-      const opt = document.createElement('option');
-      opt.value = t.id;
-      const label = TUTORIAL_LABELS[t.id] || t.id.replace(/_/g, ' ');
-      const badge = t.difficulty === 'basic' ? '' : ` [${t.difficulty}]`;
-      opt.textContent = label + badge;
-      if (!t.supported) opt.style.color = 'var(--text-muted)';
-      select.appendChild(opt);
-    });
+    _spMatrix = await resp.json();
+    _renderSystemTypeCards();
+    _renderProtocolCards();
   } catch (e) {
-    console.error('loadTutorials failed:', e);
+    console.error('loadSystemProtocolMatrix failed:', e);
   }
+}
+
+function _comboFor(systemType, protocol) {
+  if (!_spMatrix) return null;
+  return _spMatrix.combos.find(c => c.system_type === systemType && c.protocol === protocol) || null;
+}
+
+function _makeAxisCard(label, active, disabled, onSelect) {
+  const card = document.createElement('div');
+  card.textContent = label;
+  card.title = disabled ? 'Coming soon for this System Type' : '';
+  card.style.cssText = `padding:8px 12px;border-radius:6px;border:1px solid ${active ? 'var(--accent-primary)' : 'var(--border-color)'};background:${active ? 'var(--bg-card-hover)' : 'var(--bg-card)'};font-size:12px;cursor:${disabled ? 'not-allowed' : 'pointer'};opacity:${disabled ? '0.4' : '1'};white-space:nowrap;`;
+  if (!disabled) card.onclick = onSelect;
+  return card;
+}
+
+function _renderSystemTypeCards() {
+  const container = document.getElementById('system-type-cards');
+  if (!container || !_spMatrix) return;
+  container.innerHTML = '';
+  _spMatrix.system_types.forEach(st => {
+    const active = st.id === _selectedSystemType;
+    const card = _makeAxisCard(st.label, active, false, () => {
+      _selectedSystemType = st.id;
+      _selectedProtocol = null;
+      _renderSystemTypeCards();
+      _renderProtocolCards();
+      _updateTutorialHiddenInput();
+    });
+    if (st.id === window._recommendedSystemType) {
+      const badge = document.createElement('span');
+      badge.textContent = ' (Recommended)';
+      badge.style.cssText = 'font-size:9px;color:var(--accent-green);';
+      card.appendChild(badge);
+    }
+    container.appendChild(card);
+  });
+}
+
+function _renderProtocolCards() {
+  const container = document.getElementById('protocol-cards');
+  if (!container || !_spMatrix) return;
+  container.innerHTML = '';
+  _spMatrix.protocols.forEach(pr => {
+    const supported = !!_selectedSystemType && !!_comboFor(_selectedSystemType, pr.id);
+    const active = pr.id === _selectedProtocol;
+    const card = _makeAxisCard(pr.label, active, !supported, () => {
+      _selectedProtocol = pr.id;
+      _renderProtocolCards();
+      _updateTutorialHiddenInput();
+    });
+    container.appendChild(card);
+  });
+}
+
+function _updateTutorialHiddenInput() {
+  const hidden = document.getElementById('tutorial-select-value');
+  const variantSelect = document.getElementById('tutorial-variant-select');
+  if (!hidden || !variantSelect) return;
+  const combo = (_selectedSystemType && _selectedProtocol)
+    ? _comboFor(_selectedSystemType, _selectedProtocol) : null;
+  if (!combo) {
+    hidden.value = '';
+    variantSelect.style.display = 'none';
+    variantSelect.innerHTML = '';
+    return;
+  }
+  if (combo.tutorial_ids.length > 1) {
+    variantSelect.innerHTML = '';
+    combo.tutorial_ids.forEach(tid => {
+      const opt = document.createElement('option');
+      opt.value = tid;
+      opt.textContent = TUTORIAL_LABELS[tid] || tid.replace(/_/g, ' ');
+      variantSelect.appendChild(opt);
+    });
+    variantSelect.style.display = '';
+    variantSelect.onchange = () => { hidden.value = variantSelect.value; };
+    hidden.value = variantSelect.value;
+  } else {
+    variantSelect.style.display = 'none';
+    variantSelect.innerHTML = '';
+    hidden.value = combo.tutorial_ids[0];
+  }
+}
+
+const _SOLVENT_RESNAMES = new Set(['HOH', 'WAT', 'SOL', 'NA', 'CL', 'MG', 'CA', 'K', 'ZN']);
+
+function _applyRecommendedSystemType(a) {
+  const hasLigand = (a.hetatm || []).some(h => !_SOLVENT_RESNAMES.has(h.resname));
+  window._recommendedSystemType = hasLigand ? 'protein_ligand_complex' : 'aqueous_protein';
+  _renderSystemTypeCards();
 }
 
 // Initialize on page load
@@ -5418,7 +5520,7 @@ window.addEventListener('load', async () => {
   // 앱 초기화
   initFFManager();
   loadLlms();
-  loadTutorials();
+  loadSystemProtocolMatrix();
   loadForcefields();
   document.getElementById('forcefield-select').addEventListener('change', e => {
     loadWaterModels(e.target.value);
