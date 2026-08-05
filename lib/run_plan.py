@@ -40,16 +40,17 @@ def _pdb_hints(pdb_path: Path) -> dict[str, bool]:
 def _provided_inputs(config: dict[str, Any]) -> set[str]:
     provided = {"protein_pdb"}
     ligand = config.get("ligand", {})
-    if ligand.get("itp_file") or ligand.get("complex_gro") or ligand.get("residue_name"):
+    if ligand.get("itp_file") or ligand.get("complex_gro") or ligand.get("residue_name") or ligand.get("gro_file"):
         provided.update({"ligand_structure", "ligand_topology"})
     membrane = config.get("membrane", {})
-    if membrane.get("lipids_upper") or membrane.get("lipids_lower"):
+    if membrane.get("lipids_upper") or membrane.get("lipids_lower") or membrane.get("lipid_type"):
         provided.add("membrane_composition")
     workflow = config.get("advanced_workflow") or {}
     if (workflow.get("free_energy") or {}).get("coordinate"):
-        provided.update({"solute_topology", "lambda_schedule", "coulomb_vdw_lambda_schedule"})
-    if (workflow.get("umbrella") or {}).get("windows"):
-        provided.add("reaction_coordinate_definition")
+        provided.update({"solute_topology", "lambda_schedule", "coulomb_vdw_lambda_schedule",
+                         "phase_components", "composition_ratio", "molecule_topology", "virtual_site_definition", "couple_moltype"})
+    if (workflow.get("umbrella") or {}).get("windows") or (workflow.get("umbrella") or {}).get("group1"):
+        provided.update({"reaction_coordinate_definition", "group1", "group2", "windows"})
     return provided
 
 

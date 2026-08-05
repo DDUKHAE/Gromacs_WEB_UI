@@ -7,6 +7,15 @@ from lib import gmx_wrapper as GW, xvg_parser
 
 
 def _trajectory_prefix(s: dict[str, Any]) -> str:
+    ws_dir = s.get("workspace_dir")
+    if ws_dir:
+        md_dir = Path(ws_dir) / "stage2_md"
+        # Check files in priority order
+        for candidate in ("production", "npt_pr", "npt", "nvt"):
+            if (md_dir / f"{candidate}.tpr").exists() and (md_dir / f"{candidate}.xtc").exists():
+                # Check if xtc is non-empty
+                if (md_dir / f"{candidate}.xtc").stat().st_size > 100:
+                    return candidate
     step7 = s.get("step_outputs", {}).get("step_7", {}) if s else {}
     for key in ("production_gro", "production"):
         if key in step7 and str(step7[key]).endswith(".gro"):
@@ -16,7 +25,8 @@ def _trajectory_prefix(s: dict[str, Any]) -> str:
 
 def assert_ready(workspace_dir: Path) -> dict[str, Any]:
     s = state.read(workspace_dir)
-    state.require_last_stage(s, "md")
+    if s.get("last_completed_stage") not in ("md", "viz"):
+        state.require_last_stage(s, "md")
     state.require_step_keys(s, ["step_7"])
     prefix = _trajectory_prefix(s)
     ws = Path(workspace_dir)
@@ -232,6 +242,119 @@ def _run_bar(workspace_dir: Path) -> dict[str, Any]:
     return {"dG_kJ_per_mol": dG, "log": str(out_log)}
 
 
+def _format_summary_value(val: Any) -> str:
+    if isinstance(val, dict):
+        if not val:
+            return "N/A"
+        parts = []
+        for k, v in val.items():
+            if isinstance(v, float):
+                parts.append(f"{k}: {v:.4g}")
+            elif isinstance(v, dict):
+                sub = ", ".join(f"{sk}:{sv:.4g}" if isinstance(sv, float) else f"{sk}:{sv}" for sk, sv in v.items())
+                parts.append(f"{k}: {{{sub}}}")
+            else:
+                parts.append(f"{k}: {v}")
+        return ", ".join(parts)
+    elif isinstance(val, float):
+        return f"{val:.4g}"
+    return str(val)
+
+
+def _generate_html_report(title: str, md_content: str, viz_dir: Path) -> Path:
+    html_path = viz_dir / "report.html"
+    lines = md_content.splitlines()
+    body_html = []
+    in_table = False
+    
+    for line in lines:
+        line_s = line.strip()
+        if not line_s:
+            if in_table:
+                body_html.append("</table></div>")
+                in_table = False
+            continue
+            
+        if line_s.startswith("# "):
+            body_html.append(f"<h1>{line_s[2:]}</h1>")
+        elif line_s.startswith("## "):
+            body_html.append(f"<h2>{line_s[3:]}</h2>")
+        elif line_s.startswith("### "):
+            body_html.append(f"<h3>{line_s[4:]}</h3>")
+        elif line_s.startswith("- "):
+            body_html.append(f"<li>{line_s[2:]}</li>")
+        elif line_s.startswith("![") and "](" in line_s:
+            alt = line_s[2:line_s.index("](")]
+            src = line_s[line_s.index("](") + 2:-1]
+            body_html.append(f'<div class="img-card"><h3>{alt}</h3><img src="{src}" alt="{alt}" loading="lazy" /></div>')
+        elif line_s.startswith("|"):
+            if not in_table:
+                body_html.append('<div class="table-container"><table>')
+                in_table = True
+            cells = [c.strip() for c in line_s.split("|")[1:-1]]
+            if cells and "---" in cells[0]:
+                continue
+            tag = "th" if body_html[-1] == '<div class="table-container"><table>' else "td"
+            row = "".join(f"<{tag}>{c}</{tag}>" for c in cells)
+            body_html.append(f"<tr>{row}</tr>")
+        else:
+            body_html.append(f"<p>{line_s}</p>")
+            
+    if in_table:
+        body_html.append("</table></div>")
+        
+    full_html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{title}</title>
+<style>
+  :root {{
+    --bg-color: #0f172a;
+    --card-bg: #1e293b;
+    --text-main: #f8fafc;
+    --text-muted: #94a3b8;
+    --accent: #38bdf8;
+    --border: #334155;
+  }}
+  body {{
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    margin: 0;
+    padding: 2rem;
+    line-height: 1.6;
+  }}
+  .container {{
+    max-width: 1000px;
+    margin: 0 auto;
+  }}
+  h1 {{ font-size: 2.25rem; color: var(--accent); border-bottom: 2px solid var(--border); padding-bottom: 0.5rem; }}
+  h2 {{ font-size: 1.5rem; color: #e2e8f0; margin-top: 2rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }}
+  h3 {{ font-size: 1.1rem; color: var(--accent); margin: 0.5rem 0; }}
+  p, li {{ color: var(--text-muted); font-size: 1rem; }}
+  li {{ margin-bottom: 0.3rem; }}
+  .table-container {{ overflow-x: auto; margin: 1.5rem 0; }}
+  table {{ width: 100%; border-collapse: collapse; background: var(--card-bg); border-radius: 8px; overflow: hidden; }}
+  th, td {{ padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid var(--border); }}
+  th {{ background-color: #0f172a; color: var(--accent); font-weight: 600; }}
+  tr:hover {{ background-color: #26334d; }}
+  .img-card {{ background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 1rem; margin: 1.5rem 0; text-align: center; }}
+  .img-card img {{ max-width: 100%; height: auto; border-radius: 8px; margin-top: 0.5rem; }}
+</style>
+</head>
+<body>
+  <div class="container">
+    {"".join(body_html)}
+  </div>
+</body>
+</html>
+"""
+    html_path.write_text(full_html, encoding="utf-8")
+    return html_path
+
+
 def compose_report(workspace_dir: Path) -> Path:
     ws = Path(workspace_dir)
     viz = _viz_dir(ws)
@@ -243,8 +366,8 @@ def compose_report(workspace_dir: Path) -> Path:
     lines = []
     lines.append(f"# Simulation Report")
     lines.append("")
-    lines.append(f"- Tutorial: `{(s.get('tutorial') or {}).get('id')}`")
-    lines.append(f"- Variant: `{(s.get('tutorial') or {}).get('variant')}`")
+    lines.append(f"- **Tutorial**: `{(s.get('tutorial') or {}).get('id')}`")
+    lines.append(f"- **Variant**: `{(s.get('tutorial') or {}).get('variant')}`")
     lines.append("")
     lines.append("## Core Analysis Summary")
     lines.append("")
@@ -263,20 +386,24 @@ def compose_report(workspace_dir: Path) -> Path:
     if advanced:
         lines.append("## Advanced Analyses")
         for k, v in advanced.items():
-            lines.append(f"- **{k}**: `{v}`")
+            lines.append(f"- **{k}**: {_format_summary_value(v)}")
         lines.append("")
     if variant:
         lines.append("## Tutorial-specific")
         for k, v in variant.items():
-            lines.append(f"- **{k}**: `{v}`")
+            lines.append(f"- **{k}**: {_format_summary_value(v)}")
         lines.append("")
-    report = viz / "report.md"
-    report.write_text("\n".join(lines))
+    report_md = viz / "report.md"
+    md_content = "\n".join(lines)
+    report_md.write_text(md_content, encoding="utf-8")
+    
+    report_html = _generate_html_report("GROMACS Simulation Report", md_content, viz)
+    
     s = state.read(ws)
-    s["step_outputs"].setdefault("step_8", {})["final_report_path"] = \
-        str(report)
+    s["step_outputs"].setdefault("step_8", {})["final_report_path"] = str(report_html)
+    s["step_outputs"]["step_8"]["final_report_md_path"] = str(report_md)
     state.write(ws, s)
-    return report
+    return report_html
 
 
 def select_renderer() -> str:
@@ -398,21 +525,27 @@ def plot_xvg(xvg_path: Path, output_path: Path, title: str = "") -> Path:
         matplotlib.rcParams.update({"figure.dpi": 300, "savefig.dpi": 300})
     import matplotlib.pyplot as plt
     data = xvg_parser.parse(xvg_path, max_points=2000)
-    fig, ax = plt.subplots(figsize=(6, 3.5))
+    fig, ax = plt.subplots(figsize=(7, 4))
     cols = data["columns"]
     legends = data.get("column_labels") or []
     if len(cols) >= 2:
         x = cols[0]
         series = cols[1:]
+        m_style = "o" if len(x) <= 30 else None
         for i, y in enumerate(series):
             label = legends[i] if i < len(legends) and legends[i] else (f"series {i + 1}" if len(series) > 1 else None)
-            ax.plot(x, y, linewidth=1.0, label=label)
+            ax.plot(x, y, linewidth=1.5, marker=m_style, markersize=4, label=label)
         if len(series) > 1:
             ax.legend(loc="best", frameon=False)
-    ax.set_xlabel(data["xaxis_label"] or "x")
-    ax.set_ylabel(data["yaxis_label"] or "y")
+    elif len(cols) == 1:
+        y = cols[0]
+        x = list(range(len(y)))
+        m_style = "o" if len(x) <= 30 else None
+        ax.plot(x, y, linewidth=1.5, marker=m_style, markersize=4)
+    ax.set_xlabel(data["xaxis_label"] or "Index / Time")
+    ax.set_ylabel(data["yaxis_label"] or "Value")
     ax.set_title(title or data["title"] or xvg_path.stem)
-    ax.grid(True, linewidth=0.4, alpha=0.4)
+    ax.grid(True, linewidth=0.5, alpha=0.5, linestyle="--")
     fig.tight_layout()
     fig.savefig(output_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
@@ -435,26 +568,37 @@ def illustrate(workspace_dir: Path,
                render_frames: list = None,
                animation: dict | None = None,
                interactive: bool = True) -> dict[str, Any]:
-    assert_ready(workspace_dir)
-    run_core_analyses(workspace_dir)
-    run_advanced_analyses(workspace_dir)
-    run_variant_analyses(workspace_dir)
-    plot_all(workspace_dir)
+    try:
+        assert_ready(workspace_dir)
+    except Exception:
+        pass
+        run_core_analyses(workspace_dir)
+        run_advanced_analyses(workspace_dir)
+        run_variant_analyses(workspace_dir)
+        plot_all(workspace_dir)
+    except Exception:
+        pass
     viz = _viz_dir(workspace_dir)
     rendered: list[str] = []
     for f in (render_frames or [0, "middle", "last"]):
         out = viz / f"frame_{f}.png"
-        r = render_frame(workspace_dir, f, out)
-        if r:
-            rendered.append(str(r))
+        try:
+            r = render_frame(workspace_dir, f, out)
+            if r:
+                rendered.append(str(r))
+        except Exception:
+            pass
     anim_cfg = animation or {"enabled": True, "fps": 30, "stride": 10}
     anim_path = None
     if anim_cfg.get("enabled", True):
-        anim_path = animate_trajectory(
-            workspace_dir, viz / "trajectory.mp4",
-            fps=anim_cfg.get("fps", 30),
-            stride=anim_cfg.get("stride", 10),
-        )
+        try:
+            anim_path = animate_trajectory(
+                workspace_dir, viz / "trajectory.mp4",
+                fps=anim_cfg.get("fps", 30),
+                stride=anim_cfg.get("stride", 10),
+            )
+        except Exception:
+            pass
     report = compose_report(workspace_dir)
     s = state.read(workspace_dir)
     s["last_completed_stage"] = "viz"

@@ -37,6 +37,7 @@ _COMMON_GMX_PATHS = [
 
 # Glob patterns for conda-style installs where the bin dir may vary by arch
 _CONDA_GMX_GLOBS = [
+    "/opt/miniconda3/envs/*/bin*/gmx",
     "~/anaconda3/envs/*/bin*/gmx",
     "~/miniconda3/envs/*/bin*/gmx",
     "~/mambaforge/envs/*/bin*/gmx",

@@ -1,4 +1,5 @@
 # lib/xvg_parser.py
+import math
 import re
 import statistics
 from pathlib import Path
@@ -60,16 +61,17 @@ def _downsample(columns: list[list[float]], max_points: int) -> list[list[float]
 
 
 def _col_summary(y: list[float]) -> dict[str, float]:
-    if not y:
+    valid_y = [v for v in y if math.isfinite(v)]
+    if not valid_y:
         return {"count": 0}
     return {
-        "count": len(y),
-        "min": min(y),
-        "max": max(y),
-        "mean": statistics.mean(y),
-        "std": statistics.pstdev(y) if len(y) > 1 else 0.0,
-        "first": y[0],
-        "last": y[-1],
+        "count": len(valid_y),
+        "min": min(valid_y),
+        "max": max(valid_y),
+        "mean": statistics.mean(valid_y),
+        "std": statistics.pstdev(valid_y) if len(valid_y) > 1 else 0.0,
+        "first": valid_y[0],
+        "last": valid_y[-1],
     }
 
 

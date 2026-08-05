@@ -95,6 +95,17 @@ def render(phase: str, overrides: dict[str, Any], output_dir: Path) -> Path:
         params["tc_grps"] = tc_grps
         params["tau_t_list"] = " ".join([str(params["tau_t"])] * n_groups)
         params["ref_t_list"] = " ".join([str(params["ref_t"])] * n_groups)
+    if "nsteps" in params:
+        try:
+            nsteps_val = int(params["nsteps"])
+            interval = max(1, min(5000, nsteps_val // 50))
+            params.setdefault("nstenergy", interval)
+            params.setdefault("nstlog", interval)
+            params.setdefault("nstxout_compressed", interval)
+        except (ValueError, TypeError):
+            params.setdefault("nstenergy", 500)
+            params.setdefault("nstlog", 500)
+            params.setdefault("nstxout_compressed", 500)
     content = template.format(**params) if params else template
     out = Path(output_dir) / f"{phase}.mdp"
     out.write_text(content)
