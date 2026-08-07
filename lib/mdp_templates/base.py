@@ -12,14 +12,14 @@ _DIR = Path(__file__).parent
 REPRODUCIBLE_SEED = 20240101
 
 DEFAULTS = {
-    "em": {"emtol": 1000.0, "emstep": 0.01, "nsteps": 50000},
+    "em": {"emtol": 1000.0, "emstep": 0.01, "nsteps": 50000, "define": ""},
     "nvt": {"nsteps": 50000, "dt": 0.002, "tau_t": 0.1, "ref_t": 300.0,
-            "gen_seed": -1},
+            "gen_seed": -1, "define": "-DPOSRES"},
     "npt": {"nsteps": 50000, "dt": 0.002, "tau_t": 0.1, "ref_t": 300.0, "tau_p": 2.0,
             # Initial equilibration: Berendsen (or C-rescale) barostat is
             # recommended before switching to Parrinello-Rahman, which can
             # oscillate wildly when started far from equilibrium.
-            "pcoupl": "Berendsen", "pcoupltype": "isotropic"},
+            "pcoupl": "Berendsen", "pcoupltype": "isotropic", "define": "-DPOSRES"},
     # Keep the second NPT stage distinct. Reusing the ``npt`` name would
     # overwrite files and make a restart falsely appear to have completed
     # both barostat stages.
