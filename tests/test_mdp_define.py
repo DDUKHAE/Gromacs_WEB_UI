@@ -47,31 +47,64 @@ def test_define_line_exists_in_every_touched_template(phase, tmp_path):
 
 
 @pytest.mark.integration
-def test_grompp_accepts_a_restrained_nvt(tmp_path):
-    """-DPOSRES without -r fails outright:
-    "Cannot find position restraint file restraint.gro (option -r)"."""
+def test_grompp_accepts_a_restrained_nvt_and_rejects_it_without_r(tmp_path):
+    """The regression guard for -DPOSRES: grompp needs -r since GROMACS 2018.
+
+    Builds its own inputs from tracked tutorial data. It must not read `runs/`,
+    which is gitignored and therefore absent from a fresh clone or worktree --
+    a test that always skips guards nothing.
+
+    tc_grps is forced to System via has_protein=False: the box holds an
+    unsolvated protein, so the default "Protein Non-Protein" would fail on the
+    missing Non-Protein group for reasons unrelated to restraints.
+    """
     import os
     import shutil
     import subprocess
+
     gmx = shutil.which("gmx")
     if gmx is None:
         pytest.skip("gmx not on PATH")
-    run = Path("runs/aki_20260806_180108/stage1_env")
-    if not (run / "topol.top").is_file():
-        pytest.skip("needs the completed reference run")
-    for name in ("topol.top", "posre.itp", "ions.gro"):
-        shutil.copy(run / name, tmp_path / name)
-    mdp = MDP.render("nvt", {"nsteps": 10}, tmp_path)
+    pdb = Path("tutorial_data/Lysozyme_in_water/1AKI.pdb")
+    if not pdb.is_file():
+        pytest.skip("needs tutorial_data/Lysozyme_in_water/1AKI.pdb")
+
+    env = {**os.environ, "GMX_MAXBACKUP": "-1"}
+    # Crystal waters confuse pdb2gmx with this force field; drop them.
+    (tmp_path / "clean.pdb").write_text(
+        "".join(l for l in pdb.read_text().splitlines(keepends=True)
+                if "HOH" not in l)
+    )
+    subprocess.run(
+        [gmx, "pdb2gmx", "-f", "clean.pdb", "-o", "p.gro", "-p", "topol.top",
+         "-water", "spc", "-ff", "charmm36", "-ignh"],
+        cwd=tmp_path, capture_output=True, text=True, env=env, check=True,
+    )
+    assert (tmp_path / "posre.itp").is_file(), "pdb2gmx wrote no restraint file"
+    subprocess.run(
+        [gmx, "editconf", "-f", "p.gro", "-o", "box.gro", "-c", "-d", "1.5",
+         "-bt", "cubic"],
+        cwd=tmp_path, capture_output=True, text=True, env=env, check=True,
+    )
+
+    mdp = MDP.render("nvt", {"nsteps": 10, "has_protein": False}, tmp_path)
     assert "-DPOSRES" in _define(mdp)
 
-    proc = subprocess.run(
-        [gmx, "grompp", "-f", mdp.name, "-c", "ions.gro", "-r", "ions.gro",
-         "-p", "topol.top", "-o", "nvt.tpr", "-maxwarn", "2"],
-        cwd=tmp_path, capture_output=True, text=True,
-        env={**os.environ, "GMX_MAXBACKUP": "-1"},
-    )
-    assert "option -r" not in proc.stderr, proc.stderr[-1500:]
-    assert proc.returncode == 0, proc.stderr[-2000:]
+    def grompp(*extra, out):
+        return subprocess.run(
+            [gmx, "grompp", "-f", mdp.name, "-c", "box.gro", *extra,
+             "-p", "topol.top", "-o", out, "-maxwarn", "2"],
+            cwd=tmp_path, capture_output=True, text=True, env=env,
+        )
+
+    with_r = grompp("-r", "box.gro", out="nvt.tpr")
+    assert with_r.returncode == 0, with_r.stderr[-2000:]
+    assert (tmp_path / "nvt.tpr").is_file()
+
+    # Without -r the same mdp must fail, or this test proves nothing.
+    without_r = grompp(out="no_r.tpr")
+    assert without_r.returncode != 0
+    assert "option -r" in without_r.stderr
 
 
 @pytest.mark.integration
