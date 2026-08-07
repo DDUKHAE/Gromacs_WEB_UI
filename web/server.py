@@ -16,7 +16,7 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from lib import xvg_parser
@@ -127,6 +127,11 @@ _MAX_WORKFLOW_FILE_BYTES: int = 100 * 1024 * 1024
 _MAX_LITERATURE_BYTES: int = 20 * 1024 * 1024  # 20 MB per local paper
 _LITERATURE_EXTENSIONS = {".pdf", ".txt", ".md"}
 _RUN_ID_RE = re.compile(r"^[a-z0-9][a-z0-9\-]*_\d{8}_\d{6}$")
+
+# The four plots a run is normally judged by, in the order the pipeline
+# produces the evidence: minimisation, then NVT, then NPT, then production.
+# Everything else follows alphabetically.
+_PRIMARY_PLOTS = ("energy_potential", "energy_temperature", "energy_pressure", "rmsd")
 
 
 def _workflow_paths(config: dict) -> set[Path]:
@@ -442,9 +447,19 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         for xvg_path in sorted(viz_dir.glob("*.xvg")):
             try:
                 parsed = xvg_parser.parse(xvg_path, max_points=300)
-                results.append({"name": xvg_path.stem, **parsed})
+                results.append({"name": xvg_path.stem,
+                                "label": xvg_parser.label_for(parsed, xvg_path.stem),
+                                "plot_kind": xvg_parser.plot_kind(xvg_path.stem, parsed),
+                                **parsed})
             except Exception:
                 pass
+
+        def order(item: dict) -> tuple:
+            name = item["name"]
+            rank = _PRIMARY_PLOTS.index(name) if name in _PRIMARY_PLOTS else len(_PRIMARY_PLOTS)
+            return (rank, name)
+
+        results.sort(key=order)
         return results
 
     @app.get("/api/runs/{run_id}/audit")
@@ -559,7 +574,8 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         return sorted(found)
 
     @app.get("/api/runs/{run_id}/file/{filename}")
-    def api_get_run_file(run_id: str, filename: str, hd: HarnessDir):
+    def api_get_mol_file(run_id: str, filename: str, hd: HarnessDir):
+        """Serve a coordinate/trajectory file for the 3D viewer (see _MOL_EXTENSIONS)."""
         if "/" in filename or "\\" in filename or ".." in filename:
             raise HTTPException(status_code=400, detail="invalid filename")
         ext = Path(filename).suffix.lower()
@@ -711,7 +727,6 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
             shutil.rmtree(ws, ignore_errors=True)
             raise HTTPException(status_code=409, detail=str(exc))
 
-        # Execute autonomous python runner pipeline for robust background simulation
         log_file = ws / "runner.log"
         log_fd = open(log_file, "w")
         proc = subprocess.Popen(
@@ -720,10 +735,30 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
             cwd=str(hd),
             stdout=log_fd,
             stderr=subprocess.STDOUT,
+            start_new_session=True,
         )
         log_fd.close()
         (ws / "runner.pid").write_text(str(proc.pid))
         return {"run_id": run_id}
+
+    def _kill_process_tree(pid: int) -> None:
+        """Recursively terminate/kill target process and all its child subprocesses (e.g. gmx mdrun)."""
+        if pid <= 0:
+            return
+        server_pid = os.getpid()
+        if pid == server_pid:
+            return
+        try:
+            server_pgid = os.getpgid(server_pid)
+        except Exception:
+            server_pgid = -1
+
+        try:
+            target_pgid = os.getpgid(pid)
+            if target_pgid > 0 and target_pgid != server_pgid and target_pgid != server_pid:
+                os.killpg(target_pgid, signal.SIGKILL)
+        except Exception:
+            pass
 
     @app.post("/api/runs/{run_id}/action")
     def api_action(run_id: str, body: dict, hd: HarnessDir) -> dict:
@@ -738,11 +773,11 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
             if pid_file.exists():
                 try:
                     pid = int(pid_file.read_text().strip())
-                    if pid <= 0:
-                        raise ValueError
-                    os.kill(pid, signal.SIGTERM)
+                    _kill_process_tree(pid)
                 except (ValueError, ProcessLookupError, OSError):
                     pass
+            # 130 is the abort marker derive_status() maps to "aborted".
+            (workspace / "runner.exit").write_text("130")
             return {"status": "aborted"}
         info = read_run(run_id, hd / "runs")
         if info is None:
@@ -760,11 +795,76 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
             cwd=str(hd),
             stdout=log_fd,
             stderr=subprocess.STDOUT,
+            start_new_session=True,
         )
         log_fd.close()
         (info.workspace / "runner.pid").write_text(str(proc.pid))
         (info.workspace / "runner.exit").unlink(missing_ok=True)
         return {"status": "started", "skill": next_skill}
+
+    @app.get("/api/runs/{run_id}/topology")
+    def api_get_run_topology(run_id: str, hd: HarnessDir) -> dict:
+        ws = _check_run_id(run_id, hd / "runs")
+        if not ws.is_dir():
+            raise HTTPException(status_code=404, detail="run not found")
+        top_candidates = list(ws.glob("**/*.top"))
+        if not top_candidates:
+            return {"exists": False, "molecules": [], "forcefield": "None", "water_model": "None"}
+        top_file = top_candidates[0]
+
+        content = top_file.read_text(encoding="utf-8", errors="replace")
+        molecules = []
+        in_molecules = False
+        forcefield = "Standard"
+        water_model = "Standard"
+
+        for line in content.splitlines():
+            line = line.strip()
+            if not line or line.startswith(";"):
+                continue
+            if line.startswith("#include"):
+                # Includes look like #include "charmm36.ff/tip3p.itp". The force
+                # field is the *directory* (charmm36); the file name only tells
+                # you which part of it is being pulled in. Matching on the file
+                # name makes every charmm36.ff/* line overwrite the answer, so
+                # the last include (ions.itp) would win.
+                ff_dir = re.search(r'([\w.+-]+)\.ff/', line)
+                if ff_dir:
+                    forcefield = ff_dir.group(1)
+                include_file = re.search(r'/([\w.+-]+)\.itp', line)
+                if include_file and re.match(r'(tip\w*|spc\w*|tips\dp)$',
+                                             include_file.group(1), re.IGNORECASE):
+                    water_model = include_file.group(1)
+            if line.startswith("[") and line.endswith("]"):
+                section = line.strip("[] ").lower()
+                in_molecules = (section == "molecules")
+                continue
+            if in_molecules:
+                parts = line.split()
+                if len(parts) >= 2:
+                    molecules.append({"name": parts[0], "count": parts[1]})
+
+        return {
+            "exists": True,
+            "molecules": molecules,
+            "forcefield": forcefield,
+            "water_model": water_model,
+            "filename": top_file.name
+        }
+
+    @app.get("/api/runs/{run_id}/plot/{filename:path}")
+    def api_get_run_plot(run_id: str, filename: str, hd: HarnessDir) -> FileResponse:
+        """Serve a full-size analysis plot PNG for the Results tab."""
+        ws = _check_run_id(run_id, hd / "runs")
+        if not ws.is_dir():
+            raise HTTPException(status_code=404, detail="run not found")
+        # `filename` is a :path param, so it can carry ".." — resolve and
+        # confirm the result is still inside the workspace before serving.
+        root = ws.resolve()
+        target = (root / "stage3_viz" / filename).resolve()
+        if root in target.parents and target.is_file():
+            return FileResponse(str(target))
+        raise HTTPException(status_code=404, detail="file not found")
 
     @app.delete("/api/runs/{run_id}", status_code=200)
     def api_delete_run(run_id: str, hd: HarnessDir) -> dict:
@@ -775,12 +875,7 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
         if pid_file.exists():
             try:
                 pid = int(pid_file.read_text().strip())
-                if pid > 0:
-                    os.kill(pid, signal.SIGTERM)
-                    try:
-                        time.sleep(0.3)
-                    except Exception:
-                        pass
+                _kill_process_tree(pid)
             except (ValueError, ProcessLookupError, OSError):
                 pass
         shutil.rmtree(workspace, ignore_errors=True)
@@ -827,7 +922,7 @@ def create_app(harness_dir: Path | None = None) -> FastAPI:
                 return
             with open(log_file, "rb") as f:
                 while True:
-                    data = f.read(4096)
+                    data = f.read(65536)
                     if data:
                         await websocket.send_bytes(data)
                         continue

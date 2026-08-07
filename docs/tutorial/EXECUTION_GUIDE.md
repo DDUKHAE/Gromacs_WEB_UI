@@ -34,4 +34,4 @@ The validation contract for an umbrella or free-energy run is `advanced_workflow
 {"advanced_workflow":{"free_energy":{"coordinate":"inputs/free_energy/met.gro","topology":"inputs/free_energy/topol.top","topology_includes":["inputs/free_energy/met.itp"],"couple_moltype":"MET","lambda_schedule":[{"id":"00","init_lambda_state":0,"coul_lambdas":[0.0,0.0],"vdw_lambdas":[0.0,1.0]}]}}}
 ```
 
-After every run, inspect `state.json.retry_history`, per-phase `.log` files, and `stage3_viz/report.md`. A failed GROMACS command should be retried only through the runner so its changed parameters are recorded.
+After every run, inspect `state.json.retry_history`, per-phase `.log` files, and the plots in `stage3_viz/`. A failed GROMACS command should be retried only through the runner so its changed parameters are recorded.

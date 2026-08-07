@@ -25,6 +25,63 @@ def _read_metadata(lines: list[str]) -> dict[str, str]:
     return meta
 
 
+# `gmx energy` writes this same title into every file it extracts, so density,
+# pressure, temperature and total energy all arrive claiming the same name.
+# The series legend is what actually identifies the quantity.
+_GENERIC_TITLES = {"gromacs energies", "gromacs energy"}
+
+# xmgrace markup: \S...\N is superscript, \s...\N subscript.
+_SUPERSCRIPT = {"2": "\u00b2", "3": "\u00b3", "1": "\u00b9"}
+
+
+def decode_xmgrace(text: str) -> str:
+    """Strip xmgrace formatting codes, keeping simple exponents readable."""
+    out = re.sub(r"\\S(-?\d)\\N", lambda m: _SUPERSCRIPT.get(m.group(1), "^" + m.group(1)), text or "")
+    out = re.sub(r"\\[SsNn]", "", out)
+    return out.replace("^2", "\u00b2").replace("^3", "\u00b3")
+
+
+def label_for(parsed: dict[str, Any], fallback: str = "") -> str:
+    """Human-readable name for a plotted quantity.
+
+    Used for both the PNG title and the web UI's card label so the two agree.
+    """
+    title = (parsed.get("title") or "").strip()
+    legends = parsed.get("column_labels") or []
+    legend = (legends[0] if legends else "").strip()
+
+    base = legend if title.lower() in _GENERIC_TITLES else (title or legend)
+    if not base:
+        base = fallback.replace("_", " ")
+    # Drop a trailing parenthetical: "Radius of gyration (total and around axes)".
+    base = re.sub(r"\s*\([^)]*\)\s*$", "", base).strip() or base
+
+    # Append the unit only when the y-axis label is a bare unit such as "(K)";
+    # a descriptive label like "RMSD (nm)" already reads fine on its own.
+    yaxis = decode_xmgrace(parsed.get("yaxis_label") or "").strip()
+    unit = yaxis if re.fullmatch(r"\(.+\)", yaxis) else ""
+    base = decode_xmgrace(base)
+    return f"{base} {unit}" if unit else base
+
+
+# How a file should be drawn. Both the PNG (illustrator.plot_xvg) and the web
+# UI's sparkline read this, so a card can never disagree with the plot it opens.
+#
+#   "scatter" — the two columns are a 2D projection, not a time series. A PCA
+#               file's x axis is "projection on eigenvector 1", so plotting
+#               column 1 against the row index draws a different chart entirely.
+#   "series"  — column 0 is the x axis and every later column is a curve.
+#               gyrate ships four (Rg, Rg_x, Rg_y, Rg_z); drawing only the
+#               first hides three quarters of the plot.
+#   "single"  — one column, plotted against its index.
+def plot_kind(stem: str, parsed: dict[str, Any]) -> str:
+    n = len(parsed.get("columns") or [])
+    name = (stem or "").lower()
+    if n >= 2 and ("pca" in name or "proj" in name):
+        return "scatter"
+    return "series" if n >= 2 else "single"
+
+
 def _read_legends(lines: list[str]) -> list[str]:
     """Return per-series legend labels ordered by series index."""
     legends: dict[int, str] = {}

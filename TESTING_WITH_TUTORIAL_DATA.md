@@ -44,7 +44,7 @@ python main.py
    ```
 3. **Run** 클릭
 4. 파이프라인 진행 상황을 터미널 및 UI 로그에서 확인
-5. 완료 후 결과 탭에서 RMSD, Rg 그래프 및 `report.md` 확인
+5. 완료 후 Results 탭에서 RMSD, Rg 그래프 확인 (그래프 클릭 시 전체 크기 PNG)
 
 **예상 소요 시간:** 환경 구성 ~5분 + 시뮬레이션 (1 ns 기준 GPU 환경 ~10분)
 
@@ -192,7 +192,7 @@ run_simulation(workspace_dir=ws, interactive=False)
 
 illustrate(workspace_dir=ws, animation={"enabled": False})
 
-print("결과:", ws / "stage3_viz" / "report.md")
+print("결과:", sorted((ws / "stage3_viz").glob("*.png")))
 ```
 
 ---
@@ -221,7 +221,7 @@ pytest tests/integration -v --tb=short
 | EM 수렴 | `stage2_md/em.log` | `Potential Energy` 음수 수렴 |
 | NVT 온도 | `stage2_md/nvt.xvg` | 목표 온도 ±5 K 이내 |
 | NPT 밀도 | `stage2_md/npt.xvg` | ~1000 kg/m³ (순수 물 기준) |
-| 보고서 | `stage3_viz/report.md` | 존재, RMSD/Rg 포함 |
+| 분석 플롯 | `stage3_viz/*.png` | 존재, RMSD/Rg 포함 |
 
 ---
 

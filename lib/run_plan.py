@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from lib import tutorial_registry as TR
+from lib import run_parameters as RPARAM
 from lib.system_config import load_config, validate_advanced_workflow
 
 
@@ -79,16 +80,8 @@ def compile_plan(workspace: Path, pdb_path: Path,
     if entry is None or manifest is None:
         raise RunPlanError(f"tutorial registry is incomplete: {tutorial_id}")
     defaults = manifest.get("defaults", {})
-    ff, box, ions, sim = (config.get("forcefield", {}), config.get("box", {}),
-                          config.get("ions", {}), config.get("simulation", {}))
-    locked = {
-        "forcefield": ff.get("name") or defaults.get("forcefield"),
-        "water_model": ff.get("water_model") or defaults.get("water_model"),
-        "box_type": box.get("type") or defaults.get("box_type"),
-        "box_distance_nm": box.get("edge_distance_nm", defaults.get("box_distance_nm")),
-        "ion_concentration_M": ions.get("concentration_M", 0.15),
-        "neutralize": ions.get("neutralize", True),
-    }
+    sim = config.get("simulation", {})
+    locked = RPARAM.locked_settings(defaults, config)
     expected = {"forcefield": defaults.get("forcefield"), "water_model": defaults.get("water_model"),
                 "box_type": defaults.get("box_type"), "box_distance_nm": defaults.get("box_distance_nm")}
     compatibility = []

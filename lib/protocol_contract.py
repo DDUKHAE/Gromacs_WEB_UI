@@ -15,6 +15,7 @@ from typing import Any
 
 from lib import tutorial_registry as TR
 from lib.system_config import load_config
+from lib import run_parameters as RPARAM
 from lib import run_plan as RP
 
 
@@ -144,19 +145,12 @@ def compile_contract(workspace: Path, tutorial_id: str,
     defaults = manifest.get("defaults", {})
     plan = RP.assert_valid(workspace)
     config = load_config(workspace) or {}
-    ff = config.get("forcefield", {})
-    box = config.get("box", {})
-    ions = config.get("ions", {})
     sim = config.get("simulation", {})
 
-    locked = (plan or {}).get("user_locked_settings") or {
-        "forcefield": ff.get("name", defaults.get("forcefield")),
-        "water_model": ff.get("water_model", defaults.get("water_model")),
-        "box_type": box.get("type", defaults.get("box_type")),
-        "box_distance_nm": box.get("edge_distance_nm", defaults.get("box_distance_nm")),
-        "ion_concentration_M": ions.get("concentration_M", 0.15),
-        "neutralize": ions.get("neutralize", True),
-    }
+    # The plan already resolved these; recompute identically only when a
+    # workspace predates run plans.
+    locked = ((plan or {}).get("user_locked_settings")
+              or RPARAM.locked_settings(defaults, config))
     # Only explicitly enabled expert controls are locked.  This prevents an
     # agent from inventing a parameter while leaving normal tutorial defaults
     # free to evolve with the versioned MDP templates.

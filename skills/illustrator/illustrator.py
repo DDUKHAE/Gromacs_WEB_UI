@@ -242,170 +242,6 @@ def _run_bar(workspace_dir: Path) -> dict[str, Any]:
     return {"dG_kJ_per_mol": dG, "log": str(out_log)}
 
 
-def _format_summary_value(val: Any) -> str:
-    if isinstance(val, dict):
-        if not val:
-            return "N/A"
-        parts = []
-        for k, v in val.items():
-            if isinstance(v, float):
-                parts.append(f"{k}: {v:.4g}")
-            elif isinstance(v, dict):
-                sub = ", ".join(f"{sk}:{sv:.4g}" if isinstance(sv, float) else f"{sk}:{sv}" for sk, sv in v.items())
-                parts.append(f"{k}: {{{sub}}}")
-            else:
-                parts.append(f"{k}: {v}")
-        return ", ".join(parts)
-    elif isinstance(val, float):
-        return f"{val:.4g}"
-    return str(val)
-
-
-def _generate_html_report(title: str, md_content: str, viz_dir: Path) -> Path:
-    html_path = viz_dir / "report.html"
-    lines = md_content.splitlines()
-    body_html = []
-    in_table = False
-    
-    for line in lines:
-        line_s = line.strip()
-        if not line_s:
-            if in_table:
-                body_html.append("</table></div>")
-                in_table = False
-            continue
-            
-        if line_s.startswith("# "):
-            body_html.append(f"<h1>{line_s[2:]}</h1>")
-        elif line_s.startswith("## "):
-            body_html.append(f"<h2>{line_s[3:]}</h2>")
-        elif line_s.startswith("### "):
-            body_html.append(f"<h3>{line_s[4:]}</h3>")
-        elif line_s.startswith("- "):
-            body_html.append(f"<li>{line_s[2:]}</li>")
-        elif line_s.startswith("![") and "](" in line_s:
-            alt = line_s[2:line_s.index("](")]
-            src = line_s[line_s.index("](") + 2:-1]
-            body_html.append(f'<div class="img-card"><h3>{alt}</h3><img src="{src}" alt="{alt}" loading="lazy" /></div>')
-        elif line_s.startswith("|"):
-            if not in_table:
-                body_html.append('<div class="table-container"><table>')
-                in_table = True
-            cells = [c.strip() for c in line_s.split("|")[1:-1]]
-            if cells and "---" in cells[0]:
-                continue
-            tag = "th" if body_html[-1] == '<div class="table-container"><table>' else "td"
-            row = "".join(f"<{tag}>{c}</{tag}>" for c in cells)
-            body_html.append(f"<tr>{row}</tr>")
-        else:
-            body_html.append(f"<p>{line_s}</p>")
-            
-    if in_table:
-        body_html.append("</table></div>")
-        
-    full_html = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{title}</title>
-<style>
-  :root {{
-    --bg-color: #0f172a;
-    --card-bg: #1e293b;
-    --text-main: #f8fafc;
-    --text-muted: #94a3b8;
-    --accent: #38bdf8;
-    --border: #334155;
-  }}
-  body {{
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background-color: var(--bg-color);
-    color: var(--text-main);
-    margin: 0;
-    padding: 2rem;
-    line-height: 1.6;
-  }}
-  .container {{
-    max-width: 1000px;
-    margin: 0 auto;
-  }}
-  h1 {{ font-size: 2.25rem; color: var(--accent); border-bottom: 2px solid var(--border); padding-bottom: 0.5rem; }}
-  h2 {{ font-size: 1.5rem; color: #e2e8f0; margin-top: 2rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }}
-  h3 {{ font-size: 1.1rem; color: var(--accent); margin: 0.5rem 0; }}
-  p, li {{ color: var(--text-muted); font-size: 1rem; }}
-  li {{ margin-bottom: 0.3rem; }}
-  .table-container {{ overflow-x: auto; margin: 1.5rem 0; }}
-  table {{ width: 100%; border-collapse: collapse; background: var(--card-bg); border-radius: 8px; overflow: hidden; }}
-  th, td {{ padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid var(--border); }}
-  th {{ background-color: #0f172a; color: var(--accent); font-weight: 600; }}
-  tr:hover {{ background-color: #26334d; }}
-  .img-card {{ background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 1rem; margin: 1.5rem 0; text-align: center; }}
-  .img-card img {{ max-width: 100%; height: auto; border-radius: 8px; margin-top: 0.5rem; }}
-</style>
-</head>
-<body>
-  <div class="container">
-    {"".join(body_html)}
-  </div>
-</body>
-</html>
-"""
-    html_path.write_text(full_html, encoding="utf-8")
-    return html_path
-
-
-def compose_report(workspace_dir: Path) -> Path:
-    ws = Path(workspace_dir)
-    viz = _viz_dir(ws)
-    s = state.read(ws)
-    step8 = s["step_outputs"].get("step_8", {})
-    analyses = step8.get("analysis_summaries", {})
-    advanced = step8.get("advanced_summaries", {})
-    variant = step8.get("variant_summary", {})
-    lines = []
-    lines.append(f"# Simulation Report")
-    lines.append("")
-    lines.append(f"- **Tutorial**: `{(s.get('tutorial') or {}).get('id')}`")
-    lines.append(f"- **Variant**: `{(s.get('tutorial') or {}).get('variant')}`")
-    lines.append("")
-    lines.append("## Core Analysis Summary")
-    lines.append("")
-    lines.append("| Metric | Mean | Std | Count |")
-    lines.append("|---|---|---|---|")
-    for name, st in sorted(analyses.items()):
-        if st.get("count", 0) == 0:
-            continue
-        lines.append(f"| {name.upper()} | {st.get('mean','-'):.4g} "
-                     f"| {st.get('std','-'):.4g} | {st.get('count')} |")
-    lines.append("")
-    lines.append("## Plots")
-    for png in sorted(viz.glob("*.png")):
-        lines.append(f"![{png.stem}]({png.name})")
-        lines.append("")
-    if advanced:
-        lines.append("## Advanced Analyses")
-        for k, v in advanced.items():
-            lines.append(f"- **{k}**: {_format_summary_value(v)}")
-        lines.append("")
-    if variant:
-        lines.append("## Tutorial-specific")
-        for k, v in variant.items():
-            lines.append(f"- **{k}**: {_format_summary_value(v)}")
-        lines.append("")
-    report_md = viz / "report.md"
-    md_content = "\n".join(lines)
-    report_md.write_text(md_content, encoding="utf-8")
-    
-    report_html = _generate_html_report("GROMACS Simulation Report", md_content, viz)
-    
-    s = state.read(ws)
-    s["step_outputs"].setdefault("step_8", {})["final_report_path"] = str(report_html)
-    s["step_outputs"]["step_8"]["final_report_md_path"] = str(report_md)
-    state.write(ws, s)
-    return report_html
-
-
 def select_renderer() -> str:
     if shutil.which("pymol"):
         return "pymol"
@@ -528,6 +364,24 @@ def plot_xvg(xvg_path: Path, output_path: Path, title: str = "") -> Path:
     fig, ax = plt.subplots(figsize=(7, 4))
     cols = data["columns"]
     legends = data.get("column_labels") or []
+
+    # PCA 2D Phase Space Projection (Scatter plot with Viridis time colormap)
+    if xvg_parser.plot_kind(xvg_path.stem, data) == "scatter":
+        pc1 = cols[0]
+        pc2 = cols[1]
+        time_steps = list(range(len(pc1)))
+        sc = ax.scatter(pc1, pc2, c=time_steps, cmap="viridis", s=18, alpha=0.75, edgecolors="none")
+        cbar = fig.colorbar(sc, ax=ax)
+        cbar.set_label("Frame Index / Time Step", fontsize=9)
+        ax.set_xlabel("Projection on PC1 (nm)")
+        ax.set_ylabel("Projection on PC2 (nm)")
+        ax.set_title(title or "PCA 2D Phase Space Projection (PC1 vs PC2)")
+        ax.grid(True, linewidth=0.5, alpha=0.3, linestyle="--")
+        fig.tight_layout()
+        fig.savefig(output_path, dpi=300, bbox_inches="tight")
+        plt.close(fig)
+        return output_path
+
     if len(cols) >= 2:
         x = cols[0]
         series = cols[1:]
@@ -558,7 +412,9 @@ def plot_all(workspace_dir: Path) -> list[Path]:
     for xvg in sorted(viz.glob("*.xvg")):
         png = viz / (xvg.stem + ".png")
         try:
-            plot_xvg(xvg, png, title=xvg.stem)
+            # Share the web UI's label so the plot and its card agree.
+            label = xvg_parser.label_for(xvg_parser.parse(xvg, max_points=1), xvg.stem)
+            plot_xvg(xvg, png, title=label)
             pngs.append(png)
         except Exception:
             continue
@@ -572,12 +428,12 @@ def illustrate(workspace_dir: Path,
         assert_ready(workspace_dir)
     except Exception:
         pass
-        run_core_analyses(workspace_dir)
-        run_advanced_analyses(workspace_dir)
-        run_variant_analyses(workspace_dir)
-        plot_all(workspace_dir)
-    except Exception:
-        pass
+    
+    for fn in (run_core_analyses, run_advanced_analyses, run_variant_analyses, plot_all):
+        try:
+            fn(workspace_dir)
+        except Exception:
+            pass
     viz = _viz_dir(workspace_dir)
     rendered: list[str] = []
     for f in (render_frames or [0, "middle", "last"]):
@@ -599,12 +455,15 @@ def illustrate(workspace_dir: Path,
             )
         except Exception:
             pass
-    report = compose_report(workspace_dir)
+    # The plots in stage3_viz are the deliverable; marking step 8 done is what
+    # tells the UI and derive_status() that the run finished.
     s = state.read(workspace_dir)
+    s["current_step"] = 8
     s["last_completed_stage"] = "viz"
+    s["step_outputs"].setdefault("step_8", {})
     state.write(workspace_dir, s)
     return {
-        "report_path": str(report),
+        "plots": sorted(str(p) for p in viz.glob("*.png")),
         "rendered_frames": rendered,
         "animation_path": str(anim_path) if anim_path else None,
     }

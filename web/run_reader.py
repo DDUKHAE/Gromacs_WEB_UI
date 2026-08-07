@@ -43,20 +43,28 @@ def production_finished(workspace: Path) -> bool:
         return False
 
 
+def _read_state(state_file: Path) -> dict:
+    try:
+        return json.loads(state_file.read_text()) if state_file.exists() else {}
+    except Exception:
+        return {}
+
+
 def derive_status(workspace: Path) -> str:
     pid_file = workspace / "runner.pid"
     exit_file = workspace / "runner.exit"
     state_file = workspace / "state.json"
 
-    # Keep the MD state distinct from a still-open (or stalled) LLM terminal.
-    # This prevents the UI from claiming "MD Running" after mdrun has ended.
+    # "viz" is the terminal stage, so a run that recorded it is finished no
+    # matter what runner.pid still says. Checked first because a restarted
+    # server can find that pid reused by an unrelated process, which would
+    # otherwise report a long-finished run as still running.
+    if _read_state(state_file).get("last_completed_stage") == "viz":
+        return "completed"
+
+    # MD is done but the analysis stage has not recorded itself yet.
     if production_finished(workspace):
-        try:
-            state = json.loads(state_file.read_text()) if state_file.exists() else {}
-        except Exception:
-            state = {}
-        if state.get("last_completed_stage") != "viz":
-            return "analysis_pending"
+        return "analysis_pending"
 
     if pid_file.exists():
         try:
@@ -77,18 +85,14 @@ def derive_status(workspace: Path) -> str:
         code = int(exit_file.read_text().strip())
     except ValueError:
         return "failed"
+    if code == 130:
+        return "aborted"  # written by the abort action, not a real failure
     if code != 0:
         return "failed"
 
-    if state_file.exists():
-        try:
-            s = json.loads(state_file.read_text())
-            if s.get("last_completed_stage") == "viz":
-                return "completed"
-            return "paused"
-        except Exception:
-            pass
-    return "completed"
+    # Exited cleanly, but the viz check above did not fire, so an earlier
+    # stage finished and the next one can still be resumed.
+    return "paused" if state_file.exists() else "completed"
 
 
 def read_run(run_id: str, runs_dir: Path) -> RunInfo | None:
@@ -116,6 +120,8 @@ def read_run(run_id: str, runs_dir: Path) -> RunInfo | None:
         except Exception:
             pass
 
+    status = derive_status(workspace)
+
     display_name: str | None = None
     meta_file = workspace / "meta.json"
     if meta_file.exists():
@@ -128,7 +134,7 @@ def read_run(run_id: str, runs_dir: Path) -> RunInfo | None:
     return RunInfo(
         run_id=run_id,
         workspace=workspace,
-        status=derive_status(workspace),
+        status=status,
         protein=protein,
         created_at=created_at,
         last_completed_stage=last_stage,

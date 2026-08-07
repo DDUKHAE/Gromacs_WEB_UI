@@ -128,6 +128,7 @@ def run_phase(workspace_dir: Path, phase: str,
     grompp_result = GW.run(
         grompp_args,
         cwd=out_dir,
+        progress_log=ws / "runner.log",
     )
     _record_grompp_warnings(ws, phase, grompp_result.stdout + grompp_result.stderr)
     if not grompp_result.ok:
@@ -135,12 +136,11 @@ def run_phase(workspace_dir: Path, phase: str,
             f"grompp ({phase}) failed [{grompp_result.classification}]: "
             f"{grompp_result.stderr[-500:]}"
         )
-    progress_log = out_dir / f"{phase}_progress.log"
     mdrun_result = GW.run(
-        ["mdrun", "-deffnm", phase, "-ntomp",
+        ["mdrun", "-v", "-deffnm", phase, "-ntomp",
          str(state.read(ws)["hardware"]["ntomp"])],
         cwd=out_dir,
-        progress_log=progress_log,
+        progress_log=ws / "runner.log",
     )
     if not mdrun_result.ok:
         raise RuntimeError(
@@ -536,12 +536,12 @@ def _run_local_phase(workspace_dir: Path, phase: str, out_dir: Path,
         args.extend(["-t", str(input_cpt)])
     if index:
         args.extend(["-n", str(index)])
-    grompp = GW.run(args, cwd=out_dir)
+    grompp = GW.run(args, cwd=out_dir, progress_log=ws / "runner.log")
     if not grompp.ok:
         raise RuntimeError(f"grompp ({phase}) failed [{grompp.classification}]: {grompp.stderr[-500:]}")
     ntomp = str((state.read(ws).get("hardware") or {}).get("ntomp", 1))
-    mdrun = GW.run(["mdrun", "-deffnm", phase, "-ntomp", ntomp], cwd=out_dir,
-                   progress_log=out_dir / f"{phase}_progress.log")
+    mdrun = GW.run(["mdrun", "-v", "-deffnm", phase, "-ntomp", ntomp], cwd=out_dir,
+                   progress_log=ws / "runner.log")
     if not mdrun.ok:
         raise RuntimeError(f"mdrun ({phase}) failed [{mdrun.classification}]: {mdrun.stderr[-500:]}")
     return out_dir / f"{phase}.gro"

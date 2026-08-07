@@ -121,6 +121,7 @@ def run(args: Sequence[str], cwd: Path,
     if env:
         merged_env.update(env)
     cmd = [gmx_bin] + list(args)
+    print(f"\n$ gmx {' '.join(args)}", flush=True)
     proc_input = "\n".join(interactive_inputs) + "\n" if interactive_inputs else None
 
     if progress_log is None:

@@ -179,8 +179,7 @@ Umbrella 산출은 `stage2_md/umbrella/window_<id>/`, Free-energy 산출은
   },
   "variant_summary": {...},
   "rmsd_stable": true,
-  "energy_converged": true,
-  "final_report_path": "stage3_viz/report.md"
+  "energy_converged": true
 }
 ```
 

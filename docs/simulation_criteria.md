@@ -60,7 +60,7 @@ phase별로 `gmx energy`가 추출한 평균값을 기준 판정한다.
 
 ## 3. Step 8 — Analysis 보고 기준
 
-`lib/validators.py`는 RMSD plateau 이외의 Step 8 metric에 대한 자동 판정을 제공하지 않는다. illustrator는 다음을 추출해 `report.md`에 게재한다.
+`lib/validators.py`는 RMSD plateau 이외의 Step 8 metric에 대한 자동 판정을 제공하지 않는다. illustrator는 다음을 추출해 `state.json`의 `step_8.analysis_summaries`에 기록한다.
 
 | 지표 | 권장 해석 |
 |---|---|

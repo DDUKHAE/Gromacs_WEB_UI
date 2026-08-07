@@ -84,8 +84,8 @@
 
 ### Step 8 — Analysis & Illustration
 - 입력: Step 7 trajectory + edr
-- 출력: `stage3_viz/{*.xvg, *.png, frame_*.png, trajectory.mp4, report.md, report.html}`
-- 상태: `step_outputs.step_8 = {analysis_summaries, advanced_summaries, variant_summary, final_report_path}`, `last_completed_stage = "viz"`
+- 출력: `stage3_viz/{*.xvg, *.png, frame_*.png, trajectory.mp4}`
+- 상태: `step_outputs.step_8 = {analysis_summaries, advanced_summaries, variant_summary}`, `last_completed_stage = "viz"`
 - 규칙: LLM은 원본 `.xvg`/`.xtc`를 직접 읽지 않는다. 모든 통계는 `lib/xvg_parser`로 downsample된 JSON으로 받는다.
 
 ## 4. 에러 처리 계약

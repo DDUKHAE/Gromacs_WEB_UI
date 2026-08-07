@@ -40,7 +40,7 @@ The `state.json` managed by `StateManager` must contain the following keys after
 | Step 3 | `solv_gro`, `n_solvent_molecules` | Solvation information |
 | Step 5 | `ion_gro`, `n_na`, `n_cl`, `net_charge` | Ionization results |
 | Step 7 | `em_gro`, `nvt_gro`, `npt_gro`, `production_gro` | Result structures for each step |
-| Step 8 | `analysis_summaries`, `final_report_path` | Final quality judgment |
+| Step 8 | `analysis_summaries` | Final quality judgment |
 
 ---
 

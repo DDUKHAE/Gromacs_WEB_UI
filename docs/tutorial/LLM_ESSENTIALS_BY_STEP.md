@@ -12,7 +12,7 @@
 | 5 | `gmx genion` | `ions.tpr`, `topol.top` | `ion_gro`, `n_na`, `n_cl`, `net_charge` | 중성화 검증 | charge neutralization fail |
 | 6 | `gmx grompp` (min/nvt/npt/md) | phase `.mdp`, previous `.gro`, `topol.top` | per-phase prep metadata | tpr 생성 + coupling 설정 확인 | temperature/pressure coupling issue |
 | 7 | `gmx mdrun` | `{phase}.tpr` | `em_gro`, `nvt_gro`, `npt_berendsen_gro`, `npt_gro`, `production_gro` | `SystemValidator` gate | unstable energy |
-| 8 | `gmx energy/rms/rmsf/gyrate` via analyzer | `md.xtc`, `md.edr`, `md.tpr` | `rmsd_stable`, `energy_converged`, `final_report_path` | `TrajectoryAnalyzer` 요약 통과 | analysis_not_converged |
+| 8 | `gmx energy/rms/rmsf/gyrate` via analyzer | `md.xtc`, `md.edr`, `md.tpr` | `rmsd_stable`, `energy_converged`, `analysis_summaries` | `TrajectoryAnalyzer` 요약 통과 | analysis_not_converged |
 
 ## Mandatory Execution Notes
 

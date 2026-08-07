@@ -40,11 +40,10 @@ Files under `workspace/stage3_viz/`:
 - `*.png` for every plot
 - `frame_*.png` for each rendered frame
 - `trajectory.mp4` (or `.gif`) for animation
-- `report.md`
 
 `workspace/state.json` is updated with
 `step_outputs.step_8.{analysis_summaries, advanced_summaries,
-variant_summary, final_report_path}` and `last_completed_stage="viz"`.
+variant_summary}` and `last_completed_stage="viz"`.
 
 ## Graceful Degradation
 

@@ -15,6 +15,8 @@ from lib import validators as V
 from lib.mdp_templates import base as MDP
 from lib import protocol_contract as PC
 from lib import run_plan as RP
+from lib import run_parameters as RPARAM
+from lib import berger_forcefield as BFF
 from lib.system_config import load_config
 from lib import ligand_params as LP
 from lib import llm_assist
@@ -117,7 +119,7 @@ def run_step1_topology(workspace_dir: Path, forcefield: str, water: str) -> None
         ["pdb2gmx", "-f", str(pdb),
          "-o", "processed.gro", "-p", "topol.top",
          "-water", water, "-ff", forcefield, "-ignh"],
-        cwd=out_dir,
+        cwd=out_dir, progress_log=ws / "runner.log",
     )
     if not result.ok:
         raise RuntimeError(f"pdb2gmx failed: {result.stderr[-500:]}")
@@ -194,7 +196,7 @@ def run_step2_box(workspace_dir: Path, box_type: str, distance_nm: float) -> Non
     result = GW.run(
         ["editconf", "-f", "processed.gro", "-o", "box.gro",
          "-c", "-d", str(distance_nm), "-bt", box_type],
-        cwd=out_dir,
+        cwd=out_dir, progress_log=ws / "runner.log",
     )
     if not result.ok:
         raise RuntimeError(f"editconf failed: {result.stderr[-500:]}")
@@ -218,7 +220,7 @@ def run_step3_solvate(workspace_dir: Path) -> None:
     result = GW.run(
         ["solvate", "-cp", "box.gro", "-cs", "spc216.gro",
          "-o", "solv.gro", "-p", "topol.top"],
-        cwd=out_dir,
+        cwd=out_dir, progress_log=ws / "runner.log",
     )
     if not result.ok:
         GW.restore_topology(top)
@@ -253,7 +255,7 @@ def run_step4_ions_prep(workspace_dir: Path) -> None:
     result = GW.run(
         ["grompp", "-f", "ions.mdp", "-c", "solv.gro",
          "-p", "topol.top", "-o", "ions.tpr", "-maxwarn", maxwarn],
-        cwd=out_dir,
+        cwd=out_dir, progress_log=ws / "runner.log",
     )
     if not result.ok:
         raise RuntimeError(f"grompp (ions) failed: {result.stderr[-500:]}")
@@ -286,7 +288,7 @@ def run_step5_genion(workspace_dir: Path, concentration: float = 0.15) -> None:
         ["genion", "-s", "ions.tpr", "-o", "ions.gro",
          "-p", "topol.top", "-pname", "NA", "-nname", "CL",
          "-neutral", "-conc", str(concentration)],
-        cwd=out_dir, interactive_inputs=["SOL"],
+        cwd=out_dir, interactive_inputs=["SOL"], progress_log=ws / "runner.log",
     )
     if not result.ok:
         GW.restore_topology(top)
@@ -373,6 +375,73 @@ def _strip_hetatm_water(pdb_path: Path) -> None:
         if not (l.startswith("HETATM") and l[17:20].strip() in _SOLVENT_AND_IONS)
     ]
     pdb_path.write_text("".join(cleaned))
+
+
+def prepare_berger_forcefield(workspace_dir: Path) -> str | None:
+    """Build gromos53a6_lipid.ff in-place when the run supplies Berger lipids.
+
+    The membrane tutorial's force field does not exist in GMXLIB: it is a copy
+    of gromos53a6.ff with lipid.itp's parameters merged in. Build it into
+    stage1_env, which is pdb2gmx's working directory and therefore searched
+    before GMXLIB.
+
+    Returns the force field name to use, or None when this run has no lipid.itp
+    and should fall back to the resolved parameter.
+    """
+    ws = Path(workspace_dir)
+    lipid_itp = next((p for p in (ws / "inputs" / "lipid.itp", ws / "lipid.itp") if p.is_file()), None)
+    if lipid_itp is None:
+        return None
+
+    gmxlib = GW.get_gmxlib()
+    if not gmxlib:
+        raise RuntimeError(
+            "lipid.itp was supplied but GMXLIB could not be located, so "
+            f"{BFF.FF_SOURCE}.ff cannot be extended. Install GROMACS or set GMXLIB."
+        )
+    stage = ws / "stage1_env"
+    summary = BFF.build(lipid_itp, Path(gmxlib), stage)
+
+    # Copy the moleculetype definition next to the force field so the
+    # `#include "dppc.itp"` the tutorial adds to topol.top resolves.
+    for extra in ("dppc.itp",):
+        src = next((p for p in (ws / "inputs" / extra, ws / extra) if p.is_file()), None)
+        if src is not None:
+            shutil.copy2(src, stage / extra)
+            summary.setdefault("copied_includes", []).append(extra)
+
+    s = state.read(ws)
+    s["step_outputs"].setdefault("step_0", {})["berger_forcefield"] = summary
+    state.write(ws, s)
+    return summary["forcefield"]
+
+
+def integrate_lipid_topology(workspace_dir: Path) -> None:
+    """Point topol.top at the lipid moleculetype definitions.
+
+    Runs after pdb2gmx because topol.top does not exist before it. pdb2gmx
+    already wrote the `#include` for gromos53a6_lipid.ff (it follows `-ff`), so
+    the only edit left from the tutorial is the dppc.itp include.
+    """
+    ws = Path(workspace_dir)
+    s = state.read(ws)
+    berger = (s["step_outputs"].get("step_0") or {}).get("berger_forcefield")
+    if not berger:
+        return
+    topol = ws / "stage1_env" / "topol.top"
+    if not topol.is_file():
+        return
+    redirected = BFF.ensure_forcefield_include(topol, berger["forcefield"])
+    added = [name for name in berger.get("copied_includes", [])
+             if BFF.add_include(topol, name)]
+    if added or redirected:
+        s = state.read(ws)
+        step1 = s["step_outputs"]["step_1"]
+        if added:
+            step1["lipid_includes"] = added
+        if redirected:
+            step1["forcefield_include_redirected"] = berger["forcefield"]
+        state.write(ws, s)
 
 
 def _available_forcefields() -> set[str]:
@@ -497,19 +566,29 @@ def build_environment(pdb_path: Path, prompt: str, workspace_dir: Path,
         state.write(workspace_dir, s)
         return s
     defaults = manifest.get("defaults", {})
-    # Contract values originate from either the selected tutorial or explicit
-    # System Builder fields.  Fall back to legacy preferences only for runs
-    # created before protocol contracts existed.
-    locked = (contract or {}).get("locked_parameters", {})
-    ff = _resolve_forcefield(user_prefs.get("forcefield") or locked.get("forcefield")
-                             or defaults.get("forcefield", "charmm36"))
-    water = user_prefs.get("water_model") or user_prefs.get("water") or locked.get("water_model") or defaults.get("water_model", "tip3p")
-    box_type = user_prefs.get("box_type") or locked.get("box_type") or defaults.get("box_type", "cubic")
-    box_d = locked.get("box_distance_nm") or defaults.get("box_distance_nm", 1.0)
-    run_step1_topology(workspace_dir, ff, water)
+    # Every build parameter is decided in one place, layering the tutorial's
+    # defaults, the System Builder submission, this run's locked contract and
+    # any legacy per-run preference. See lib/run_parameters.py for the rules.
+    params = RPARAM.resolve(
+        tutorial_defaults=defaults,
+        system_config=load_config(Path(workspace_dir)) or {},
+        locked=(contract or {}).get("locked_parameters", {}),
+        user_prefs=user_prefs,
+    )
+    # Record which layer supplied each value so a finished run can be audited
+    # without re-deriving the precedence by hand.
+    s = state.read(workspace_dir)
+    s["step_outputs"].setdefault("step_0", {})["resolved_parameters"] = {
+        "values": params.values, "sources": params.provenance,
+    }
+    state.write(workspace_dir, s)
+
+    ff = prepare_berger_forcefield(workspace_dir) or _resolve_forcefield(params.values["forcefield"])
+    run_step1_topology(workspace_dir, ff, params.values["water_model"])
+    integrate_lipid_topology(workspace_dir)
     integrate_cgenff_ligand(workspace_dir)
-    run_step2_box(workspace_dir, box_type, box_d)
+    run_step2_box(workspace_dir, params.values["box_type"], params.values["box_distance_nm"])
     run_step3_solvate(workspace_dir)
     run_step4_ions_prep(workspace_dir)
-    run_step5_genion(workspace_dir, concentration=locked.get("ion_concentration_M", 0.15))
+    run_step5_genion(workspace_dir, concentration=params.values["ion_concentration_M"])
     return state.read(workspace_dir)

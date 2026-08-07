@@ -139,7 +139,7 @@ result = illustrate(
     render_frames=[0, "last"],
     animation={"enabled": False},  # PyMOL/ffmpeg 없으면 비활성
 )
-# result == {"report_path": ".../report.md", ...}
+# result == {"plots": [".../rmsd.png", ...], ...}
 ```
 
 ## 4. 결정 트리

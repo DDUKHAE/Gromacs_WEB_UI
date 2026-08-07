@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gromacs Harness</title>
+<!-- Inline SVG favicon: no extra file, no /favicon.ico round trip. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Crect%20width%3D%2232%22%20height%3D%2232%22%20rx%3D%227%22%20fill%3D%22%230b0f24%22%2F%3E%3Cg%20stroke%3D%22%236366f1%22%20stroke-width%3D%222.2%22%20stroke-linecap%3D%22round%22%3E%3Cpath%20d%3D%22M16%2016%20L8%209%22%2F%3E%3Cpath%20d%3D%22M16%2016%20L24%2010%22%2F%3E%3Cpath%20d%3D%22M16%2016%20L15%2025%22%2F%3E%3C%2Fg%3E%3Ccircle%20cx%3D%2216%22%20cy%3D%2216%22%20r%3D%224.2%22%20fill%3D%22%2306b6d4%22%2F%3E%3Ccircle%20cx%3D%228%22%20cy%3D%229%22%20r%3D%222.8%22%20fill%3D%22%236366f1%22%2F%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%2210%22%20r%3D%222.8%22%20fill%3D%22%236366f1%22%2F%3E%3Ccircle%20cx%3D%2215%22%20cy%3D%2225%22%20r%3D%222.8%22%20fill%3D%22%236366f1%22%2F%3E%3C%2Fsvg%3E">
 <!-- Google Fonts & Iconography -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -596,6 +598,195 @@ body.light-theme .step-circle {
 .step-node.done .step-label { color: var(--accent-green); }
 .step-node.active .step-label { color: var(--accent-cyan); font-weight: 700; text-shadow: 0 0 8px rgba(6, 182, 212, 0.25); }
 
+/* ── Run status block: composition line + instrument rail ────────────────
+   Replaces the old topology/checkpoint tile cards. Readouts sit in one
+   row separated by hairlines so the numbers align and read as a cluster,
+   not as eight competing boxes. */
+.run-status {
+  margin: 14px 0 0;
+  padding: 12px 16px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.run-composition {
+  font-family: 'Fira Code', monospace;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  letter-spacing: -0.01em;
+  word-break: break-word;
+}
+.run-composition .sep { color: var(--text-muted); margin: 0 6px; }
+.run-composition strong { color: var(--text-primary); font-weight: 600; }
+
+.metric-rail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  margin-top: 12px;
+  padding-top: 11px;
+  border-top: 1px solid var(--border-color);
+}
+
+.metric {
+  flex: 1 1 auto;
+  min-width: 104px;
+  padding: 0 14px;
+  border-left: 1px solid var(--border-color);
+}
+.metric:first-child { padding-left: 0; border-left: none; }
+
+.metric-label {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.metric-value {
+  display: block;
+  margin-top: 3px;
+  font-family: 'Fira Code', monospace;
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.metric-value.is-idle { color: var(--text-muted); font-weight: 400; font-size: 12px; }
+.metric-value.is-good { color: var(--accent-green); }
+.metric-value.is-warn { color: var(--accent-yellow); }
+.metric-value.is-bad  { color: var(--accent-red); }
+.metric-value.is-live { color: var(--accent-cyan); }
+.metric-unit { font-size: 10px; font-weight: 400; color: var(--text-muted); margin-left: 3px; }
+
+/* ── Run tabs ───────────────────────────────────────────────────────────
+   Log / Results / Audit are three different questions asked at three
+   different times, so only one is mounted at a time. */
+.run-tabbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 16px 0 0;
+  border-bottom: 1px solid var(--border-color);
+  flex-wrap: wrap;
+}
+
+.run-tabs { display: flex; gap: 2px; }
+
+.run-tab {
+  appearance: none;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 9px 14px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.run-tab:hover { color: var(--text-secondary); }
+.run-tab[aria-selected="true"] {
+  color: var(--accent-cyan);
+  border-bottom-color: var(--accent-cyan);
+}
+.run-tab:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: -2px; }
+
+/* Clean/Raw fidelity switch — same bytes, two readabilities */
+.fidelity {
+  display: flex;
+  gap: 1px;
+  margin-bottom: 6px;
+  padding: 2px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+}
+.fidelity button {
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 3px 12px;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.fidelity button:hover { color: var(--text-secondary); }
+.fidelity button[aria-pressed="true"] {
+  background: rgba(var(--accent-cyan-rgb), 0.18);
+  color: var(--accent-cyan);
+}
+.fidelity button:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 1px; }
+
+.run-panel { padding-top: 16px; }
+.run-panel[hidden] { display: none; }
+
+/* Executed-command list (Commands view of the log pane) */
+.cmd-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 14px;
+  font-family: 'Fira Code', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  border-left: 2px solid transparent;
+  word-break: break-word;
+}
+.cmd-row:nth-child(odd) { background: rgba(255, 255, 255, 0.015); }
+.cmd-row.failed {
+  border-left-color: var(--accent-red);
+  background: rgba(var(--accent-red-rgb), 0.07);
+}
+
+.cmd-num {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
+
+.cmd-text { flex: 1; }
+.cmd-name { color: var(--accent-cyan); font-weight: 600; }
+
+.cmd-status {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent-red);
+}
+
+.panel-empty {
+  padding: 40px 16px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+@media (max-width: 720px) {
+  .metric { flex-basis: 50%; padding-left: 0; border-left: none; margin-top: 10px; }
+  .run-tab { padding: 9px 10px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .run-tab, .fidelity button { transition: none; }
+}
+
 
 /* Connector lines - ANIMATION REMOVED & Gray for uncompleted/pending parts */
 .step-connector {
@@ -653,39 +844,6 @@ body.light-theme .btn-toggle {
 }
 
 /* Live stage-by-stage 3D viewport - replaces the old terminal/chat panel */
-#run-3d-panel {
-  height: 450px;
-  flex: none; /* Fixed height so charts won't get cut off */
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: #04060f;
-  border-radius: var(--radius-md);
-  transition: background 0.3s;
-  position: relative;
-}
-
-body.light-theme #run-3d-panel {
-  background: #f9fafb;
-}
-
-#run-3d-viewport {
-  flex: 1;
-  width: 100%;
-  height: 100%;
-}
-
-#run-3d-placeholder {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  color: var(--text-muted);
-  pointer-events: none;
-}
-
 /* Actions - Relocated to top header, compact styling */
 .header-actions {
   display: flex;
@@ -783,12 +941,24 @@ body.light-theme .btn:disabled {
   margin-top: 10px;
 }
 
+/* Rendered as a <button> so the plot opens on click and on Enter/Space. */
 .chart-card {
+  appearance: none;
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
   background: rgba(6, 8, 20, 0.55);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   padding: 12px;
-  transition: all 0.25s;
+  transition: border-color 0.25s, background 0.25s;
+}
+
+.chart-card:focus-visible {
+  outline: 2px solid var(--accent-cyan);
+  outline-offset: 2px;
 }
 
 body.light-theme .chart-card {
@@ -796,7 +966,12 @@ body.light-theme .chart-card {
 }
 
 .chart-card:hover {
-  border-color: rgba(99, 102, 241, 0.2);
+  border-color: rgba(var(--accent-cyan-rgb), 0.45);
+  background: rgba(6, 8, 20, 0.75);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chart-card { transition: none; }
 }
 
 .chart-card-title {
@@ -2089,68 +2264,86 @@ body.light-theme #run-search {
           </div>
         </div>
 
-        <!-- Live 3D Viewport Header -->
-        <div class="terminal-header-outer" style="display: flex; align-items: center; justify-content: space-between; margin: 16px 0 8px 4px; flex-shrink: 0;">
-          <span style="font-size: 11px; color: var(--text-primary); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;">LIVE 3D VIEWPORT</span>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <div id="md-progress-badge" style="display:none; align-items:center; gap:6px; font-size:11px; font-weight:600; color:var(--accent-cyan); padding:4px 10px; border:1px solid rgba(6,182,212,0.3); border-radius:20px; background:rgba(6,182,212,0.08);">
-              <span style="width:7px;height:7px;border-radius:50%;background:var(--accent-cyan);animation:pulse-dot 1.2s ease-in-out infinite;display:inline-block;"></span>
-              <span id="md-progress-text">MD Running...</span>
+        <div id="failure-summary" role="alert" style="display:none;margin:14px 0 0;padding:12px;border:1px solid var(--accent-red);border-radius:var(--radius-sm);color:var(--text-primary);background:rgba(239,68,68,.08);"></div>
+
+        <!-- System composition + live instrument readouts.
+             Composition is static (what was built); the rail is live (how it's
+             behaving). Both answer "what am I looking at" before any output. -->
+        <div class="run-status">
+          <div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+            <div id="run-composition" class="run-composition">Reading topology…</div>
+            <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+              <div id="md-progress-badge" style="display:none; align-items:center; gap:6px; font-size:11px; font-weight:600; color:var(--accent-cyan); padding:4px 10px; border:1px solid rgba(6,182,212,0.3); border-radius:20px; background:rgba(6,182,212,0.08);">
+                <span style="width:7px;height:7px;border-radius:50%;background:var(--accent-cyan);animation:pulse-dot 1.2s ease-in-out infinite;display:inline-block;"></span>
+                <span id="md-progress-text">MD Running...</span>
+              </div>
+              <span id="term-status" class="run-item-badge badge-running" style="margin-top:0;">running</span>
             </div>
-            <span id="run-3d-stage-label" style="font-size:10px;color:var(--text-muted);"></span>
-            <span id="term-status" class="run-item-badge badge-running" style="margin-top:0;">running</span>
           </div>
-        </div>
 
-        <div id="failure-summary" role="alert" style="display:none;margin:0 0 12px;padding:12px;border:1px solid var(--accent-red);border-radius:var(--radius-sm);color:var(--text-primary);background:rgba(239,68,68,.08);"></div>
-
-        <!-- Live stage-by-stage 3D structure viewport (replaces the old terminal/chat panel) -->
-        <div id="run-3d-panel" class="card" role="region" aria-label="Live 3D structure viewport">
-          <div id="run-3d-viewport"></div>
-          <div id="run-3d-placeholder">Waiting for the first structure file...</div>
-        </div>
-
-        <!-- Results Gallery -->
-        <div id="gallery-panel" class="card">
-          <div class="card-header">
-            <span style="font-size: 11px; color: var(--text-primary); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;">ANALYSIS RESULTS</span>
-          </div>
-          <div id="gallery-grid"></div>
-        </div>
-
-        <!-- Tutorial Audit Panel -->
-        <div id="audit-panel" class="card" style="display:none; margin-top:12px;">
-          <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 16px 0; cursor:pointer;" onclick="toggleAuditPanel()">
-            <span style="font-size:13px; font-weight:700; color:var(--text-primary);">
-              <span id="audit-badge" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--accent-green); margin-right:8px; vertical-align:middle;"></span>
-              Tutorial Audit
-            </span>
-            <span id="audit-chevron" style="font-size:11px; color:var(--text-muted);">▼</span>
-          </div>
-          <div id="audit-body" style="padding:12px 16px 16px; display:none;">
-            <div id="audit-content" style="font-size:12px;"></div>
-          </div>
-        </div>
-
-        <div id="literature-panel" class="card" style="display:none; margin-top:12px;">
-          <div style="padding:12px 16px; border-bottom:1px solid var(--border-color); font-weight:700;">Literature evidence</div>
-          <div style="padding:12px 16px;">
-            <div style="font-size:12px;color:var(--text-secondary);margin-bottom:9px;">Search public Europe PMC abstracts or upload permitted PDF/TXT/Markdown papers. PaperQA reviews this run-local corpus; evidence cannot change the protocol automatically.</div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-              <input id="literature-search-query" type="text" maxlength="500" placeholder="e.g. CHARMM36 zinc coordination GROMACS" style="flex:1;min-width:220px;">
-              <button type="button" class="btn-secondary" onclick="searchLiterature()">Search public evidence</button>
+          <div class="metric-rail">
+            <div class="metric">
+              <span class="metric-label">Time remaining</span>
+              <span id="metric-eta" class="metric-value is-idle">—</span>
             </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-              <input id="literature-file" type="file" accept=".pdf,.txt,.md,text/plain,application/pdf" style="font-size:12px;max-width:280px;">
-              <button type="button" class="btn-secondary" onclick="uploadLiterature()">Upload paper</button>
+            <div class="metric">
+              <span class="metric-label">Performance</span>
+              <span id="metric-perf" class="metric-value is-idle">—</span>
             </div>
-            <div style="display:flex;gap:8px;margin-top:10px;">
-              <input id="literature-question" type="text" maxlength="2000" placeholder="Question about the uploaded papers" style="flex:1;min-width:160px;">
-              <button type="button" class="btn-secondary" onclick="queryLiterature()">Ask</button>
+            <div class="metric">
+              <span class="metric-label" title="Energy minimisation converges below 1000 kJ/mol/nm">Max force</span>
+              <span id="metric-fmax" class="metric-value is-idle">—</span>
             </div>
-            <pre id="literature-result" style="display:none;white-space:pre-wrap;max-height:260px;overflow:auto;margin:10px 0 0;padding:10px;background:var(--bg-secondary);border-radius:6px;font:12px/1.45 monospace;"></pre>
+            <div class="metric">
+              <span class="metric-label" title="grompp warnings and LINCS constraint warnings">Warnings</span>
+              <span id="metric-warn" class="metric-value is-idle">—</span>
+            </div>
           </div>
         </div>
+
+        <div class="run-tabbar">
+          <div class="run-tabs" role="tablist" aria-label="Run output">
+            <button type="button" class="run-tab" id="run-tab-log" role="tab" aria-selected="true"
+                    aria-controls="run-pane-log" onclick="switchRunTab('log')">Log</button>
+            <button type="button" class="run-tab" id="run-tab-results" role="tab" aria-selected="false"
+                    aria-controls="run-pane-results" onclick="switchRunTab('results')">Results</button>
+            <button type="button" class="run-tab" id="run-tab-audit" role="tab" aria-selected="false"
+                    aria-controls="run-pane-audit" onclick="switchRunTab('audit')">Audit</button>
+          </div>
+          <div id="log-fidelity" class="fidelity" role="group" aria-label="Log view">
+            <button type="button" id="fidelity-clean" aria-pressed="true" onclick="setLogFidelity('clean')">Output</button>
+            <button type="button" id="fidelity-commands" aria-pressed="false" onclick="setLogFidelity('commands')">Commands</button>
+          </div>
+        </div>
+
+        <!-- Log: one pane, two fidelities of the same bytes -->
+        <div class="run-panel" id="run-pane-log" role="tabpanel" aria-labelledby="run-tab-log">
+          <pre id="clean-log-output" style="width:100%; height:min(58vh, 620px); overflow:auto; margin:0; padding:14px; font-family:'Fira Code', monospace; font-size:12px; line-height:1.55; color:var(--text-primary); background:var(--bg-base); border-radius:var(--radius-md); border:1px solid var(--border-color); white-space:pre-wrap; word-break:break-all;"></pre>
+          <div id="command-list" style="display:none; width:100%; height:min(58vh, 620px); overflow:auto; padding:6px 0; background:var(--bg-base); border-radius:var(--radius-md); border:1px solid var(--border-color);"></div>
+        </div>
+
+        <!-- Results: the analysis plots. Click one for the full-size PNG. -->
+        <div class="run-panel" id="run-pane-results" role="tabpanel" aria-labelledby="run-tab-results" hidden>
+          <div id="gallery-panel">
+            <div id="gallery-grid"></div>
+          </div>
+          <div id="results-empty" class="panel-empty">Plots appear here once the analysis stage finishes.</div>
+        </div>
+
+        <!-- Audit: tutorial contract compliance -->
+        <div class="run-panel" id="run-pane-audit" role="tabpanel" aria-labelledby="run-tab-audit" hidden>
+          <div id="audit-panel">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+              <span id="audit-badge" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--accent-green);"></span>
+              <span style="font-size:12px; font-weight:600; color:var(--text-primary);">Tutorial contract</span>
+            </div>
+            <div id="audit-body">
+              <div id="audit-content" style="font-size:12px;"></div>
+            </div>
+          </div>
+          <div id="audit-empty" class="panel-empty">No audit recorded for this run.</div>
+        </div>
+
       </div>
 
       <!-- [새 시뮬레이션 생성] System Builder 마법사 탭(PDB 업로드, FF 지정, 박스 설정, 이온 등) 설정 폼 영역 -->
@@ -2325,7 +2518,7 @@ body.light-theme #run-search {
                   </div>
                 </div>
                 <div class="ff-select-col">
-                  <select name="box_type" id="box-type-select" onchange="update3dBoxPreview()">
+                  <select name="box_type" id="box-type-select">
                     <option value="dodecahedron">Dodecahedron (recommended)</option>
                     <option value="cubic">Cubic</option>
                     <option value="octahedron">Octahedron</option>
@@ -2343,7 +2536,7 @@ body.light-theme #run-search {
                   </div>
                 </div>
                 <div class="ff-select-col">
-                  <input type="number" id="edge-distance" name="edge_distance_nm" value="1.0" min="0.5" max="5.0" step="0.1" onchange="update3dBoxPreview()" oninput="update3dBoxPreview()">
+                  <input type="number" id="edge-distance" name="edge_distance_nm" value="1.0" min="0.5" max="5.0" step="0.1">
                 </div>
               </div>
             </div>
@@ -3211,26 +3404,19 @@ body.light-theme #run-search {
         </div>
       </div>
 
-      <!-- 🧊 [3D Minimap Viewport] UI 오른쪽 상단 미니맵 연동 위젯 -->
-      <div id="ngl-minimap-widget" style="position:fixed;top:70px;right:24px;z-index:1040;width:380px;height:320px;min-width:280px;min-height:220px;max-width:800px;max-height:600px;resize:both;overflow:hidden;background:var(--bg-surface,#0b0f24);backdrop-filter:blur(12px);border:1px solid var(--border-color,rgba(255,255,255,0.12));border-radius:12px;box-shadow:var(--shadow-lg,0 12px 32px rgba(0,0,0,0.4));display:flex;flex-direction:column;transition:background 0.3s ease, border-color 0.3s ease;">
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--bg-card-header,rgba(255,255,255,0.03));border-bottom:1px solid var(--border-color,rgba(255,255,255,0.08));flex-shrink:0;">
-          <div style="display:flex;align-items:center;gap:6px;">
-            <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#10b981;box-shadow:0 0 8px #10b981;"></span>
-            <span style="font-size:12px;font-weight:700;color:var(--text-primary);letter-spacing:0.5px;">3D LIVE MINIMAP</span>
+      <!-- Full-size plot viewer: opened by clicking a card in the Results tab -->
+      <div id="plot-modal" style="display:none; position:fixed; inset:0; background:rgba(6,8,19,0.85); backdrop-filter:blur(6px); z-index:1070; align-items:center; justify-content:center; padding:24px;"
+           onclick="if (event.target === this) closePlotImage();">
+        <div style="background:var(--bg-surface); border:1px solid var(--border-color); border-radius:var(--radius-md); max-width:min(1100px, 95vw); max-height:92vh; display:flex; flex-direction:column; overflow:hidden;">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px; border-bottom:1px solid var(--border-color);">
+            <span id="plot-modal-caption" style="font-size:13px; font-weight:600; color:var(--text-primary);"></span>
+            <div style="display:flex; align-items:center; gap:10px; flex-shrink:0;">
+              <a id="plot-modal-link" href="#" target="_blank" rel="noopener" class="btn-secondary" style="padding:4px 12px; font-size:11px; text-decoration:none; border:1px solid var(--border-color); border-radius:var(--radius-sm);">Open in new tab</a>
+              <button type="button" onclick="closePlotImage()" aria-label="Close plot" style="background:none; border:none; color:var(--text-muted); font-size:18px; cursor:pointer; line-height:1;">✕</button>
+            </div>
           </div>
-          <div style="display:flex;gap:6px;align-items:center;">
-            <button type="button" onclick="toggleMinimapExpand()" title="Expand 3D Modal" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:13px;padding:2px 4px;">⛶</button>
-            <button type="button" onclick="toggleMinimapCollapse()" id="minimap-toggle-btn" title="Minimize Minimap" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:12px;padding:2px 4px;">−</button>
-          </div>
-        </div>
-        <div id="minimap-body" style="position:relative;width:100%;flex:1;min-height:0;background:var(--bg-main,#04060f);">
-          <div id="ngl-minimap-viewport" style="width:100%;height:100%;"></div>
-          <div id="ngl-minimap-placeholder" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:11px;color:var(--text-muted,rgba(255,255,255,0.4));pointer-events:none;padding:12px;text-align:center;">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:6px;opacity:0.6;"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
-            Upload PDB to activate 3D Live View
-          </div>
-          <div id="ngl-minimap-label" style="position:absolute;bottom:6px;left:8px;font-size:10px;color:var(--text-primary,#fff);background:var(--bg-card-header,rgba(0,0,0,0.6));padding:2px 6px;border-radius:4px;backdrop-filter:blur(4px);pointer-events:none;border:1px solid var(--border-color);">
-            Ready
+          <div style="overflow:auto; background:#ffffff; padding:8px;">
+            <img id="plot-modal-img" alt="" style="display:block; max-width:100%; height:auto; margin:0 auto;">
           </div>
         </div>
       </div>
@@ -3437,61 +3623,223 @@ function onTrajFrameChange(val) {
   traj.trajectory.setFrame(frame);
 }
 
-// ── Live stage-by-stage 3D viewport (run-view panel, replaces terminal/chat) ──
-let _run3dStage = null;
-let _run3dComp = null;
-let _run3dLoadedFile = null;
+// ── Executed gmx commands ────────────────────────────────────────────────
+// lib/gmx_wrapper.run() echoes every invocation as "$ gmx <args>" before it
+// runs, so the log itself is the record of what was executed.
+const GMX_CMD_RE = /^\$ gmx (.+)$/gm;
+const CMD_FAILED_RE = /Fatal error|Error in user input|Software inconsistency/;
 
-// Most-advanced-phase first: whichever of these exists in the run's mol_files
-// is the current best structure to show.
-const STAGE_STRUCT_PRIORITY = [
-  'production.gro', 'npt_pr.gro', 'npt.gro', 'nvt.gro', 'em.gro',
-  'ions.gro', 'solv.gro', 'box.gro', 'processed.gro',
-];
-
-function initRun3dStage() {
-  const viewport = document.getElementById('run-3d-viewport');
-  if (!viewport || _run3dStage) return;
-  const isDark = !document.body.classList.contains('light-theme');
-  _run3dStage = new NGL.Stage(viewport, { backgroundColor: isDark ? '#0b0f24' : '#f0f2f5' });
-  window.addEventListener('resize', () => { if (_run3dStage) _run3dStage.handleResize(); });
+// Arguments carry full absolute paths, which are unreadable in a list and
+// identical across every entry. The basename is the part that differs.
+function shortenArgs(args) {
+  return args.split(/\s+/)
+    .map(t => (t.includes('/') && !t.startsWith('-')) ? t.split('/').pop() : t)
+    .join(' ');
 }
 
-async function refreshRun3dStructure(runId) {
-  if (!runId || runId === 'virtual_sandbox') return;
-  try {
-    const resp = await fetch('/api/runs/' + runId + '/mol_files');
-    if (!resp.ok || currentRunId !== runId) return;
-    const files = await resp.json();
-    const structName = STAGE_STRUCT_PRIORITY.find(name => files.includes(name));
-    const label = document.getElementById('run-3d-stage-label');
-    if (!structName || structName === _run3dLoadedFile) return;
+function parseGmxCommands(log) {
+  const found = [];
+  GMX_CMD_RE.lastIndex = 0;
+  let m;
+  while ((m = GMX_CMD_RE.exec(log)) !== null) {
+    if (found.length) found[found.length - 1].end = m.index;
+    found.push({ args: m[1].trim(), bodyStart: GMX_CMD_RE.lastIndex, end: log.length });
+  }
+  return found.map(c => {
+    const body = log.slice(c.bodyStart, c.end);
+    const [sub, ...rest] = c.args.split(/\s+/);
+    return { sub, rest: shortenArgs(rest.join(' ')), failed: CMD_FAILED_RE.test(body) };
+  });
+}
 
-    initRun3dStage();
-    const fileResp = await fetch('/api/runs/' + runId + '/file/' + encodeURIComponent(structName));
-    if (!fileResp.ok || currentRunId !== runId) return;
-    const buf = await fileResp.arrayBuffer();
-    const blob = new Blob([buf]);
-    const url = URL.createObjectURL(blob);
-    try {
-      _run3dComp = await _run3dStage.loadFile(url, { ext: 'gro' });
-      _run3dComp.addRepresentation('cartoon', { colorScheme: 'residueindex' });
-      _run3dComp.addRepresentation('ball+stick', { sele: 'hetero or ion or SOL', opacity: 0.7 });
-      _run3dStage.autoView();
-      _run3dLoadedFile = structName;
-      updateMinimapStructure(url, 'gro', structName);
-      const placeholder = document.getElementById('run-3d-placeholder');
-      if (placeholder) placeholder.style.display = 'none';
-      if (label) label.textContent = `${structName} (Live 3D View)`;
-      setTimeout(() => { if (_run3dStage) _run3dStage.handleResize(); }, 150);
-    } finally {
-      URL.revokeObjectURL(url);
+function renderCommandList() {
+  const el = document.getElementById('command-list');
+  if (!el) return;
+  const cmds = parseGmxCommands(_rawFullLog);
+  el.innerHTML = '';
+  if (!cmds.length) {
+    el.innerHTML = '<div class="panel-empty">No commands recorded yet.</div>';
+    return;
+  }
+  cmds.forEach((c, i) => {
+    const row = document.createElement('div');
+    row.className = 'cmd-row' + (c.failed ? ' failed' : '');
+
+    const n = document.createElement('span');
+    n.className = 'cmd-num';
+    n.textContent = String(i + 1).padStart(2, '0');
+
+    const text = document.createElement('span');
+    text.className = 'cmd-text';
+    const name = document.createElement('span');
+    name.className = 'cmd-name';
+    name.textContent = 'gmx ' + c.sub;
+    text.appendChild(name);
+    if (c.rest) text.appendChild(document.createTextNode(' ' + c.rest));
+
+    row.appendChild(n);
+    row.appendChild(text);
+    if (c.failed) {
+      const bad = document.createElement('span');
+      bad.className = 'cmd-status';
+      bad.textContent = 'failed';
+      row.appendChild(bad);
+    }
+    el.appendChild(row);
+  });
+}
+
+function calcRemainingFromFinishTime(finishStr) {
+  if (!finishStr) return finishStr;
+  try {
+    const now = new Date();
+    const finishDate = new Date(finishStr);
+
+    if (!isNaN(finishDate.getTime())) {
+      const diffMs = finishDate - now;
+      if (diffMs > 0) {
+        const totalSecs = Math.floor(diffMs / 1000);
+        const hrs = Math.floor(totalSecs / 3600);
+        const mins = Math.floor((totalSecs % 3600) / 60);
+        const secs = totalSecs % 60;
+        const hms = `${String(hrs).padStart(2,'0')}:${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
+        return `${hms} (종료 시각: ${finishStr.trim()})`;
+      }
     }
   } catch (_) {}
+  return finishStr;
+}
+
+function parsePhysicalCheckpointsAndEta(logData) {
+  if (!logData) return;
+
+  const set = (id, text, cls) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML = text;
+    el.className = 'metric-value' + (cls ? ' ' + cls : '');
+  };
+  const unit = u => `<span class="metric-unit">${u}</span>`;
+  const IDLE = '—';
+
+  // Time remaining — mdrun prints a countdown every few steps; last one wins.
+  // It counts down to "0 s", which is what "finished" looks like in this log.
+  const remaining = [...logData.matchAll(/remaining wall clock time:\s*([\d.]+)\s*(\w+)/gi)];
+  if (logData.includes('Finished mdrun')) {
+    set('metric-eta', 'Done', 'is-good');
+  } else if (remaining.length) {
+    const [, amount, u] = remaining[remaining.length - 1];
+    set('metric-eta', parseFloat(amount) === 0 ? 'Done' : amount + unit(u),
+        parseFloat(amount) === 0 ? 'is-good' : 'is-live');
+  } else {
+    set('metric-eta', IDLE, 'is-idle');
+  }
+
+  // Performance — "Performance:  <ns/day>  <hour/ns> ..."
+  const perf = [...logData.matchAll(/Performance:\s+([\d.]+)/g)];
+  set('metric-perf', perf.length ? perf[perf.length - 1][1] + unit('ns/day') : IDLE,
+      perf.length ? 'is-live' : 'is-idle');
+
+  // Max force — GROMACS writes "Fmax= 1.81027e+05" (no space before "=").
+  // Energy minimisation is converged once this drops below 1000 kJ/mol/nm.
+  const fmax = [...logData.matchAll(/Fmax\s*=\s*([0-9.eE+\-]+)/g)];
+  if (fmax.length) {
+    const val = parseFloat(fmax[fmax.length - 1][1]);
+    const shown = Number.isFinite(val)
+      ? (val >= 10000 ? val.toExponential(2) : val.toFixed(1))
+      : fmax[fmax.length - 1][1];
+    set('metric-fmax', shown + unit('kJ/mol/nm'), val < 1000 ? 'is-good' : 'is-warn');
+  } else {
+    set('metric-fmax', IDLE, 'is-idle');
+  }
+
+  // Warnings — numbered grompp warnings plus any LINCS constraint warnings.
+  // GROMACS only prints a LINCS warning when the solver actually struggled,
+  // so absence of one is a clean result, not missing data.
+  const grompp = (logData.match(/^WARNING\s+\d+\s+\[/gm) || []).length;
+  const lincs = (logData.match(/LINCS warning/gi) || []).length;
+  const total = grompp + lincs;
+  const sawMdrun = /Performance:|Steepest Descents|remaining wall clock time/.test(logData);
+  if (total > 0) {
+    set('metric-warn', String(total), lincs > 0 ? 'is-bad' : 'is-warn');
+  } else if (sawMdrun) {
+    set('metric-warn', '0', 'is-good');
+  } else {
+    set('metric-warn', IDLE, 'is-idle');
+  }
+}
+
+let _rawFullLog = '';
+
+function renderCleanLog() {
+  const cleanLog = document.getElementById('clean-log-output');
+  if (!cleanLog) return;
+  
+  const lines = _rawFullLog.split('\n');
+  const filtered = [];
+  let stepNoiseCount = 0;
+  let lastStepStr = '';
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    const cleanLine = line.replace(/\x1b\[[0-9;]*[mGKHFABCDJsr]/g, '');
+
+    // 1. Always keep command lines, stage headers, and important physical milestones
+    if (
+      cleanLine.includes('$ gmx ') ||
+      cleanLine.startsWith('==>') ||
+      cleanLine.includes('Fmax') ||
+      cleanLine.includes('Steepest Descents') ||
+      cleanLine.includes('Performance:') ||
+      cleanLine.includes('Finished') ||
+      cleanLine.includes('Stage ') ||
+      cleanLine.includes('LINCS warning') ||
+      cleanLine.includes('Error') ||
+      cleanLine.includes('Fatal') ||
+      cleanLine.includes('Attached to Run')
+    ) {
+      if (stepNoiseCount > 0 && lastStepStr) {
+        filtered.push(`   ↳ [MD Step Progress: ${lastStepStr}]`);
+        stepNoiseCount = 0;
+        lastStepStr = '';
+      }
+      filtered.push(cleanLine);
+      continue;
+    }
+
+    // 2. Filter out repetitive verbose step progress rows
+    if (trimmed.match(/^(?:step\s+\d+|VOL\s+[\d\.]+%|VOL\s+0\.\d+)/i) || trimmed.match(/^\s*\d+\s+\d+\.\d+\s+[-0-9\.]+/)) {
+      stepNoiseCount++;
+      lastStepStr = trimmed;
+      continue;
+    }
+
+    // 3. Skip blank/separator lines
+    if (trimmed.match(/^[-=+*]{10,}$/)) {
+      continue;
+    }
+
+    filtered.push(cleanLine);
+  }
+
+  if (stepNoiseCount > 0 && lastStepStr) {
+    filtered.push(`   ↳ [MD Step Progress: ${lastStepStr}]`);
+  }
+
+  cleanLog.textContent = filtered.join('\n');
+  cleanLog.scrollTop = cleanLog.scrollHeight;
+  parsePhysicalCheckpointsAndEta(_rawFullLog);
+}
+
+function writeToTerminal(data) {
+  if (data === undefined || data === null) return;
+  _rawFullLog += String(data);
+  renderCleanLog();
+  if (_logFidelity === 'commands') renderCommandList();
 }
 
 let _nglBoxShapeComp = null;
-let _minimapBoxShapeComp = null;
 
 function renderBoxShapeOnStage(stageObj, compObj, distNm) {
   if (!stageObj || !compObj || !compObj.structure) return null;
@@ -3549,94 +3897,19 @@ function update3dBoxPreview() {
   const dist = document.getElementById('edge-distance')?.value || '1.0';
   
   if (_nglBoxShapeComp) {
-    try { (_nglStage || _run3dStage)?.removeComponent(_nglBoxShapeComp); } catch (_) {}
+    try { _nglStage?.removeComponent(_nglBoxShapeComp); } catch (_) {}
     _nglBoxShapeComp = null;
   }
-  if (_minimapBoxShapeComp) {
-    try { _minimapStage?.removeComponent(_minimapBoxShapeComp); } catch (_) {}
-    _minimapBoxShapeComp = null;
-  }
-  
-  const mainStage = _nglStage || _run3dStage;
-  const mainComp = _nglComp || _run3dComp;
+  const mainStage = _nglStage;
+  const mainComp = _nglComp;
   if (mainStage && mainComp) {
     _nglBoxShapeComp = renderBoxShapeOnStage(mainStage, mainComp, dist);
   }
-  if (_minimapStage && _minimapComp) {
-    _minimapBoxShapeComp = renderBoxShapeOnStage(_minimapStage, _minimapComp, dist);
-  }
 }
 
-let _minimapStage = null;
-let _minimapComp = null;
-
-function initMinimapStage() {
-  const vp = document.getElementById('ngl-minimap-viewport');
-  if (!vp) return;
-  const isDark = !document.body.classList.contains('light-theme');
-  const bgColor = isDark ? '#04060f' : '#ffffff';
-  if (_minimapStage) {
-    try { _minimapStage.setParameters({ backgroundColor: bgColor }); } catch (_) {}
-    return;
-  }
-  _minimapStage = new NGL.Stage(vp, { backgroundColor: bgColor });
-  window.addEventListener('resize', () => { if (_minimapStage) _minimapStage.handleResize(); });
-}
-
-function updateMinimapStructure(fileOrUrl, ext = 'pdb', nameLabel = '') {
-  initMinimapStage();
-  const ph = document.getElementById('ngl-minimap-placeholder');
-  const lb = document.getElementById('ngl-minimap-label');
-  if (ph) ph.style.display = 'none';
-  if (lb && nameLabel) lb.textContent = nameLabel;
-  
-  if (_minimapComp) {
-    try { _minimapStage.removeComponent(_minimapComp); } catch(_) {}
-    _minimapComp = null;
-  }
-  
-  _minimapStage.loadFile(fileOrUrl, { ext }).then(comp => {
-    _minimapComp = comp;
-    _minimapComp.addRepresentation('cartoon', { colorScheme: 'residueindex' });
-    _minimapComp.addRepresentation('ball+stick', { sele: 'hetero or ion or SOL', opacity: 0.7 });
-    _minimapStage.autoView();
-    setTimeout(() => { if (_minimapStage) _minimapStage.handleResize(); }, 150);
-  }).catch(err => {
-    console.warn('Minimap render failed:', err);
-  });
-}
-
-function toggleMinimapCollapse() {
-  const body = document.getElementById('minimap-body');
-  const btn = document.getElementById('minimap-toggle-btn');
-  if (body.style.display === 'none') {
-    body.style.display = 'block';
-    btn.textContent = '−';
-    setTimeout(() => { if (_minimapStage) _minimapStage.handleResize(); }, 100);
-  } else {
-    body.style.display = 'none';
-    btn.textContent = '+';
-  }
-}
-
-async function toggleMinimapExpand() {
-  const modal = document.getElementById('ngl-viewer-modal');
-  if (!modal) return;
-  modal.style.display = 'flex';
-  
-  if (selectedPdb) {
-    await handleMolStructFile(selectedPdb);
-  } else if (currentRunId && currentRunId !== 'virtual_sandbox') {
-    await refreshRun3dStructure(currentRunId);
-  }
-  
-  setTimeout(() => {
-    if (_nglStage) _nglStage.handleResize();
-    update3dBoxPreview();
-  }, 150);
-}
-
-const CHART_COLORS = ['#06b6d4', '#6366f1', '#10b981', '#f59e0b', '#ef4444'];
+// One solid colour for every plot. A rotating palette implied a distinction
+// between series that does not exist, and read as decoration rather than data.
+const CHART_COLOR = '#6366f1';
 let _sidebarDragging = false;
 
 let selectedPdb = null;
@@ -3648,8 +3921,6 @@ function handleFileSelect(file) {
   document.getElementById('selected-file').textContent = `✓ ${file.name}`;
   document.getElementById('btn-start').disabled = false;
   _analyzePDBStructure(file);
-  // Render on 3D Live Minimap automatically without opening large modal
-  updateMinimapStructure(file, file.name.split('.').pop().toLowerCase(), file.name);
 }
 
 async function _analyzePDBStructure(file) {
@@ -4346,13 +4617,9 @@ function toggleTheme() {
   if (isLight) {
     body.classList.add('light-theme');
     localStorage.setItem('theme', 'light');
-    if (_minimapStage) { try { _minimapStage.setParameters({ backgroundColor: '#ffffff' }); } catch(_) {} }
-    if (_run3dStage) { try { _run3dStage.setParameters({ backgroundColor: '#f0f2f5' }); } catch(_) {} }
   } else {
     body.classList.remove('light-theme');
     localStorage.setItem('theme', 'dark');
-    if (_minimapStage) { try { _minimapStage.setParameters({ backgroundColor: '#04060f' }); } catch(_) {} }
-    if (_run3dStage) { try { _run3dStage.setParameters({ backgroundColor: '#0b0f24' }); } catch(_) {} }
   }
 }
 
@@ -4530,8 +4797,16 @@ function connectWs(runId) {
   wsConn = new WebSocket(`${proto}://${location.host}/ws/runs/${runId}`);
   wsConn.binaryType = 'arraybuffer';
 
+  // One decoder for the whole stream: the server splits the log on byte
+  // boundaries, so a multi-byte character can straddle two messages. Decoding
+  // each message on its own would turn those into replacement characters.
+  const decoder = new TextDecoder('utf-8');
+
   wsConn.onmessage = (e) => {
-    if (e.data instanceof ArrayBuffer) return; // raw log bytes, no terminal to render them into
+    if (e.data instanceof ArrayBuffer) {
+      writeToTerminal(decoder.decode(e.data, { stream: true }));
+      return;
+    }
     try {
       const msg = JSON.parse(e.data);
       if (msg.type === "permission_request") {
@@ -4539,8 +4814,14 @@ function connectWs(runId) {
       } else if (msg.type === 'exit') {
         wsConn.close();
         wsConn = null;
-        // 종료 후 런 상태 재조회
-        setTimeout(() => selectRun(runId, false), 500);
+        // The log stream ended. Refresh the run's data in place — calling
+        // selectRun() here would rebuild the whole view and throw away the
+        // tab the user is currently reading.
+        setTimeout(() => {
+          if (currentRunId !== runId) return;
+          loadTopology(runId);
+          loadRuns();
+        }, 500);
       }
     } catch {}
   };
@@ -4552,17 +4833,88 @@ function connectWs(runId) {
   wsConn.onclose = () => { wsConn = null; };
 }
 
+// Renders the system's composition as one line, in the order the pipeline
+// builds it: solute, then solvent, then counter-ions, then the force field.
+async function loadTopology(runId) {
+  const el = document.getElementById('run-composition');
+  if (!el) return;
+  try {
+    const resp = await fetch(`/api/runs/${runId}/topology`);
+    if (!resp.ok) { el.textContent = 'Topology not available'; return; }
+    const data = await resp.json();
+    if (!data.exists) { el.textContent = 'Topology not built yet'; return; }
+
+    const parts = (data.molecules || []).map(m => {
+      const count = parseInt(m.count || '0', 10) || 0;
+      const name = escapeHtml(m.name || '?');
+      // A single solute reads better by name alone than as "1 Protein_chain_A".
+      return count === 1 ? `<strong>${name}</strong>`
+                         : `<strong>${count.toLocaleString()}</strong> ${name}`;
+    });
+
+    const ff = [data.forcefield, data.water_model]
+      .filter(v => v && v !== 'Standard' && v !== 'None')
+      .join(' / ');
+    if (ff) parts.push(escapeHtml(ff));
+
+    el.innerHTML = parts.length
+      ? parts.join('<span class="sep">·</span>')
+      : 'Topology is empty';
+  } catch (e) {
+    el.textContent = 'Topology not available';
+  }
+}
+
+// ── Run output tabs ───────────────────────────────────────────────────────
+let _runTab = 'log';
+let _logFidelity = 'clean';
+
+const RUN_TABS = ['log', 'results', 'audit'];
+
+function switchRunTab(name) {
+  _runTab = name;
+  RUN_TABS.forEach(t => {
+    const tab = document.getElementById(`run-tab-${t}`);
+    const pane = document.getElementById(`run-pane-${t}`);
+    if (tab) tab.setAttribute('aria-selected', String(t === name));
+    if (pane) pane.hidden = (t !== name);
+  });
+
+  // The Output/Commands switch only means something for the log pane.
+  const fid = document.getElementById('log-fidelity');
+  if (fid) fid.style.visibility = name === 'log' ? 'visible' : 'hidden';
+
+  if (name === 'audit') {
+    const panel = document.getElementById('audit-panel');
+    const empty = document.getElementById('audit-empty');
+    const hasAudit = panel && panel.style.display !== 'none';
+    if (empty) empty.style.display = hasAudit ? 'none' : '';
+  }
+}
+
+function setLogFidelity(mode) {
+  _logFidelity = mode;
+  const output = document.getElementById('clean-log-output');
+  const cmds = document.getElementById('command-list');
+  if (output) output.style.display = mode === 'clean' ? '' : 'none';
+  if (cmds) cmds.style.display = mode === 'commands' ? '' : 'none';
+
+  const outBtn = document.getElementById('fidelity-clean');
+  const cmdBtn = document.getElementById('fidelity-commands');
+  if (outBtn) outBtn.setAttribute('aria-pressed', String(mode === 'clean'));
+  if (cmdBtn) cmdBtn.setAttribute('aria-pressed', String(mode === 'commands'));
+
+  if (mode === 'commands') renderCommandList();
+}
+
 async function selectRun(runId, reconnectWs = true) {
   currentRunId = runId;
   _lastKnownStatus = null;
   _mdProgressStart = null;
   const _badge = document.getElementById('md-progress-badge');
   if (_badge) _badge.style.display = 'none';
-  _auditOpen = false;
-  const _auditBody = document.getElementById('audit-body');
-  if (_auditBody) _auditBody.style.display = 'none';
-  const _auditChevron = document.getElementById('audit-chevron');
-  if (_auditChevron) _auditChevron.textContent = '▼';
+  switchRunTab('log');
+  setLogFidelity('clean');
 
   // 사이드바 active 상태 갱신
   document.querySelectorAll('.run-item').forEach(el => {
@@ -4578,12 +4930,14 @@ async function selectRun(runId, reconnectWs = true) {
   document.getElementById('run-view').style.display = 'flex';
   const _demoBanner = document.getElementById('demo-mode-banner');
   if (_demoBanner) _demoBanner.style.display = 'none';
-  const _literaturePanel = document.getElementById('literature-panel');
-  if (_literaturePanel) _literaturePanel.style.display = '';
-  const _literatureResult = document.getElementById('literature-result');
-  if (_literatureResult) { _literatureResult.style.display = 'none'; _literatureResult.textContent = ''; }
 
   try {
+    _rawFullLog = '';
+    const cleanLog = document.getElementById('clean-log-output');
+    if (cleanLog) cleanLog.textContent = '';
+    writeToTerminal(`==> Attached to Run Session: ${runId}\n`);
+    loadTopology(runId);
+
     const resp = await fetch(`/api/runs/${runId}`);
     if (!resp.ok) { showToast('Failed to load run info.', 'error'); return; }
     const info = await resp.json();
@@ -4601,19 +4955,15 @@ async function selectRun(runId, reconnectWs = true) {
       failure.textContent = '';
     }
 
-    _run3dLoadedFile = null;
-    const _placeholder = document.getElementById('run-3d-placeholder');
-    if (_placeholder) _placeholder.style.display = '';
-    const _stageLabel = document.getElementById('run-3d-stage-label');
-    if (_stageLabel) _stageLabel.textContent = '';
-    refreshRun3dStructure(runId);
     if (reconnectWs) connectWs(runId);
 
-    if (info.status === 'completed') {
+    const galPanel = document.getElementById('gallery-panel');
+    if (galPanel) galPanel.style.display = 'block';
+
+    if (info.status === 'completed' || info.status === 'done') {
       loadArtifacts(runId);
       loadAudit(runId);
     } else {
-      document.getElementById('gallery-panel').style.display = 'none';
       document.getElementById('audit-panel').style.display = 'none';
     }
   } catch (e) {
@@ -4773,7 +5123,6 @@ async function loadRuns() {
             const detail = await detailResp.json();
             updateStepper(detail);
             updateButtons(detail.status);
-            refreshRun3dStructure(runIdSnapshot);
             if (detail.status === 'completed') {
               loadArtifacts(runIdSnapshot);
               loadAudit(runIdSnapshot);
@@ -4807,63 +5156,108 @@ async function loadRuns() {
   }
 }
 
-function drawSparkline(canvas, yData, color) {
+// Mirrors illustrator.plot_xvg so a card shows the same chart as the PNG it
+// opens: x comes from column 0 (not the row index), every later column is a
+// curve, and a 2D projection is drawn as a scatter.
+// Mirror of lib/xvg_parser.plot_kind(). The server sends `plot_kind` and that
+// value wins; this exists only so a server that predates the field still draws
+// the right chart instead of silently falling back to a line — a 2D projection
+// rendered as a line is wrong, not merely plainer.
+function plotKindOf(artifact) {
+  const cols = (artifact && artifact.columns) || [];
+  const name = ((artifact && artifact.name) || '').toLowerCase();
+  if (cols.length >= 2 && (name.includes('pca') || name.includes('proj'))) return 'scatter';
+  return cols.length >= 2 ? 'series' : 'single';
+}
+
+function drawSparkline(canvas, artifact, color) {
   const ctx = canvas.getContext('2d');
   const w = canvas.width, h = canvas.height;
   ctx.clearRect(0, 0, w, h);
 
-  if (!yData || yData.length < 2) {
-    ctx.fillStyle = 'var(--text-muted)';
+  const cols = (artifact && artifact.columns) || [];
+  const kind = (artifact && artifact.plot_kind) || plotKindOf(artifact);
+  let xData, series;
+  if (kind === 'single' || cols.length < 2) {
+    xData = (cols[0] || []).map((_, i) => i);
+    series = cols.length ? [cols[0]] : [];
+  } else if (kind === 'scatter') {
+    xData = cols[0];
+    series = [cols[1]];
+  } else {
+    xData = cols[0];
+    series = cols.slice(1);
+  }
+
+  const usable = series.filter(s => s && s.length >= 2);
+  if (!xData || xData.length < 2 || !usable.length) {
+    // Canvas cannot resolve CSS custom properties; the var() here silently
+    // left fillStyle at its default black, invisible on the dark card.
+    ctx.fillStyle = '#6b7280';
     ctx.font = '9px monospace';
     ctx.fillText('No data', 8, h / 2);
     return;
   }
 
-  const minY = Math.min(...yData), maxY = Math.max(...yData);
-  const rangeY = maxY - minY || 1;
+  const flat = usable.flat();
+  const minY = Math.min(...flat), maxY = Math.max(...flat);
+  const minX = Math.min(...xData), maxX = Math.max(...xData);
+  const rangeY = (maxY - minY) || 1;
+  const rangeX = (maxX - minX) || 1;
   const pad = { t: 6, r: 6, b: 6, l: 6 };
   const pw = w - pad.l - pad.r, ph = h - pad.t - pad.b;
 
-  const toX = i => pad.l + (i / (yData.length - 1)) * pw;
+  const toX = v => pad.l + ((v - minX) / rangeX) * pw;
   const toY = v => pad.t + ph - ((v - minY) / rangeY) * ph;
 
-  // 그라디언트 채움
-  const grad = ctx.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0, color + '30');
-  grad.addColorStop(1, color + '00');
-  ctx.beginPath();
-  ctx.moveTo(toX(0), h - pad.b);
-  yData.forEach((v, i) => ctx.lineTo(toX(i), toY(v)));
-  ctx.lineTo(toX(yData.length - 1), h - pad.b);
-  ctx.closePath();
-  ctx.fillStyle = grad;
-  ctx.fill();
-
-  // 선
-  ctx.beginPath();
-  ctx.moveTo(toX(0), toY(yData[0]));
-  for (let i = 1; i < yData.length; i++) {
-    const xc = (toX(i) + toX(i - 1)) / 2;
-    const yc = (toY(yData[i]) + toY(yData[i - 1])) / 2;
-    ctx.quadraticCurveTo(toX(i - 1), toY(yData[i - 1]), xc, yc);
+  if (kind === 'scatter') {
+    // A phase-space cloud: points only, no connecting line.
+    ctx.fillStyle = color + 'b0';
+    for (let i = 0; i < xData.length; i++) {
+      const y = usable[0][i];
+      if (y === undefined) continue;
+      ctx.beginPath();
+      ctx.arc(toX(xData[i]), toY(y), 1.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return;
   }
-  ctx.lineTo(toX(yData.length - 1), toY(yData[yData.length - 1]));
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 2;
-  ctx.shadowColor = color;
-  ctx.shadowBlur = 6;
-  ctx.stroke();
-  ctx.shadowBlur = 0;
 
-  // 마지막 점 dot
-  const lx = toX(yData.length - 1), ly = toY(yData[yData.length - 1]);
+  // Fill only under a lone curve; with several it would just be mud.
+  if (usable.length === 1) {
+    ctx.beginPath();
+    ctx.moveTo(toX(xData[0]), h - pad.b);
+    usable[0].forEach((v, i) => ctx.lineTo(toX(xData[i]), toY(v)));
+    ctx.lineTo(toX(xData[usable[0].length - 1]), h - pad.b);
+    ctx.closePath();
+    ctx.fillStyle = color + '1f';
+    ctx.fill();
+  }
+
+  // One hue throughout; secondary series fade back so the first still leads.
+  const alphas = ['', 'a0', '70', '50', '38'];
+  usable.forEach((yData, si) => {
+    ctx.beginPath();
+    ctx.moveTo(toX(xData[0]), toY(yData[0]));
+    for (let i = 1; i < yData.length && i < xData.length; i++) {
+      const xc = (toX(xData[i]) + toX(xData[i - 1])) / 2;
+      const yc = (toY(yData[i]) + toY(yData[i - 1])) / 2;
+      ctx.quadraticCurveTo(toX(xData[i - 1]), toY(yData[i - 1]), xc, yc);
+    }
+    const lastI = Math.min(yData.length, xData.length) - 1;
+    ctx.lineTo(toX(xData[lastI]), toY(yData[lastI]));
+    ctx.strokeStyle = color + (alphas[si] || alphas[alphas.length - 1]);
+    ctx.lineWidth = si === 0 ? 1.8 : 1.1;
+    ctx.stroke();
+  });
+
+  // Last value of the primary series.
+  const primary = usable[0];
+  const li = Math.min(primary.length, xData.length) - 1;
   ctx.beginPath();
-  ctx.arc(lx, ly, 3, 0, Math.PI * 2);
-  ctx.fillStyle = '#fff';
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.5;
+  ctx.arc(toX(xData[li]), toY(primary[li]), 2.5, 0, Math.PI * 2);
+  ctx.fillStyle = color;
   ctx.fill();
-  ctx.stroke();
 }
 
 // ── Running Average ──────────────────────────────────────────────────────────
@@ -5260,33 +5654,63 @@ function renderXvgResultModal(dataList) {
   document.getElementById('xvg-result-modal').style.display = 'flex';
 }
 
+function openPlotImage(runId, name, label) {
+  const modal = document.getElementById('plot-modal');
+  const img = document.getElementById('plot-modal-img');
+  const cap = document.getElementById('plot-modal-caption');
+  const link = document.getElementById('plot-modal-link');
+  if (!modal || !img) return;
+  const url = `/api/runs/${runId}/plot/${encodeURIComponent(name)}.png`;
+  img.src = url;
+  img.alt = label;
+  if (cap) cap.textContent = label;
+  if (link) link.href = url;
+  modal.style.display = 'flex';
+}
+
+function closePlotImage() {
+  const modal = document.getElementById('plot-modal');
+  const img = document.getElementById('plot-modal-img');
+  if (modal) modal.style.display = 'none';
+  if (img) img.src = '';
+}
+
 async function loadArtifacts(runId) {
   const panel = document.getElementById('gallery-panel');
+  const empty = document.getElementById('results-empty');
+  const showEmpty = (yes) => {
+    if (panel) panel.style.display = yes ? 'none' : '';
+    if (empty) empty.style.display = yes ? '' : 'none';
+  };
   try {
     const resp = await fetch(`/api/runs/${runId}/artifacts`);
-    if (!resp.ok) { panel.style.display = 'none'; return; }
+    if (!resp.ok) { showEmpty(true); return; }
     const artifacts = await resp.json();
-    if (artifacts.length === 0) { panel.style.display = 'none'; return; }
+    if (artifacts.length === 0) { showEmpty(true); return; }
 
-    panel.style.display = '';
+    showEmpty(false);
     const grid = document.getElementById('gallery-grid');
     grid.innerHTML = '';
 
     artifacts.forEach((a, idx) => {
       const cols = a.columns || [];
       const yData = cols[1] || [];
-      const color = CHART_COLORS[idx % CHART_COLORS.length];
+      const label = a.label || a.name;
 
       const mn = yData.length ? Math.min(...yData).toFixed(3) : '—';
       const mx = yData.length ? Math.max(...yData).toFixed(3) : '—';
       const last = yData.length ? yData[yData.length - 1].toFixed(3) : '—';
 
-      const card = document.createElement('div');
+      // A button, so the plot opens on click and on Enter/Space alike.
+      const card = document.createElement('button');
+      card.type = 'button';
       card.className = 'chart-card';
+      card.title = `Open the ${label} plot`;
+      card.addEventListener('click', () => openPlotImage(runId, a.name, label));
 
       const titleEl = document.createElement('div');
       titleEl.className = 'chart-card-title';
-      titleEl.textContent = a.title || a.name;
+      titleEl.textContent = label;
 
       const canvas = document.createElement('canvas');
       canvas.className = 'chart-canvas';
@@ -5307,24 +5731,15 @@ async function loadArtifacts(runId) {
       grid.appendChild(card);
 
       requestAnimationFrame(() => {
-        drawSparkline(card.querySelector('canvas'), yData, color);
+        drawSparkline(card.querySelector('canvas'), a, CHART_COLOR);
       });
     });
   } catch (e) {
     console.error('loadArtifacts:', e);
-    panel.style.display = 'none';
+    showEmpty(true);
   }
 }
 
-let _auditOpen = false;
-
-function toggleAuditPanel() {
-  _auditOpen = !_auditOpen;
-  const body = document.getElementById('audit-body');
-  const chevron = document.getElementById('audit-chevron');
-  if (body) body.style.display = _auditOpen ? 'block' : 'none';
-  if (chevron) chevron.textContent = _auditOpen ? '▲' : '▼';
-}
 
 async function loadAudit(runId) {
   const panel = document.getElementById('audit-panel');
@@ -5374,52 +5789,6 @@ async function loadAudit(runId) {
     console.error('loadAudit:', e);
     panel.style.display = 'none';
   }
-}
-
-async function uploadLiterature() {
-  if (!currentRunId || currentRunId === 'virtual_sandbox') return;
-  const file = document.getElementById('literature-file')?.files?.[0];
-  if (!file) { showToast('Choose a PDF, TXT, or Markdown paper first.', 'error'); return; }
-  const data = new FormData();
-  data.append('literature_file', file);
-  try {
-    const resp = await fetch(`/api/runs/${currentRunId}/literature/upload`, { method: 'POST', body: data });
-    const payload = await resp.json().catch(() => ({}));
-    if (!resp.ok) { showToast(payload.detail || 'Literature upload failed.', 'error'); return; }
-    showToast(`${payload.filename} added to this run's evidence corpus.`, 'success');
-  } catch (_) { showToast('Literature upload failed.', 'error'); }
-}
-
-async function searchLiterature() {
-  if (!currentRunId || currentRunId === 'virtual_sandbox') return;
-  const query = document.getElementById('literature-search-query')?.value?.trim();
-  if (!query) { showToast('Enter a public-literature search query first.', 'error'); return; }
-  try {
-    const resp = await fetch(`/api/runs/${currentRunId}/literature/search`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, limit: 5 }),
-    });
-    const payload = await resp.json().catch(() => ({}));
-    if (!resp.ok) { showToast(payload.detail || 'Public literature search failed.', 'error'); return; }
-    const found = (payload.results || []).length;
-    showToast(`${found} public abstract record${found === 1 ? '' : 's'} added to this run's evidence corpus.`, found ? 'success' : 'error');
-  } catch (_) { showToast('Public literature search failed.', 'error'); }
-}
-
-async function queryLiterature() {
-  if (!currentRunId || currentRunId === 'virtual_sandbox') return;
-  const question = document.getElementById('literature-question')?.value?.trim();
-  const result = document.getElementById('literature-result');
-  if (!question) { showToast('Enter a literature question first.', 'error'); return; }
-  try {
-    const resp = await fetch(`/api/runs/${currentRunId}/literature/query`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question }),
-    });
-    const payload = await resp.json().catch(() => ({}));
-    if (!resp.ok) { showToast(payload.detail || 'Literature query failed.', 'error'); return; }
-    result.style.display = 'block';
-    result.textContent = `${payload.answer}\n\nCitations: ${(payload.citation_markers || []).join('; ') || 'none returned'}\nRecord: ${payload.record_path}\n\nEvidence requires explicit approval and has not changed this run.`;
-  } catch (_) { showToast('Literature query failed.', 'error'); }
 }
 
 let _pendingDeleteId = null;
@@ -5662,8 +6031,11 @@ window.addEventListener('load', async () => {
     if (e.target === document.getElementById('delete-confirm-modal')) closeDeleteModal();
   });
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && document.getElementById('delete-confirm-modal').style.display === 'flex')
+    if (e.key !== 'Escape') return;
+    if (document.getElementById('delete-confirm-modal').style.display === 'flex')
       closeDeleteModal();
+    const plotModal = document.getElementById('plot-modal');
+    if (plotModal && plotModal.style.display === 'flex') closePlotImage();
   });
 
   // NGL viewer modal close
@@ -5738,10 +6110,8 @@ window.addEventListener('load', async () => {
         sidebar.style.width = '180px';
         setTimeout(() => {
           sidebar.classList.remove('sidebar-animating');
-          if (_run3dStage) _run3dStage.handleResize();
         }, DURATION);
       } else {
-        if (_run3dStage) _run3dStage.handleResize();
       }
     });
   }
@@ -5761,7 +6131,6 @@ window.addEventListener('load', async () => {
       sidebar.classList.remove('sidebar-collapsing');
       setTimeout(() => {
         sidebar.classList.remove('sidebar-animating');
-        if (_run3dStage) _run3dStage.handleResize();
       }, DURATION);
     } else {
       // ── Collapse ────────────────────────────────────
@@ -5807,7 +6176,7 @@ async function doAction(action) {
       return;
     }
     // 즉시 상태 재조회
-    await selectRun(currentRunId, action === 'continue');
+    await selectRun(currentRunId);
   } catch (e) {
     showToast('Server connection error', 'error');
   }
@@ -6092,7 +6461,6 @@ function startVirtualRun() {
         ];
 
         mockPlots.forEach((p, idx) => {
-          const color = CHART_COLORS[idx % CHART_COLORS.length];
           const mn = Math.min(...p.data).toFixed(2);
           const mx = Math.max(...p.data).toFixed(2);
           const last = p.data[p.data.length - 1].toFixed(2);
@@ -6123,7 +6491,7 @@ function startVirtualRun() {
           grid.appendChild(card);
 
           requestAnimationFrame(() => {
-            drawSparkline(canvas, p.data, color);
+            drawSparkline(canvas, { columns: [p.data], plot_kind: 'single' }, CHART_COLOR);
           });
         });
 
@@ -6566,8 +6934,8 @@ async function lbRunCgenff() {
       statusEl.style.color = 'var(--accent-green)';
       filesEl.style.display = '';
       filesEl.textContent = `Files generated: ${_lbResname}.itp, ${_lbResname}.prm, ${_lbResname}.gro`;
-      document.getElementById('lb-next-3-btn').disabled = false;
-      document.getElementById('lb-next-3-btn').style.opacity = '1';
+      const lbNext = document.getElementById('lb-next-3-btn');
+      if (lbNext) { lbNext.disabled = false; lbNext.style.opacity = '1'; }
     }
   } catch {
     statusEl.textContent = 'Network error.';
