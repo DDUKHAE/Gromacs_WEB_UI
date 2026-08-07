@@ -24,7 +24,7 @@ DEFAULTS = {
     # overwrite files and make a restart falsely appear to have completed
     # both barostat stages.
     "npt_pr": {"nsteps": 50000, "dt": 0.002, "tau_t": 0.1, "ref_t": 300.0,
-               "tau_p": 2.0, "pcoupl": "Parrinello-Rahman", "pcoupltype": "isotropic"},
+               "tau_p": 2.0, "pcoupl": "Parrinello-Rahman", "pcoupltype": "isotropic", "define": "-DPOSRES"},
     "production": {"nsteps": 500000, "dt": 0.002, "tau_t": 0.1, "ref_t": 300.0,
                     "tau_p": 2.0,
                     # Production runs from an already-equilibrated NPT state,

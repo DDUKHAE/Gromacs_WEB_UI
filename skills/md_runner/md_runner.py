@@ -77,6 +77,9 @@ PHASE_TO_STATE_KEY = {
 _GROMPP_WARNING_RE = re.compile(r"^WARNING\s+\d+\s+\[.*", re.MULTILINE)
 _GEN_SEED_RE = re.compile(r"gen_seed\s*=\s*(-?\d+)")
 
+_DEFINE_RE = re.compile(r"^define\s*=([^;\n]*)", re.MULTILINE)
+
+
 
 def _record_grompp_warnings(ws: Path, phase: str, combined_output: str) -> None:
     """Log any grompp WARNING blocks into state so suppressed (-maxwarn)
@@ -89,6 +92,13 @@ def _record_grompp_warnings(ws: Path, phase: str, combined_output: str) -> None:
     log = step7.setdefault("grompp_warnings", {})
     log[phase] = warnings
     state.write(ws, s)
+
+
+
+def _mdp_defines_restraints(mdp_path: Path) -> bool:
+    """Whether a rendered mdp switches on any position restraints."""
+    match = _DEFINE_RE.search(mdp_path.read_text())
+    return bool(match) and "-DPOSRES" in match.group(1)
 
 
 def run_phase(workspace_dir: Path, phase: str,
@@ -118,6 +128,12 @@ def run_phase(workspace_dir: Path, phase: str,
     tpr_path = out_dir / f"{phase}.tpr"
     grompp_args = ["grompp", "-f", mdp_path.name,
                    "-c", str(in_gro_path)]
+    # Position restraints need an explicit reference structure since
+    # GROMACS 2018; without it grompp fails with "Cannot find position
+    # restraint file restraint.gro (option -r)". Both tutorials pass the
+    # phase's own input coordinates, e.g. `-c em.gro -r em.gro`.
+    if _mdp_defines_restraints(mdp_path):
+        grompp_args.extend(["-r", str(in_gro_path)])
     input_cpt = PHASE_INPUT_CPT.get(phase)
     if input_cpt and (out_dir / input_cpt).is_file():
         grompp_args.extend(["-t", input_cpt])

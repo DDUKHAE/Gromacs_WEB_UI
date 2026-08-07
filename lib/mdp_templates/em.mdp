@@ -1,5 +1,5 @@
 ; em.mdp - energy minimization
-define                   = {define} ;
+define                   = {define}
 integrator               = steep
 emtol                    = {emtol}
 emstep                   = {emstep}

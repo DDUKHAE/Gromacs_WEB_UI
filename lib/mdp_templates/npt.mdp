@@ -1,5 +1,5 @@
 ; npt.mdp - constant pressure equilibration
-define                   = {define} ;
+define                   = {define}
 integrator               = md
 nsteps                   = {nsteps}
 dt                       = {dt}

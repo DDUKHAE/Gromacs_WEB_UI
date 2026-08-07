@@ -1,5 +1,5 @@
 ; nvt.mdp - constant volume equilibration
-define                   = {define} ;
+define                   = {define}
 integrator               = md
 nsteps                   = {nsteps}
 dt                       = {dt}

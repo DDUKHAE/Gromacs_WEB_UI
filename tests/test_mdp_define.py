@@ -7,6 +7,7 @@ tutorials also call for -DPOSRES during equilibration, which never reached any
 rendered mdp.
 """
 import re
+from pathlib import Path
 
 import pytest
 
@@ -14,7 +15,7 @@ from lib.mdp_templates import base as MDP
 
 
 def _define(path):
-    m = re.search(r"^define\s*=\s*(.*)$", path.read_text(), re.M)
+    m = re.search(r"^define[ \t]*=[ \t]*(.*)$", path.read_text(), re.M)
     return None if m is None else m.group(1).split(";")[0].strip()
 
 
@@ -43,3 +44,39 @@ def test_multiple_defines_survive(tmp_path):
 def test_define_line_exists_in_every_touched_template(phase, tmp_path):
     """A missing placeholder is silent, so assert the line is present at all."""
     assert _define(MDP.render(phase, {}, tmp_path)) is not None
+
+
+@pytest.mark.integration
+def test_grompp_accepts_a_restrained_nvt(tmp_path):
+    """-DPOSRES without -r fails outright:
+    "Cannot find position restraint file restraint.gro (option -r)"."""
+    import os
+    import shutil
+    import subprocess
+    gmx = shutil.which("gmx")
+    if gmx is None:
+        pytest.skip("gmx not on PATH")
+    run = Path("runs/aki_20260806_180108/stage1_env")
+    if not (run / "topol.top").is_file():
+        pytest.skip("needs the completed reference run")
+    for name in ("topol.top", "posre.itp", "ions.gro"):
+        shutil.copy(run / name, tmp_path / name)
+    mdp = MDP.render("nvt", {"nsteps": 10}, tmp_path)
+    assert "-DPOSRES" in _define(mdp)
+
+    proc = subprocess.run(
+        [gmx, "grompp", "-f", mdp.name, "-c", "ions.gro", "-r", "ions.gro",
+         "-p", "topol.top", "-o", "nvt.tpr", "-maxwarn", "2"],
+        cwd=tmp_path, capture_output=True, text=True,
+        env={**os.environ, "GMX_MAXBACKUP": "-1"},
+    )
+    assert "option -r" not in proc.stderr, proc.stderr[-1500:]
+    assert proc.returncode == 0, proc.stderr[-2000:]
+
+
+@pytest.mark.integration
+def test_every_phase_renders_without_a_key_error(tmp_path):
+    """npt_pr renders from npt.mdp, so a placeholder there needs a default."""
+    from lib.mdp_templates import base as _base
+    for phase in sorted(_base._FILES):
+        MDP.render(phase, {}, tmp_path)
