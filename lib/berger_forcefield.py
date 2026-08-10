@@ -247,6 +247,72 @@ def add_include(topol: Path, include: str) -> bool:
     return True
 
 
+def add_ifdef_block(topol: Path, define: str, include: str) -> bool:
+    """Add an `#ifdef <define>` guarded include after the protein's POSRES block.
+
+    The tutorial places the InflateGRO restraints there, between the protein's
+    own position-restraint block and the lipid topology, so the guard can be
+    switched on from the mdp with `-D<define>`.
+
+    Returns False when the block is already present.
+    """
+    topol = Path(topol)
+    text = topol.read_text(encoding="utf-8", errors="replace")
+    if re.search(rf"^\s*#ifdef\s+{re.escape(define)}\s*$", text, re.M):
+        return False
+
+    block = (
+        f"; Strong position restraints for InflateGRO\n"
+        f"#ifdef {define}\n"
+        f'#include "{include}"\n'
+        f"#endif\n\n"
+    )
+    # Anchor on the end of the protein's POSRES block.
+    posres = re.search(
+        r'^\s*#ifdef\s+POSRES\s*$.*?^\s*#endif\s*$\n', text, re.M | re.S
+    )
+    if posres is not None:
+        at = posres.end()
+    else:
+        # No protein restraints: fall back to just before the lipid include,
+        # which still precedes [ molecules ].
+        anchor = re.search(r'^\s*#include\s+"[\w.+-]+\.itp"\s*$', text, re.M)
+        if anchor is None:
+            raise BergerForceFieldError(
+                f"cannot find an insertion point for the {define} block in {topol}"
+            )
+        at = anchor.start()
+    topol.write_text(text[:at] + "\n" + block + text[at:], encoding="utf-8")
+    return True
+
+
+def set_molecule_count(topol: Path, molecule: str, count: int) -> int:
+    """Rewrite one row of `[ molecules ]`, returning the previous count.
+
+    InflateGRO deletes the lipids that overlap the protein and reports how many.
+    The topology has to agree or the next grompp fails on an atom-count
+    mismatch, so this is not optional bookkeeping.
+    """
+    topol = Path(topol)
+    text = topol.read_text(encoding="utf-8", errors="replace")
+    section = re.search(r"^\[\s*molecules\s*\]\s*$(.*)", text, re.M | re.S)
+    if section is None:
+        raise BergerForceFieldError(f"{topol} has no [ molecules ] section")
+
+    body = section.group(1)
+    row = re.search(rf"^([ \t]*){re.escape(molecule)}([ \t]+)(\d+)[ \t]*$", body, re.M)
+    if row is None:
+        raise BergerForceFieldError(
+            f"{topol} [ molecules ] has no row for {molecule!r}"
+        )
+    previous = int(row.group(3))
+    start = section.start(1) + row.start()
+    end = section.start(1) + row.end()
+    text = text[:start] + f"{row.group(1)}{molecule}{row.group(2)}{count}" + text[end:]
+    topol.write_text(text, encoding="utf-8")
+    return previous
+
+
 def build(lipid_itp: Path, gmxlib: Path, dest_parent: Path) -> dict[str, Any]:
     """Create ``<dest_parent>/gromos53a6_lipid.ff``.
 

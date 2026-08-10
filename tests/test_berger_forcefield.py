@@ -523,3 +523,151 @@ def test_grompp_accepts_the_built_forcefield(tmp_path, lipid_name):
     assert "Unknown atomtype" not in proc.stderr, proc.stderr[-2000:]
     assert proc.returncode == 0, proc.stderr[-2000:]
     assert (tmp_path / "dppc.tpr").is_file()
+
+
+# --- topology mutations for the membrane assembly ------------------------------
+
+TOPOL_WITH_MOLECULES = """\
+; Include forcefield parameters
+#include "gromos53a6_lipid.ff/forcefield.itp"
+
+[ moleculetype ]
+Protein_chain_A     3
+
+; Include Position restraint file
+#ifdef POSRES
+#include "posre.itp"
+#endif
+
+; Include DPPC chain topology
+#include "dppc.itp"
+
+; Include water topology
+#include "gromos53a6_lipid.ff/spc.itp"
+
+[ system ]
+KALP15 in DPPC
+
+[ molecules ]
+; Compound        #mols
+Protein_chain_A     1
+DPPC              128
+SOL              3655
+"""
+
+
+def test_add_ifdef_block_lands_after_the_protein_posres_block(tmp_path):
+    t = tmp_path / "topol.top"
+    t.write_text(TOPOL_WITH_MOLECULES)
+    assert BFF.add_ifdef_block(t, "STRONG_POSRES", "strong_posre.itp") is True
+    lines = t.read_text().splitlines()
+    posres_end = next(i for i, l in enumerate(lines)
+                      if l.strip() == "#endif")
+    added = next(i for i, l in enumerate(lines) if "strong_posre.itp" in l)
+    dppc = next(i for i, l in enumerate(lines) if 'include "dppc.itp"' in l)
+    assert posres_end < added < dppc
+
+
+def test_add_ifdef_block_wraps_the_include_in_the_guard(tmp_path):
+    t = tmp_path / "topol.top"
+    t.write_text(TOPOL_WITH_MOLECULES)
+    BFF.add_ifdef_block(t, "STRONG_POSRES", "strong_posre.itp")
+    text = t.read_text()
+    assert "#ifdef STRONG_POSRES" in text
+    i = text.index("#ifdef STRONG_POSRES")
+    block = text[i:text.index("#endif", i)]
+    assert 'strong_posre.itp' in block
+
+
+def test_add_ifdef_block_is_idempotent(tmp_path):
+    t = tmp_path / "topol.top"
+    t.write_text(TOPOL_WITH_MOLECULES)
+    assert BFF.add_ifdef_block(t, "STRONG_POSRES", "strong_posre.itp") is True
+    before = t.read_text()
+    assert BFF.add_ifdef_block(t, "STRONG_POSRES", "strong_posre.itp") is False
+    assert t.read_text() == before
+
+
+def test_set_molecule_count_returns_the_previous_value(tmp_path):
+    t = tmp_path / "topol.top"
+    t.write_text(TOPOL_WITH_MOLECULES)
+    assert BFF.set_molecule_count(t, "DPPC", 120) == 128
+
+
+def test_set_molecule_count_changes_only_the_named_row(tmp_path):
+    t = tmp_path / "topol.top"
+    t.write_text(TOPOL_WITH_MOLECULES)
+    BFF.set_molecule_count(t, "DPPC", 120)
+    rows = {}
+    body = t.read_text().split("[ molecules ]", 1)[1]
+    for line in body.splitlines():
+        if line.strip() and not line.strip().startswith(";"):
+            name, n = line.split()[:2]
+            rows[name] = int(n)
+    assert rows == {"Protein_chain_A": 1, "DPPC": 120, "SOL": 3655}
+
+
+def test_set_molecule_count_ignores_an_include_of_the_same_name(tmp_path):
+    """`#include "dppc.itp"` must not be mistaken for the DPPC molecules row."""
+    t = tmp_path / "topol.top"
+    t.write_text(TOPOL_WITH_MOLECULES)
+    BFF.set_molecule_count(t, "DPPC", 120)
+    assert '#include "dppc.itp"' in t.read_text()
+
+
+def test_set_molecule_count_rejects_a_missing_molecule(tmp_path):
+    t = tmp_path / "topol.top"
+    t.write_text(TOPOL_WITH_MOLECULES)
+    with pytest.raises(BFF.BergerForceFieldError, match="POPC"):
+        BFF.set_molecule_count(t, "POPC", 10)
+
+
+def test_set_molecule_count_rejects_a_topology_without_the_section(tmp_path):
+    t = tmp_path / "topol.top"
+    t.write_text('#include "x.itp"\n')
+    with pytest.raises(BFF.BergerForceFieldError, match="molecules"):
+        BFF.set_molecule_count(t, "DPPC", 10)
+
+
+# --- the real oracle: a wrong [ molecules ] count must fail grompp -------------
+# set_molecule_count exists because InflateGRO deletes overlapping lipids and
+# the topology has to agree with the coordinate file. A structural assertion
+# that the row changed does not prove that; only grompp refusing a stale count
+# and accepting the corrected one does.
+
+@pytest.mark.integration
+@pytestmark_inputs
+def test_set_molecule_count_mismatch_is_rejected_then_fix_is_accepted_by_grompp(tmp_path):
+    gmx = shutil.which("gmx")
+    if gmx is None:
+        pytest.skip("gmx not on PATH")
+
+    BFF.build(_TUT / "lipid.itp", _GMXLIB, tmp_path)
+    for name in ("dppc.itp", "topol_dppc.top", "dppc128.pdb"):
+        shutil.copy(_TUT / name, tmp_path / name)
+    shutil.copy(_TUT / "mdp" / "minim.mdp", tmp_path / "minim.mdp")
+    top = tmp_path / "topol_dppc.top"
+
+    def run_grompp():
+        return subprocess.run(
+            [gmx, "grompp", "-f", "minim.mdp", "-c", "dppc128.pdb",
+             "-p", "topol_dppc.top", "-o", "dppc.tpr", "-maxwarn", "2"],
+            cwd=tmp_path, capture_output=True, text=True,
+            env={**os.environ, "GMX_MAXBACKUP": "-1"},
+        )
+
+    # dppc128.pdb has exactly 128 DPPC molecules worth of coordinates; a stale
+    # count (as InflateGRO would leave behind if the topology were not fixed
+    # up) must make grompp refuse the mismatched system.
+    previous = BFF.set_molecule_count(top, "DPPC", 120)
+    assert previous == 128
+    bad = run_grompp()
+    assert bad.returncode != 0, "grompp should reject a [ molecules ] count that disagrees with the coordinate file"
+
+    # Restoring the count to match the coordinates is exactly what makes the
+    # next grompp call succeed -- proving set_molecule_count is load-bearing,
+    # not cosmetic bookkeeping.
+    BFF.set_molecule_count(top, "DPPC", 128)
+    good = run_grompp()
+    assert good.returncode == 0, good.stderr[-2000:]
+    assert (tmp_path / "dppc.tpr").is_file()
