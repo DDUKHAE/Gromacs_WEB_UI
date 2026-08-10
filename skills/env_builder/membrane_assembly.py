@@ -14,7 +14,6 @@ from lib import berger_forcefield as BFF
 from lib import gmx_wrapper as GW
 from lib import gro_file
 from lib import inflate_gro
-from lib import state  # noqa: F401  -- kept for the pipeline steps in Task 8
 from lib.mdp_templates import base as MDP
 
 #: DPPC's experimental area per lipid in the liquid-crystalline phase at 323 K.
@@ -49,7 +48,9 @@ def _stage(workspace: Path) -> Path:
 
 def _run(workspace: Path, args: list[str], **kwargs: Any):
     """GW.run with the assembly's environment and the run's log."""
-    kwargs.setdefault("env", dict(GMX_ENV))
+    # Merged, not setdefault: a caller passing its own env must not silently
+    # lose GMX_MAXBACKUP and bury stage1_env under #file.N# backups.
+    kwargs["env"] = {**GMX_ENV, **(kwargs.get("env") or {})}
     result = GW.run(args, cwd=_stage(workspace),
                     progress_log=Path(workspace) / "runner.log", **kwargs)
     if not result.ok:

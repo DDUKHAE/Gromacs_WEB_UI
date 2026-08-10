@@ -4,6 +4,7 @@ Unit tests stub GW.run so the ordering, arguments and topology bookkeeping can
 be checked without GROMACS. The integration tests at the bottom let real gmx be
 the oracle for the files this module writes. The end-to-end run lives in Task 10.
 """
+import re
 import shutil
 from pathlib import Path
 from unittest import mock
@@ -153,6 +154,20 @@ def test_assembly_disables_gmx_backups(workspace):
         MA.prepare_bilayer(workspace)
     assert calls
     assert all((kw.get("env") or {}).get("GMX_MAXBACKUP") == "-1" for _, kw in calls), calls
+
+
+def test_a_caller_supplied_env_keeps_the_backup_setting(workspace):
+    """Task 6 runs the same commands 40 times in one directory; losing
+    GMX_MAXBACKUP there buries stage1_env under #file.N# backups."""
+    seen = {}
+
+    def fake(args, cwd, **kw):
+        seen.update(kw.get("env") or {})
+        return FakeResult()
+
+    with mock.patch.object(MA.GW, "run", side_effect=fake):
+        MA._run(workspace, ["editconf"], env={"OMP_NUM_THREADS": "1"})
+    assert seen == {"GMX_MAXBACKUP": "-1", "OMP_NUM_THREADS": "1"}
 
 
 def test_prepare_bilayer_is_fatal_when_gmx_fails(workspace):
@@ -393,20 +408,19 @@ pytestmark_needs_data = pytest.mark.skipif(
     not (TUT / "dppc128.pdb").is_file(), reason="needs tutorial_data/KALP15_in_DPPC")
 
 
-@pytest.fixture(scope="module")
-def real_bilayer(tmp_path_factory):
-    """A workspace whose bilayer has been through the real grompp/trjconv.
+def _real_workspace(ws):
+    """A workspace with the force field built and the bilayer made whole.
 
-    Module-scoped: prepare_bilayer on 17365 atoms is the slowest step here and
-    both integration tests need its output.
+    Each fixture gets its own: the two chains below both write processed.gro,
+    from editconf and from pdb2gmx respectively, so sharing one directory would
+    make them order-dependent. Rebuilding costs ~0.1 s.
     """
     if shutil.which("gmx") is None:
         pytest.skip("needs gmx on PATH")
-    ws = tmp_path_factory.mktemp("kalp_real")
     for sub in ("inputs", "stage1_env"):
         (ws / sub).mkdir(parents=True)
     state.write(ws, state.initial(ws))
-    for name in ("dppc128.pdb", "KALP-15_princ.pdb"):
+    for name in ("dppc128.pdb", "KALP-15_princ.pdb", "inflategro.pl"):
         shutil.copy2(TUT / name, ws / "inputs" / name)
     shutil.copy2(TUT / "dppc.itp", ws / "stage1_env" / "dppc.itp")
     # GW.get_gmxlib() derives GMXLIB from the gmx path without resolving
@@ -417,8 +431,42 @@ def real_bilayer(tmp_path_factory):
     if gmxlib is None:
         pytest.skip("needs gromos53a6.ff in GMXLIB")
     BFF.build(TUT / "lipid.itp", gmxlib, ws / "stage1_env")
-    whole = MA.prepare_bilayer(ws)
-    return ws, whole
+    return ws, MA.prepare_bilayer(ws)
+
+
+@pytest.fixture(scope="module")
+def real_bilayer(tmp_path_factory):
+    return _real_workspace(tmp_path_factory.mktemp("kalp_bilayer"))
+
+
+@pytest.fixture(scope="module")
+def real_protein_system(tmp_path_factory):
+    """The whole assembly on the real inputs, up to the inflated system.
+
+    Everything before `place_peptide` is env_builder's job, done here as
+    scaffolding: pdb2gmx needs `-ter` with terminus "None" (menu index 2, not 0
+    -- 0 is NH3+, which needs an N the ACE cap does not have) and `-ignh`
+    (the PDB's ACE carries HA1/HA2/HA3, absent from the united-atom rtp entry).
+
+    The topology gets a DPPC row but no SOL row: inflategro writes only the
+    protein and the named lipid, so the bilayer's 3655 waters are gone from
+    system_inflated.gro. The tutorial adds SOL at solvation, which is Task 7.
+    """
+    ws, whole = _real_workspace(tmp_path_factory.mktemp("kalp_protein"))
+    stage = ws / "stage1_env"
+    assert GW.run(["pdb2gmx", "-f", str(ws / "inputs" / "KALP-15_princ.pdb"),
+                   "-o", "processed.gro", "-p", "topol.top",
+                   "-ff", BFF.FF_TARGET, "-water", "spc", "-ter", "-ignh"],
+                  cwd=stage, interactive_inputs=["2", "2"],
+                  env=dict(MA.GMX_ENV)).ok
+    BFF.add_include(stage / "topol.top", "dppc.itp")
+    topol = stage / "topol.top"
+    topol.write_text(topol.read_text().rstrip("\n") + "\nDPPC 128\n")
+
+    peptide = MA.place_peptide(ws, whole)
+    MA.install_strong_restraints(ws, peptide)
+    system = MA.merge_system(ws, peptide, whole)
+    return ws, MA.inflate_once(ws, system)
 
 
 @pytest.mark.integration
@@ -458,3 +506,80 @@ def test_gmx_reads_the_merged_system(real_bilayer):
                    cwd=stage, env=dict(MA.GMX_ENV))
     assert check.ok, check.stderr[-800:]
     assert gro_file.count(stage / "check.gro") == gro_file.count(system)
+
+
+@pytest.mark.integration
+@pytestmark_needs_data
+def test_inflate_once_corrects_molecules_for_a_real_deletion(real_protein_system):
+    """The [ molecules ] arithmetic fed by a real inflategro.pl run.
+
+    grompp is the oracle: it compares [ molecules ] against the coordinates, so
+    a wrong correction aborts with "number of coordinates ... does not match
+    topology". 128 lipids x 50 atoms - 2 deleted + 138 protein atoms = 6438.
+    """
+    ws, result = real_protein_system
+    stage = ws / "stage1_env"
+    assert result.removed == 2, "the real overlap deletion on this system"
+    assert re.search(r"^DPPC 126$", (stage / "topol.top").read_text(), re.M)
+    assert gro_file.count(result.output) == 6438
+    # Inflating by 4 multiplies the lateral area by 16, so this is far from
+    # TARGET_APL -- that is what Task 6's shrink loop is for.
+    assert result.apl_total > 10 * MA.TARGET_APL
+
+    grompp = GW.run(["grompp", "-f", "em.mdp", "-c", result.output.name,
+                     "-r", result.output.name, "-p", "topol.top",
+                     "-o", "count_check.tpr", "-maxwarn", "3"],
+                    cwd=stage, env=dict(MA.GMX_ENV))
+    assert grompp.ok, grompp.stderr[-800:]
+
+    # Seen to fail: uncorrected, the same grompp reports the mismatch.
+    MA.BFF.set_molecule_count(stage / "topol.top", "DPPC", 128)
+    try:
+        stale = GW.run(["grompp", "-f", "em.mdp", "-c", result.output.name,
+                        "-r", result.output.name, "-p", "topol.top",
+                        "-o", "count_check.tpr", "-maxwarn", "3"],
+                       cwd=stage, env=dict(MA.GMX_ENV))
+        assert stale.classification == "topology_mismatch", stale.stderr[-800:]
+    finally:
+        MA.BFF.set_molecule_count(stage / "topol.top", "DPPC", 126)
+
+
+@pytest.mark.integration
+@pytestmark_needs_data
+def test_minimise_runs_against_a_real_protein_topology(real_protein_system):
+    """grompp + mdrun + trjconv on the inflated system, protein topology and all.
+
+    GROMPP_MAXWARN is patched to 3 here: once the protein is in the topology a
+    third warning appears -- "You are using Ewald electrostatics in a system
+    with net charge", KALP-15's +4e with the counter-ions not added until Task
+    7's genion. The shipped cap of 2 is therefore not enough for this call; the
+    assertion below pins that down, and the cap is the coordinator's call, not
+    this test's. (The tutorial's own minim_inflategro.mdp never sees it: it uses
+    coulombtype = cutoff, while lib/mdp_templates/em.mdp hardcodes PME.)
+    """
+    ws, result = real_protein_system
+    stage = ws / "stage1_env"
+
+    with pytest.raises(MA.MembraneAssemblyError, match="grompp"):
+        MA.minimise(ws, result.output, "maxwarn_probe")
+
+    with mock.patch.object(MA, "GROMPP_MAXWARN", "3"):
+        out = MA.minimise(ws, result.output, "system_inflated_em")
+
+    assert out.name == "system_inflated_em.gro"
+    assert gro_file.count(out) == gro_file.count(result.output)
+    log = (stage / "system_inflated_em.log").read_text()
+    assert "Steepest Descents converged" in log
+    assert not (stage / "tmp.gro").exists(), "trjconv output moved onto the result"
+
+    # The restraints reached mdrun: the energy term only appears when a
+    # [ position_restraints ] block was actually compiled into the .tpr.
+    assert "Position Rest." in log
+    # And they held: at fc=100000 the peptide is pinned while the inflated
+    # lipids relax by far more.
+    before, after = gro_file.read(result.output).atoms, gro_file.read(out).atoms
+    peptide = [(b, a) for b, a in zip(before, after) if "DPPC" not in b]
+    assert len(peptide) == 138
+    assert max(abs(float(b[20:28]) - float(a[20:28])) for b, a in peptide) < 0.05
+    lipid = [(b, a) for b, a in zip(before, after) if "DPPC" in b]
+    assert max(abs(float(b[20:28]) - float(a[20:28])) for b, a in lipid) > 0.1
