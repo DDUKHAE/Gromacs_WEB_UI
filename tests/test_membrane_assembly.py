@@ -156,6 +156,25 @@ def test_assembly_disables_gmx_backups(workspace):
     assert all((kw.get("env") or {}).get("GMX_MAXBACKUP") == "-1" for _, kw in calls), calls
 
 
+def test_both_minimisations_use_the_tutorials_packing_electrostatics(workspace):
+    """minim_inflategro.mdp uses a plain 1.2 nm cut-off, not PME: the unsolvated
+    system carries KALP-15's +4 e, and Ewald with a net charge is a warning that
+    must stay fatal after genion rather than be waved through with -maxwarn 3."""
+    gro = workspace / "stage1_env" / "system_inflated.gro"
+    gro.write_text(WHOLE_GRO)
+    with mock.patch.object(MA.GW, "run", side_effect=_fake_run([])):
+        MA.prepare_bilayer(workspace)
+        first = (workspace / "stage1_env" / "em.mdp").read_text()
+        MA.minimise(workspace, gro, "system_inflated_em")
+        second = (workspace / "stage1_env" / "em.mdp").read_text()
+
+    for text in (first, second):
+        assert "coulombtype              = cutoff" in text
+        assert "rcoulomb                 = 1.2" in text
+        assert "rvdw                     = 1.2" in text
+    assert "define                   = -DSTRONG_POSRES" in second
+
+
 def test_a_caller_supplied_env_keeps_the_backup_setting(workspace):
     """Task 6 runs the same commands 40 times in one directory; losing
     GMX_MAXBACKUP there buries stage1_env under #file.N# backups."""
@@ -549,23 +568,21 @@ def test_inflate_once_corrects_molecules_for_a_real_deletion(real_protein_system
 def test_minimise_runs_against_a_real_protein_topology(real_protein_system):
     """grompp + mdrun + trjconv on the inflated system, protein topology and all.
 
-    GROMPP_MAXWARN is patched to 3 here: once the protein is in the topology a
-    third warning appears -- "You are using Ewald electrostatics in a system
-    with net charge", KALP-15's +4e with the counter-ions not added until Task
-    7's genion. The shipped cap of 2 is therefore not enough for this call; the
-    assertion below pins that down, and the cap is the coordinator's call, not
-    this test's. (The tutorial's own minim_inflategro.mdp never sees it: it uses
-    coulombtype = cutoff, while lib/mdp_templates/em.mdp hardcodes PME.)
+    Runs with the shipped GROMPP_MAXWARN. PACKING_MDP's plain cut-off is what
+    keeps two warnings sufficient here: with PME, grompp adds "You are using
+    Ewald electrostatics in a system with net charge" -- KALP-15's +4 e, with
+    counter-ions not added until Task 7's genion -- and that is a warning which
+    must stay fatal once the system is neutralised, so it is designed out rather
+    than waved through with a higher cap.
     """
     ws, result = real_protein_system
     stage = ws / "stage1_env"
 
-    with pytest.raises(MA.MembraneAssemblyError, match="grompp"):
-        MA.minimise(ws, result.output, "maxwarn_probe")
+    out = MA.minimise(ws, result.output, "system_inflated_em")
 
-    with mock.patch.object(MA, "GROMPP_MAXWARN", "3"):
-        out = MA.minimise(ws, result.output, "system_inflated_em")
-
+    mdp = (stage / "em.mdp").read_text()
+    assert "coulombtype              = cutoff" in mdp
+    assert (stage / "system_inflated_em.tpr").is_file()
     assert out.name == "system_inflated_em.gro"
     assert gro_file.count(out) == gro_file.count(result.output)
     log = (stage / "system_inflated_em.log").read_text()

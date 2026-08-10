@@ -12,7 +12,12 @@ _DIR = Path(__file__).parent
 REPRODUCIBLE_SEED = 20240101
 
 DEFAULTS = {
-    "em": {"emtol": 1000.0, "emstep": 0.01, "nsteps": 50000, "define": ""},
+    # coulombtype/rcoulomb/rvdw were hardcoded in em.mdp; they are parameters so
+    # the membrane assembly's packing minimisations can use the plain cut-off the
+    # KALP-15/DPPC tutorial specifies. The defaults are the previous literals, so
+    # every other caller renders byte-identically.
+    "em": {"emtol": 1000.0, "emstep": 0.01, "nsteps": 50000, "define": "",
+           "coulombtype": "PME", "rcoulomb": 1.0, "rvdw": 1.0},
     "nvt": {"nsteps": 50000, "dt": 0.002, "tau_t": 0.1, "ref_t": 300.0,
             "gen_seed": -1, "define": "-DPOSRES"},
     "npt": {"nsteps": 50000, "dt": 0.002, "tau_t": 0.1, "ref_t": 300.0, "tau_p": 2.0,

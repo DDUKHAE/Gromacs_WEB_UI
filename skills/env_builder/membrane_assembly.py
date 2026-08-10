@@ -32,6 +32,14 @@ GMX_ENV = {"GMX_MAXBACKUP": "-1"}
 #: with "Too many warnings (2)".
 GROMPP_MAXWARN = "2"
 
+#: The tutorial's own minim_inflategro.mdp settings: a plain cut-off at 1.2 nm
+#: rather than PME. Not cosmetic -- the system carries KALP-15's +4 e with no
+#: counter-ions until solvation, and Ewald with a net charge is a warning that
+#: must stay fatal for the runs after genion, so it cannot be waved through with
+#: a higher -maxwarn. The tutorial switches back to PME in minim.mdp once the
+#: system is solvated and neutralised.
+PACKING_MDP = {"coulombtype": "cutoff", "rcoulomb": 1.2, "rvdw": 1.2}
+
 _GRO_RESNAME = slice(5, 10)
 _GRO_RESID = slice(0, 5)
 _PDB_RESNAME = slice(17, 20)
@@ -129,7 +137,7 @@ def prepare_bilayer(workspace: Path) -> Path:
     topol_dppc = stage / "topol_dppc.top"
     write_dppc_topology(workspace, bilayer_pdb, topol_dppc)
 
-    mdp = MDP.render("em", {}, stage)
+    mdp = MDP.render("em", dict(PACKING_MDP), stage)
     _run(workspace, ["grompp", "-f", mdp.name, "-c", str(bilayer_pdb),
                      "-p", topol_dppc.name, "-o", "dppc.tpr",
                      "-maxwarn", GROMPP_MAXWARN])
@@ -216,7 +224,7 @@ def minimise(workspace: Path, gro: Path, tag: str) -> Path:
     `-DPOSRES`.
     """
     stage = _stage(workspace)
-    mdp = MDP.render("em", {"define": "-DSTRONG_POSRES"}, stage)
+    mdp = MDP.render("em", {**PACKING_MDP, "define": "-DSTRONG_POSRES"}, stage)
     _run(workspace, ["grompp", "-f", mdp.name, "-c", gro.name, "-r", gro.name,
                      "-p", "topol.top", "-o", f"{tag}.tpr",
                      "-maxwarn", GROMPP_MAXWARN])
