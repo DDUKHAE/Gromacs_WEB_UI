@@ -383,3 +383,78 @@ def test_minimise_unwraps_the_minimised_coordinates_in_place(workspace):
     trjconv = calls[2][0]
     assert trjconv[trjconv.index("-f") + 1] == "system_inflated_em.gro"
     assert trjconv[trjconv.index("-o") + 1] == "tmp.gro"
+
+
+# --------------------------------------------------------------------------
+# integration: real gmx as the oracle for the files written above
+# --------------------------------------------------------------------------
+
+pytestmark_needs_data = pytest.mark.skipif(
+    not (TUT / "dppc128.pdb").is_file(), reason="needs tutorial_data/KALP15_in_DPPC")
+
+
+@pytest.fixture(scope="module")
+def real_bilayer(tmp_path_factory):
+    """A workspace whose bilayer has been through the real grompp/trjconv.
+
+    Module-scoped: prepare_bilayer on 17365 atoms is the slowest step here and
+    both integration tests need its output.
+    """
+    if shutil.which("gmx") is None:
+        pytest.skip("needs gmx on PATH")
+    ws = tmp_path_factory.mktemp("kalp_real")
+    for sub in ("inputs", "stage1_env"):
+        (ws / sub).mkdir(parents=True)
+    state.write(ws, state.initial(ws))
+    for name in ("dppc128.pdb", "KALP-15_princ.pdb"):
+        shutil.copy2(TUT / name, ws / "inputs" / name)
+    shutil.copy2(TUT / "dppc.itp", ws / "stage1_env" / "dppc.itp")
+    # GW.get_gmxlib() derives GMXLIB from the gmx path without resolving
+    # symlinks, so a `ln -s .../gmx /tmp/gmxonly/gmx` on PATH yields nothing.
+    resolved = Path(shutil.which("gmx")).resolve().parent.parent / "share" / "gromacs" / "top"
+    gmxlib = next((Path(c) for c in (GW.get_gmxlib(), resolved)
+                   if c and (Path(c) / "gromos53a6.ff").is_dir()), None)
+    if gmxlib is None:
+        pytest.skip("needs gromos53a6.ff in GMXLIB")
+    BFF.build(TUT / "lipid.itp", gmxlib, ws / "stage1_env")
+    whole = MA.prepare_bilayer(ws)
+    return ws, whole
+
+
+@pytest.mark.integration
+@pytestmark_needs_data
+def test_grompp_accepts_the_generated_dppc_topology(real_bilayer):
+    """grompp checks [molecules] against the coordinates, so it validates the
+    counts write_dppc_topology derived from the PDB: a wrong DPPC or SOL number
+    aborts with "number of coordinates does not match topology"."""
+    ws, whole = real_bilayer
+    assert "DPPC 128" in (ws / "stage1_env" / "topol_dppc.top").read_text()
+    assert "SOL 3655" in (ws / "stage1_env" / "topol_dppc.top").read_text()
+    assert (ws / "stage1_env" / "dppc.tpr").is_file()
+    # Passing through the .tpr renames DPP to DPPC, which inflategro relies on.
+    assert MA.residue_counts(whole) == {"DPPC": 128, "SOL": 3655}
+    assert gro_file.count(whole) == 17365
+
+
+@pytest.mark.integration
+@pytestmark_needs_data
+def test_gmx_reads_the_merged_system(real_bilayer):
+    """editconf on system.gro is the oracle for the merge arithmetic: a wrong
+    atom count on line 2 makes gmx truncate or abort rather than agree."""
+    ws, whole = real_bilayer
+    stage = ws / "stage1_env"
+    # pdb2gmx on KALP-15_princ.pdb currently fails on its ACE terminus, so the
+    # peptide coordinates come straight from editconf. merge_system only needs
+    # coordinates.
+    assert GW.run(["editconf", "-f", str(ws / "inputs" / "KALP-15_princ.pdb"),
+                   "-o", "processed.gro"], cwd=stage, env=dict(MA.GMX_ENV)).ok
+    peptide = MA.place_peptide(ws, whole)
+    assert gro_file.box_vectors(gro_file.read(peptide)) == \
+        gro_file.box_vectors(gro_file.read(whole))
+    system = MA.merge_system(ws, peptide, whole)
+    assert gro_file.count(system) == gro_file.count(peptide) + gro_file.count(whole)
+
+    check = GW.run(["editconf", "-f", "system.gro", "-o", "check.gro"],
+                   cwd=stage, env=dict(MA.GMX_ENV))
+    assert check.ok, check.stderr[-800:]
+    assert gro_file.count(stage / "check.gro") == gro_file.count(system)
