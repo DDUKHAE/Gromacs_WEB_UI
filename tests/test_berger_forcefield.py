@@ -588,6 +588,17 @@ def test_add_ifdef_block_is_idempotent(tmp_path):
     assert t.read_text() == before
 
 
+def test_add_ifdef_block_without_a_posres_anchor_is_rejected(tmp_path):
+    """topol_dppc.top is real tracked data with no protein POSRES block at all --
+    position_restraints directives are only legal inside an open moleculetype
+    scope, and that block is the only place a pdb2gmx topology still has one
+    open, so there's no other place to safely land the guard."""
+    t = tmp_path / "topol.top"
+    t.write_text((_TUT / "topol_dppc.top").read_text())
+    with pytest.raises(BFF.BergerForceFieldError, match="POSRES"):
+        BFF.add_ifdef_block(t, "STRONG_POSRES", "strong_posre.itp")
+
+
 def test_set_molecule_count_returns_the_previous_value(tmp_path):
     t = tmp_path / "topol.top"
     t.write_text(TOPOL_WITH_MOLECULES)
@@ -613,6 +624,32 @@ def test_set_molecule_count_ignores_an_include_of_the_same_name(tmp_path):
     t.write_text(TOPOL_WITH_MOLECULES)
     BFF.set_molecule_count(t, "DPPC", 120)
     assert '#include "dppc.itp"' in t.read_text()
+
+
+def test_set_molecule_count_ignores_a_moleculetype_row_of_the_same_name(tmp_path):
+    """A `[ moleculetype ]` row can be a syntactic doppelganger for a
+    `[ molecules ]` row -- the real tracked dppc.itp opens with exactly
+    `DPPC     3` under `[ moleculetype ]`. Matching that instead of the
+    `[ molecules ]` row would silently corrupt the topology."""
+    topol = (
+        '[ moleculetype ]\n'
+        '; Name   nrexcl\n'
+        'DPPC     3\n'
+        '\n'
+        + TOPOL_WITH_MOLECULES
+    )
+    t = tmp_path / "topol.top"
+    t.write_text(topol)
+    assert BFF.set_molecule_count(t, "DPPC", 120) == 128
+    text = t.read_text()
+    assert "DPPC     3\n" in text  # [ moleculetype ] row left untouched
+    body = text.split("[ molecules ]", 1)[1]
+    rows = {}
+    for line in body.splitlines():
+        if line.strip() and not line.strip().startswith(";"):
+            name, n = line.split()[:2]
+            rows[name] = int(n)
+    assert rows == {"Protein_chain_A": 1, "DPPC": 120, "SOL": 3655}
 
 
 def test_set_molecule_count_rejects_a_missing_molecule(tmp_path):

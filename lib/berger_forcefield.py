@@ -250,9 +250,13 @@ def add_include(topol: Path, include: str) -> bool:
 def add_ifdef_block(topol: Path, define: str, include: str) -> bool:
     """Add an `#ifdef <define>` guarded include after the protein's POSRES block.
 
-    The tutorial places the InflateGRO restraints there, between the protein's
-    own position-restraint block and the lipid topology, so the guard can be
-    switched on from the mdp with `-D<define>`.
+    The protein's own `#ifdef POSRES ... #endif` block is the only valid
+    anchor: `position_restraints` directives are only legal while a
+    `[ moleculetype ]` scope is still open, and that block is the sole place
+    in a pdb2gmx-generated topol.top where that is still true. Landing the
+    guard anywhere later (e.g. merely "before the lipid include") produces a
+    file section order can't distinguish from valid but that grompp refuses
+    with "Invalid order for directive position_restraints".
 
     Returns False when the block is already present.
     """
@@ -271,17 +275,12 @@ def add_ifdef_block(topol: Path, define: str, include: str) -> bool:
     posres = re.search(
         r'^\s*#ifdef\s+POSRES\s*$.*?^\s*#endif\s*$\n', text, re.M | re.S
     )
-    if posres is not None:
-        at = posres.end()
-    else:
-        # No protein restraints: fall back to just before the lipid include,
-        # which still precedes [ molecules ].
-        anchor = re.search(r'^\s*#include\s+"[\w.+-]+\.itp"\s*$', text, re.M)
-        if anchor is None:
-            raise BergerForceFieldError(
-                f"cannot find an insertion point for the {define} block in {topol}"
-            )
-        at = anchor.start()
+    if posres is None:
+        raise BergerForceFieldError(
+            f"{topol.name} has no #ifdef POSRES block to anchor "
+            f"{define} after; run pdb2gmx first"
+        )
+    at = posres.end()
     topol.write_text(text[:at] + "\n" + block + text[at:], encoding="utf-8")
     return True
 
