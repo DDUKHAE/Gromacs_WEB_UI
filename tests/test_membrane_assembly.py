@@ -673,7 +673,14 @@ def test_solvate_and_ionise_neutralises_the_real_system(real_solvated_system):
     # water_deletor.pl trims SOL without touching the topology, and genion's
     # own -p bookkeeping runs afterward, so this is the first point a stale
     # SOL count would surface as a fatal (not -maxwarn-able) mismatch.
-    check = GW.run(["grompp", "-f", "ions.mdp", "-c", ions.name,
+    #
+    # Rendered with PME (the module's own overrides={} default), not the
+    # pipeline's cut-off ions.mdp: PME is what turns a leftover net charge
+    # into a fatal "Ewald electrostatics in a system with net charge"
+    # warning. Reusing the cut-off ions.mdp here would make this recheck
+    # blind to exactly the bug it exists to catch.
+    pme_mdp = MA.MDP.render("ions", {}, ws / "stage1_env")
+    check = GW.run(["grompp", "-f", pme_mdp.name, "-c", ions.name,
                     "-p", "topol.top", "-o", "recheck.tpr",
                     "-maxwarn", MA.GROMPP_MAXWARN],
                    cwd=ws / "stage1_env", env=dict(MA.GMX_ENV))
@@ -1040,9 +1047,14 @@ def test_solvate_and_ionise_corrects_sol_count_after_water_deletion(workspace):
     assert re.findall(r"^SOL[ \t]+\d+$", topol, re.M) == ["SOL 1"], topol
 
 
-def test_solvate_and_ionise_renders_a_restraint_free_ions_mdp(workspace):
-    """em.mdp survives the shrink loop with -DSTRONG_POSRES; the ions grompp
-    must not inherit lipid restraints."""
+def test_solvate_and_ionise_renders_a_cutoff_ions_mdp(workspace):
+    """The ions grompp runs before genion, so the system still carries
+    KALP-15's +4e -- PME (the template's own default) there is a fatal
+    "Ewald electrostatics in a system with net charge" warning, confirmed
+    against real gmx. `-f ions.mdp` (not em.mdp, which the shrink loop
+    leaves carrying -DSTRONG_POSRES) is the actual call-site discriminator;
+    the ions template has no `define` placeholder at all, so a
+    STRONG_POSRES-absence assertion could never fail and is not one."""
     packed = workspace / "stage1_env" / "system_shrink3_em.gro"
     packed.write_text("p\n    1\n    1DPPC     C1    1   1.0   1.0   1.0\n"
                       "   6.0   6.0   6.0\n")
@@ -1061,7 +1073,7 @@ def test_solvate_and_ionise_renders_a_restraint_free_ions_mdp(workspace):
         if args[0] == "grompp":
             assert args[args.index("-f") + 1] == "ions.mdp"
             rendered = (stage / "ions.mdp").read_text()
-            assert "STRONG_POSRES" not in rendered
+            assert "coulombtype              = cutoff" in rendered
         if args[0] == "genion":
             (stage / "ions.gro").write_text(
                 "i\n    1\n    1SOL      OW    1   1.0   1.0   1.0\n   6.0   6.0   6.0\n")
@@ -1078,4 +1090,115 @@ def test_solvate_and_ionise_renders_a_restraint_free_ions_mdp(workspace):
          mock.patch.object(MA, "_script", return_value=Path("water_deletor.pl")):
         MA.solvate_and_ionise(workspace, packed)
 
-    assert "STRONG_POSRES" not in (workspace / "stage1_env" / "ions.mdp").read_text()
+    assert "coulombtype              = cutoff" in \
+        (workspace / "stage1_env" / "ions.mdp").read_text()
+
+
+# --- assemble() -----------------------------------------------------------
+
+
+def test_assemble_calls_everything_in_order_and_builds_the_summary(workspace):
+    """assemble() has no other test and no caller yet (Task 8 wires it up).
+    A swapped call order, a mistyped summary key, or a state write onto the
+    wrong step would otherwise ship undetected until Task 10's end-to-end
+    run -- the most expensive place to find it."""
+    stage = workspace / "stage1_env"
+    bilayer = stage / "bilayer.gro"
+    peptide = stage / "peptide.gro"
+    system = stage / "system.gro"
+    inflated_out = stage / "inflated.gro"
+    inflated_em = stage / "inflated_em.gro"
+    final_gro = stage / "final.gro"
+    ions = stage / "ions.gro"
+    index = stage / "index.ndx"
+    for p in (bilayer, peptide, system, inflated_out, inflated_em, final_gro,
+             ions, index):
+        p.write_text("x")
+
+    inflate_result = MA.inflate_gro.InflateResult(
+        apl_total=5.0, apl_upper=5.0, apl_lower=5.0,
+        removed_upper=1, removed_lower=2, output=inflated_out,
+        area_dat=stage / "area.dat")
+    shrink_result = MA.ShrinkResult(
+        final_gro=final_gro, iterations=3, apl_total=0.6,
+        apl_history=[1.0, 0.8, 0.6], target_apl=0.64)
+
+    calls = []
+
+    def fake_prepare_bilayer(ws):
+        calls.append("prepare_bilayer")
+        return bilayer
+
+    def fake_place_peptide(ws, b):
+        calls.append("place_peptide")
+        assert b == bilayer
+        return peptide
+
+    def fake_merge_system(ws, p, b):
+        calls.append("merge_system")
+        assert p == peptide and b == bilayer
+        return system
+
+    def fake_install(ws, p):
+        calls.append("install_strong_restraints")
+        assert p == peptide
+
+    def fake_inflate_once(ws, s):
+        calls.append("inflate_once")
+        assert s == system
+        return inflate_result
+
+    def fake_minimise(ws, gro, tag):
+        calls.append("minimise")
+        assert gro == inflate_result.output
+        assert tag == "system_inflated_em"
+        return inflated_em
+
+    def fake_shrink(ws, em, target_apl=MA.TARGET_APL):
+        calls.append("shrink_to_target")
+        assert em == inflated_em
+        return shrink_result
+
+    def fake_solvate(ws, gro):
+        calls.append("solvate_and_ionise")
+        assert gro == final_gro
+        return ions
+
+    def fake_build_index(ws, gro):
+        calls.append("build_index")
+        assert gro == ions
+        return index
+
+    def fake_parse(path):
+        calls.append("parse_index_groups")
+        assert path == index
+        return {"Protein_DPPC": 4}
+
+    with mock.patch.object(MA, "prepare_bilayer", side_effect=fake_prepare_bilayer), \
+         mock.patch.object(MA, "place_peptide", side_effect=fake_place_peptide), \
+         mock.patch.object(MA, "merge_system", side_effect=fake_merge_system), \
+         mock.patch.object(MA, "install_strong_restraints", side_effect=fake_install), \
+         mock.patch.object(MA, "inflate_once", side_effect=fake_inflate_once), \
+         mock.patch.object(MA, "minimise", side_effect=fake_minimise), \
+         mock.patch.object(MA, "shrink_to_target", side_effect=fake_shrink), \
+         mock.patch.object(MA, "solvate_and_ionise", side_effect=fake_solvate), \
+         mock.patch.object(MA, "build_index", side_effect=fake_build_index), \
+         mock.patch.object(MA, "parse_index_groups", side_effect=fake_parse):
+        summary = MA.assemble(workspace, {})
+
+    assert calls == [
+        "prepare_bilayer", "place_peptide", "merge_system",
+        "install_strong_restraints", "inflate_once", "minimise",
+        "shrink_to_target", "solvate_and_ionise", "build_index",
+        "parse_index_groups",
+    ]
+    assert sorted(summary) == [
+        "apl_after_inflation", "apl_final", "apl_history", "apl_target",
+        "index_file", "index_groups", "lipids_removed",
+        "lipids_removed_lower", "lipids_removed_upper", "shrink_iterations",
+    ]
+    assert summary["lipids_removed"] == 3
+    assert summary["index_file"] == "stage1_env/index.ndx"
+
+    s = state.read(workspace)
+    assert s["step_outputs"]["step_2"]["membrane_assembly"] == summary
