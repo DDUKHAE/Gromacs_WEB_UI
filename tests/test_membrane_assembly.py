@@ -738,7 +738,11 @@ def test_shrink_stops_on_exact_equality_with_the_target(workspace):
     start = workspace / "stage1_env" / "system_inflated_em.gro"
     start.write_text("i\n    1\n    1DPPC     C1    1   1.0   1.0   1.0\n"
                      "   6.0   6.0   6.0\n")
-    calls, fi, fm = _apl_sequence(workspace, [0.80, 0.64, 5.0])
+    # The third value must be strictly below target: an <=-to-< mutant never
+    # stops at iteration 2 (0.64 < 0.64 is false), so it needs somewhere to
+    # terminate on its own -- 5.0 would just run the stub dry (IndexError),
+    # killing the mutant by accident rather than by a wrong-iteration assert.
+    calls, fi, fm = _apl_sequence(workspace, [0.80, 0.64, 0.60])
     with mock.patch.object(MA.inflate_gro, "inflate", side_effect=fi), \
          mock.patch.object(MA, "minimise", side_effect=fm), \
          mock.patch.object(MA, "_script", return_value=Path("inflategro.pl")):
@@ -765,7 +769,11 @@ def test_shrink_target_apl_actually_controls_the_stopping_point(workspace):
     start = workspace / "stage1_env" / "system_inflated_em.gro"
     start.write_text("i\n    1\n    1DPPC     C1    1   1.0   1.0   1.0\n"
                      "   6.0   6.0   6.0\n")
-    calls, fi, fm = _apl_sequence(workspace, [1.20, 0.90])
+    # Padded past the value a target_apl->TARGET_APL(0.64) mutant would chase
+    # (0.50 <= 0.64 at iteration 3), so that mutant terminates on a wrong
+    # iteration instead of running the stub dry -- an IndexError would kill
+    # the mutant by accident, not by observing the wrong result.
+    calls, fi, fm = _apl_sequence(workspace, [1.20, 0.90, 0.50, 0.30])
     with mock.patch.object(MA.inflate_gro, "inflate", side_effect=fi), \
          mock.patch.object(MA, "minimise", side_effect=fm), \
          mock.patch.object(MA, "_script", return_value=Path("inflategro.pl")):
