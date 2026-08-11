@@ -7,6 +7,7 @@ file names match that script so its output can be compared step for step.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -236,6 +237,52 @@ def minimise(workspace: Path, gro: Path, tag: str) -> Path:
     tmp = _require(stage / "tmp.gro")
     tmp.replace(out)
     return out
+
+
+@dataclass
+class ShrinkResult:
+    final_gro: Path
+    iterations: int
+    apl_total: float
+    apl_history: list[float]
+    target_apl: float
+
+
+def shrink_to_target(workspace: Path, inflated_em: Path,
+                     target_apl: float = TARGET_APL,
+                     max_iterations: int = MAX_SHRINK_ITERATIONS) -> ShrinkResult:
+    """Shrink by 0.95 and minimise until the area per lipid reaches the target.
+
+    The tutorial says to "repeat shrinking and EM iterations until the area per
+    lipid reaches an appropriate value", and its reference script hardcodes 26.
+    Because 4 * 0.95**26 returns the cell to roughly native bilayer packing,
+    stopping on the measured APL lands in the same place while adapting to a
+    different lipid or peptide. An iteration count far from 26 is a signal that
+    something is wrong, which is why it is returned and recorded.
+    """
+    stage = _stage(workspace)
+    script = _script(workspace, "inflategro.pl")
+    source = Path(inflated_em)
+    history: list[float] = []
+
+    for n in range(1, max_iterations + 1):
+        result = inflate_gro.inflate(
+            script=script, gro=source, scale=0.95, resname="DPPC", cutoff_a=0,
+            out=stage / f"system_shrink{n}.gro", gridsize=5,
+            area_dat=stage / f"area_shrink{n}.dat", cwd=stage,
+        )
+        history.append(result.apl_total)
+        minimised = minimise(workspace, result.output, f"system_shrink{n}_em")
+        if result.apl_total <= target_apl:
+            return ShrinkResult(final_gro=minimised, iterations=n,
+                                apl_total=result.apl_total,
+                                apl_history=history, target_apl=target_apl)
+        source = minimised
+
+    raise MembraneAssemblyError(
+        f"area per lipid did not reach {target_apl} nm^2 in {max_iterations} "
+        f"shrink iterations; last value {history[-1]:.4g}, history {history}"
+    )
 
 
 def _lipid_count(topol: Path) -> int:

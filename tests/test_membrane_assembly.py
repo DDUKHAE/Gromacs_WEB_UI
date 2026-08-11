@@ -600,3 +600,130 @@ def test_minimise_runs_against_a_real_protein_topology(real_protein_system):
     assert max(abs(float(b[20:28]) - float(a[20:28])) for b, a in peptide) < 0.05
     lipid = [(b, a) for b, a in zip(before, after) if "DPPC" in b]
     assert max(abs(float(b[20:28]) - float(a[20:28])) for b, a in lipid) > 0.1
+
+
+# --- the shrink loop ----------------------------------------------------------
+# The reference script hardcodes 26 iterations and asks the operator to inspect
+# area_shrink*.dat afterwards. Terminating on the measured APL makes that check
+# the loop's own condition; 26 becomes an expected value, not the control.
+
+
+def _apl_sequence(workspace, values):
+    """Stub inflate/minimise so the loop sees a given APL trajectory."""
+    stage = workspace / "stage1_env"
+    calls = {"inflate": [], "minimise": []}
+
+    def fake_inflate(script, gro, scale, resname, cutoff_a, out, gridsize,
+                     area_dat, cwd):
+        calls["inflate"].append((Path(gro).name, scale, cutoff_a, Path(out).name))
+        Path(out).write_text("s\n    1\n    1DPPC     C1    1   1.0   1.0   1.0\n"
+                             "   6.0   6.0   6.0\n")
+        Path(area_dat).write_text("0.0 0.0 0.0\n")
+        apl = values[len(calls["inflate"]) - 1]
+        return MA.inflate_gro.InflateResult(
+            apl_total=apl, apl_upper=apl, apl_lower=apl,
+            removed_upper=0, removed_lower=0,
+            output=Path(out), area_dat=Path(area_dat),
+        )
+
+    def fake_minimise(ws, gro, tag):
+        calls["minimise"].append(tag)
+        out = stage / f"{tag}.gro"
+        out.write_text("e\n    1\n    1DPPC     C1    1   1.0   1.0   1.0\n"
+                       "   6.0   6.0   6.0\n")
+        return out
+
+    return calls, fake_inflate, fake_minimise
+
+
+def test_shrink_stops_when_the_target_apl_is_reached(workspace):
+    start = workspace / "stage1_env" / "system_inflated_em.gro"
+    start.write_text("i\n    1\n    1DPPC     C1    1   1.0   1.0   1.0\n"
+                     "   6.0   6.0   6.0\n")
+    calls, fi, fm = _apl_sequence(workspace, [1.20, 0.90, 0.70, 0.63])
+    with mock.patch.object(MA.inflate_gro, "inflate", side_effect=fi), \
+         mock.patch.object(MA, "minimise", side_effect=fm), \
+         mock.patch.object(MA, "_script", return_value=Path("inflategro.pl")):
+        result = MA.shrink_to_target(workspace, start)
+
+    assert result.iterations == 4
+    assert result.apl_total == pytest.approx(0.63)
+    assert result.apl_history == pytest.approx([1.20, 0.90, 0.70, 0.63])
+
+
+def test_shrink_scales_by_0_95_with_no_cutoff(workspace):
+    start = workspace / "stage1_env" / "system_inflated_em.gro"
+    start.write_text("i\n    1\n    1DPPC     C1    1   1.0   1.0   1.0\n"
+                     "   6.0   6.0   6.0\n")
+    calls, fi, fm = _apl_sequence(workspace, [0.60])
+    with mock.patch.object(MA.inflate_gro, "inflate", side_effect=fi), \
+         mock.patch.object(MA, "minimise", side_effect=fm), \
+         mock.patch.object(MA, "_script", return_value=Path("inflategro.pl")):
+        MA.shrink_to_target(workspace, start)
+    _, scale, cutoff, _ = calls["inflate"][0]
+    assert scale == 0.95
+    assert cutoff == 0
+
+
+def test_shrink_file_names_match_the_reference_script(workspace):
+    """First iteration reads system_inflated_em.gro; later ones read the
+    previous iteration's minimised output."""
+    start = workspace / "stage1_env" / "system_inflated_em.gro"
+    start.write_text("i\n    1\n    1DPPC     C1    1   1.0   1.0   1.0\n"
+                     "   6.0   6.0   6.0\n")
+    calls, fi, fm = _apl_sequence(workspace, [1.0, 0.9, 0.60])
+    with mock.patch.object(MA.inflate_gro, "inflate", side_effect=fi), \
+         mock.patch.object(MA, "minimise", side_effect=fm), \
+         mock.patch.object(MA, "_script", return_value=Path("inflategro.pl")):
+        MA.shrink_to_target(workspace, start)
+
+    sources = [src for src, _, _, _ in calls["inflate"]]
+    outputs = [out for _, _, _, out in calls["inflate"]]
+    assert sources == ["system_inflated_em.gro",
+                       "system_shrink1_em.gro",
+                       "system_shrink2_em.gro"]
+    assert outputs == ["system_shrink1.gro", "system_shrink2.gro",
+                       "system_shrink3.gro"]
+    assert calls["minimise"] == ["system_shrink1_em", "system_shrink2_em",
+                                 "system_shrink3_em"]
+
+
+def test_shrink_raises_when_the_cap_is_reached(workspace):
+    """Fatal, not retryable: a system that never converged must not proceed."""
+    start = workspace / "stage1_env" / "system_inflated_em.gro"
+    start.write_text("i\n    1\n    1DPPC     C1    1   1.0   1.0   1.0\n"
+                     "   6.0   6.0   6.0\n")
+    calls, fi, fm = _apl_sequence(workspace, [5.0] * 10)
+    with mock.patch.object(MA.inflate_gro, "inflate", side_effect=fi), \
+         mock.patch.object(MA, "minimise", side_effect=fm), \
+         mock.patch.object(MA, "_script", return_value=Path("inflategro.pl")):
+        with pytest.raises(MA.MembraneAssemblyError, match="did not reach"):
+            MA.shrink_to_target(workspace, start, max_iterations=5)
+    assert len(calls["inflate"]) == 5
+
+
+def test_shrink_stops_on_exact_equality_with_the_target(workspace):
+    """<= not <: an APL landing exactly on target must not be treated as
+    still-above-target and trigger one more (unnecessary) iteration."""
+    start = workspace / "stage1_env" / "system_inflated_em.gro"
+    start.write_text("i\n    1\n    1DPPC     C1    1   1.0   1.0   1.0\n"
+                     "   6.0   6.0   6.0\n")
+    calls, fi, fm = _apl_sequence(workspace, [0.80, 0.64, 5.0])
+    with mock.patch.object(MA.inflate_gro, "inflate", side_effect=fi), \
+         mock.patch.object(MA, "minimise", side_effect=fm), \
+         mock.patch.object(MA, "_script", return_value=Path("inflategro.pl")):
+        result = MA.shrink_to_target(workspace, start, target_apl=0.64)
+    assert result.iterations == 2
+    assert result.apl_total == pytest.approx(0.64)
+
+
+def test_shrink_records_its_parameters_for_audit(workspace):
+    start = workspace / "stage1_env" / "system_inflated_em.gro"
+    start.write_text("i\n    1\n    1DPPC     C1    1   1.0   1.0   1.0\n"
+                     "   6.0   6.0   6.0\n")
+    calls, fi, fm = _apl_sequence(workspace, [0.60])
+    with mock.patch.object(MA.inflate_gro, "inflate", side_effect=fi), \
+         mock.patch.object(MA, "minimise", side_effect=fm), \
+         mock.patch.object(MA, "_script", return_value=Path("inflategro.pl")):
+        result = MA.shrink_to_target(workspace, start, target_apl=0.64)
+    assert result.target_apl == 0.64
