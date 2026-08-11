@@ -21,6 +21,7 @@ from lib.system_config import load_config
 from lib import ligand_params as LP
 from lib import llm_assist
 from lib.pdb_analyzer import PDBAnalyzer
+from skills.env_builder import membrane_assembly
 
 
 _NET_CHARGE_RE = re.compile(
@@ -467,6 +468,27 @@ def _resolve_forcefield(requested: str) -> str:
     )
 
 
+def dispatch_environment_build(workspace_dir: Path, params: dict[str, Any],
+                               variant: str | None) -> None:
+    """Build the solvated, ionised system for this tutorial's pipeline variant.
+
+    Both arms end at the same contract: stage1_env/ions.gro exists and
+    step_outputs.step_5 is populated, so md_runner does not need to know which
+    route was taken.
+
+    Deliberately not wrapped in try/except: MembraneAssemblyError subclasses
+    Exception, not RuntimeError, precisely so a fatal topology or packing
+    failure cannot be demoted into a retryable judgment.
+    """
+    if variant == "membrane_md_standard":
+        membrane_assembly.assemble(workspace_dir, params)
+        return
+    run_step2_box(workspace_dir, params["box_type"], params["box_distance_nm"])
+    run_step3_solvate(workspace_dir)
+    run_step4_ions_prep(workspace_dir)
+    run_step5_genion(workspace_dir, concentration=params["ion_concentration_M"])
+
+
 def build_environment(pdb_path: Path, prompt: str, workspace_dir: Path,
                       prerequisites: dict[str, Any] | None = None,
                       interactive: bool = True) -> dict[str, Any]:
@@ -587,8 +609,6 @@ def build_environment(pdb_path: Path, prompt: str, workspace_dir: Path,
     run_step1_topology(workspace_dir, ff, params.values["water_model"])
     integrate_lipid_topology(workspace_dir)
     integrate_cgenff_ligand(workspace_dir)
-    run_step2_box(workspace_dir, params.values["box_type"], params.values["box_distance_nm"])
-    run_step3_solvate(workspace_dir)
-    run_step4_ions_prep(workspace_dir)
-    run_step5_genion(workspace_dir, concentration=params.values["ion_concentration_M"])
+    dispatch_environment_build(workspace_dir, params.values,
+                               decision.pipeline_variant)
     return state.read(workspace_dir)
