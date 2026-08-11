@@ -115,29 +115,22 @@ def test_every_phase_renders_without_a_key_error(tmp_path):
         MDP.render(phase, {}, tmp_path)
 
 
-def test_run_phase_passes_the_restraint_reference():
+def test_run_phase_passes_the_restraint_reference(run_phase_grompp_args):
     """Guard the wiring, not just GROMACS's behaviour.
 
     The integration test above proves that -DPOSRES needs -r, but it calls
     grompp directly with its own -r, so deleting the wiring in run_phase leaves
-    it green. This asserts the argument list run_phase actually builds.
+    it green. This inspects the argument list run_phase actually builds.
     """
-    from skills.md_runner import md_runner as MD
+    # nvt defaults to define = -DPOSRES, so -r is required and must point at
+    # the phase's own input coordinates.
+    _, args = run_phase_grompp_args("restrained", "nvt", stage2_files=["em.gro"])
+    assert args[args.index("-r") + 1] == args[args.index("-c") + 1]
+    assert args[args.index("-c") + 1].endswith("stage2_md/em.gro")
 
-    restrained = MD._mdp_defines_restraints
-    assert callable(restrained)
-
-    import re as _re
-    src = Path("skills/md_runner/md_runner.py").read_text()
-    block = _re.search(r"grompp_args = \[.*?grompp_result = GW\.run\(", src, _re.S)
-    assert block, "could not locate run_phase's grompp argument construction"
-    assert '"-r"' in block.group(0), (
-        "run_phase builds grompp arguments without -r; a restrained mdp will "
-        "fail with 'Cannot find position restraint file restraint.gro'"
-    )
-    assert "_mdp_defines_restraints" in block.group(0), (
-        "-r must be conditional on the rendered mdp actually defining restraints"
-    )
+    # em has no restraints; -r there would demand a file nothing produces.
+    _, args = run_phase_grompp_args("free", "em")
+    assert "-r" not in args
 
 
 @pytest.mark.parametrize("define,expected", [

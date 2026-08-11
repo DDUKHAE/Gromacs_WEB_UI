@@ -44,6 +44,11 @@ DEFAULTS = {
     # since PME raises a fatal "Ewald electrostatics in a system with net
     # charge" warning. Defaults keep every existing caller byte-identical.
     "ions": {"coulombtype": "PME", "rcoulomb": 1.0, "rvdw": 1.0},
+    # anneal_npt.mdp is the tutorial's annealing rescue, kept literal apart
+    # from `define` -- see the comment at the top of that file. Only keys the
+    # template actually has a placeholder for belong here: str.format drops
+    # the rest silently, so extra entries would read as knobs that do nothing.
+    "anneal_npt": {"define": "-DPOSRES -DPOSRES_LIPID"},
     "umbrella": {"nsteps": 500000, "dt": 0.002, "tau_t": 0.5, "ref_t": 300.0,
                   "tau_p": 2.0, "pull_group1": "Chain_A", "pull_group2": "Chain_B",
                   "pull_coord_init": 0.0, "pull_coord_k": 1000.0},
@@ -73,6 +78,7 @@ _FILES = {
     "npt_pr": "npt.mdp",
     "production": "production.mdp",
     "ions": "ions.mdp",
+    "anneal_npt": "anneal_npt.mdp",
     "umbrella": "umbrella.mdp",
     "free_energy": "free_energy.mdp",
 }

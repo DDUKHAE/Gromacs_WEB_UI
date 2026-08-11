@@ -101,6 +101,34 @@ def _mdp_defines_restraints(mdp_path: Path) -> bool:
     return bool(match) and "-DPOSRES" in match.group(1)
 
 
+MEMBRANE_VARIANTS = frozenset({"membrane_md_standard"})
+
+
+def build_grompp_args(phase: str, variant: str | None, mdp_name: str,
+                      input_gro: str, top: str, tpr: str,
+                      index: str | None, input_cpt: str | None,
+                      maxwarn: int, restraint: str | None = None) -> list[str]:
+    """Assemble a grompp command line.
+
+    Membrane phases couple to the Protein_DPPC index group, which only exists
+    in index.ndx, so they must pass -n or grompp fails on an unknown group.
+    The aqueous sequence has no index file and must not be given -n.
+
+    `restraint` is the -r reference structure, which position restraints have
+    required since GROMACS 2018.
+    """
+    args = ["grompp", "-f", mdp_name, "-c", input_gro]
+    if restraint:
+        args.extend(["-r", restraint])
+    if input_cpt:
+        args.extend(["-t", input_cpt])
+    args.extend(["-p", top, "-o", tpr])
+    if variant in MEMBRANE_VARIANTS and index:
+        args.extend(["-n", index])
+    args.extend(["-maxwarn", str(maxwarn)])
+    return args
+
+
 def run_phase(workspace_dir: Path, phase: str,
               overrides: dict[str, Any] | None = None) -> None:
     ws = Path(workspace_dir)
@@ -112,7 +140,11 @@ def run_phase(workspace_dir: Path, phase: str,
         render_overrides["has_protein"] = (
             s_for_render.get("tutorial") or {}
         ).get("has_protein", True)
-    mdp_path = MDP.render(phase, render_overrides, output_dir=out_dir)
+    # A remediation may swap the template (see MUTATION_BY_CAUSE
+    # "lipid_collapse") without renaming the phase: the .tpr, the state key and
+    # the coordinate handoff all stay on the phase's own names.
+    template = render_overrides.pop("mdp_template", phase)
+    mdp_path = MDP.render(template, render_overrides, output_dir=out_dir)
     contract_errors = PC.validate_rendered_mdp(ws, mdp_path, phase)
     if contract_errors:
         raise StateContractError("; ".join(contract_errors))
@@ -126,21 +158,20 @@ def run_phase(workspace_dir: Path, phase: str,
     in_gro_path = ws / in_dir_rel / in_gro
     top_path = ws / "stage1_env" / "topol.top"
     tpr_path = out_dir / f"{phase}.tpr"
-    grompp_args = ["grompp", "-f", mdp_path.name,
-                   "-c", str(in_gro_path)]
-    # Position restraints need an explicit reference structure since
-    # GROMACS 2018; without it grompp fails with "Cannot find position
-    # restraint file restraint.gro (option -r)". Both tutorials pass the
-    # phase's own input coordinates, e.g. `-c em.gro -r em.gro`.
-    if _mdp_defines_restraints(mdp_path):
-        grompp_args.extend(["-r", str(in_gro_path)])
     input_cpt = PHASE_INPUT_CPT.get(phase)
-    if input_cpt and (out_dir / input_cpt).is_file():
-        grompp_args.extend(["-t", input_cpt])
-    grompp_args.extend(["-p", str(top_path), "-o", tpr_path.name,
-                        "-maxwarn", "1"])
-    if grompp_maxwarn != 1:
-        grompp_args[-1] = str(grompp_maxwarn)
+    index_path = ws / "stage1_env" / "index.ndx"
+    grompp_args = build_grompp_args(
+        phase=phase, variant=variant, mdp_name=mdp_path.name,
+        input_gro=str(in_gro_path), top=str(top_path), tpr=tpr_path.name,
+        index=str(index_path) if index_path.is_file() else None,
+        input_cpt=input_cpt if input_cpt and (out_dir / input_cpt).is_file() else None,
+        maxwarn=grompp_maxwarn,
+        # Position restraints need an explicit reference structure since
+        # GROMACS 2018; without it grompp fails with "Cannot find position
+        # restraint file restraint.gro (option -r)". Both tutorials pass the
+        # phase's own input coordinates, e.g. `-c em.gro -r em.gro`.
+        restraint=str(in_gro_path) if _mdp_defines_restraints(mdp_path) else None,
+    )
     grompp_result = GW.run(
         grompp_args,
         cwd=out_dir,
@@ -187,6 +218,14 @@ MUTATION_BY_CAUSE = {
     "pressure_coupling": [{"tau_p": 5.0}, {"tau_p": 8.0}, {"tau_p": 10.0}],
     "temperature_coupling": [{"tau_t": 0.5}, {"tau_t": 1.0}, {"tau_t": 2.0}],
     "command_error": [{"grompp_maxwarn": 2}, {"grompp_maxwarn": 3}, {"grompp_maxwarn": 4}],
+    # Membrane equilibration fails in two documented ways: the lipid headgroups
+    # collapse inward, or the bilayer separates and a void opens in the
+    # hydrophobic core. Both show up as LINCS warnings or a distorted cell.
+    # See docs/tutorial/KALP15_in_DPPC/troubleshooting/.
+    "lipid_collapse": [
+        {"define": "-DPOSRES -DPOSRES_LIPID"},
+        {"mdp_template": "anneal_npt", "define": "-DPOSRES -DPOSRES_LIPID"},
+    ],
 }
 
 
