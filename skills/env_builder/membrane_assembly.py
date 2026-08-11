@@ -15,6 +15,7 @@ from lib import berger_forcefield as BFF
 from lib import gmx_wrapper as GW
 from lib import gro_file
 from lib import inflate_gro
+from lib import state
 from lib.mdp_templates import base as MDP
 
 #: DPPC's experimental area per lipid in the liquid-crystalline phase at 323 K.
@@ -286,6 +287,167 @@ def shrink_to_target(workspace: Path, inflated_em: Path,
         f"area per lipid did not reach {target_apl} nm^2 in {max_iterations} "
         f"shrink iterations; last value {last}, history {history}"
     )
+
+
+_GROUP_HEADER_RE = re.compile(r"^\s*\[\s*(.+?)\s*\]\s*$")
+
+
+def parse_index_groups(path: Path) -> dict[str, int]:
+    """Atom count per group in an `.ndx` file."""
+    groups: dict[str, int] = {}
+    current: str | None = None
+    for line in Path(path).read_text(encoding="utf-8", errors="replace").splitlines():
+        header = _GROUP_HEADER_RE.match(line)
+        if header:
+            current = header.group(1)
+            groups.setdefault(current, 0)
+            continue
+        if current is not None:
+            groups[current] += len(line.split())
+    return groups
+
+
+def _upsert_sol_count(topol: Path, count: int) -> None:
+    """Add or correct the `[ molecules ]` SOL row.
+
+    `solvate` and `genion` maintain this themselves via `-p`. `water_deletor.pl`
+    is a plain perl script and does not touch the topology at all, so its count
+    has to be written back by hand or the next grompp rejects the coordinate
+    file for not matching [ molecules ].
+    """
+    text = Path(topol).read_text(encoding="utf-8", errors="replace")
+    if re.search(r"^[ \t]*SOL[ \t]+\d+[ \t]*$", text, re.M):
+        BFF.set_molecule_count(topol, "SOL", count)
+    else:
+        if not text.endswith("\n"):
+            text += "\n"
+        Path(topol).write_text(text + f"SOL {count}\n", encoding="utf-8")
+
+
+def solvate_and_ionise(workspace: Path, packed_gro: Path) -> Path:
+    """Add water, remove what ended up inside the bilayer, then neutralise.
+
+    The topology carries no SOL row through the shrink loop (inflategro.pl
+    writes only the protein and DPPC), so `solvate -p` is what reintroduces it.
+    `water_deletor.pl` then trims some of those waters without touching the
+    topology, so the SOL row is corrected again from what actually remains in
+    the fixed coordinates before grompp/genion ever see it.
+    """
+    stage = _stage(workspace)
+    _run(workspace, ["solvate", "-cp", packed_gro.name, "-cs", "spc216.gro",
+                     "-o", "system_solv.gro", "-p", "topol.top"])
+    solvated = _require(stage / "system_solv.gro")
+    _upsert_sol_count(stage / "topol.top", residue_counts(solvated).get("SOL", 0))
+
+    removed = inflate_gro.delete_trapped_water(
+        script=_script(workspace, "water_deletor.pl"),
+        gro=solvated, out=stage / "system_solv_fix.gro", cwd=stage,
+    )
+    fixed = _require(stage / "system_solv_fix.gro")
+    _upsert_sol_count(stage / "topol.top", residue_counts(fixed).get("SOL", 0))
+
+    # A fresh render: em.mdp (left by the shrink loop) still carries
+    # -DSTRONG_POSRES, and this grompp must not restrain the lipids.
+    #
+    # The template's ions.mdp defaults to PME, which is fine once the system
+    # is neutral. Here it is not yet -- genion hasn't run -- so PME raises
+    # "You are using Ewald electrostatics in a system with net charge",
+    # confirmed against real gmx as a genuine WARNING (not just the NOTE
+    # about non-integer/non-zero total charge), landing on a total of 3
+    # warnings against GROMPP_MAXWARN=2. PACKING_MDP's plain cut-off sidesteps
+    # it the same way it does for the pre-solvation minimisations, for the
+    # same reason: this warning must stay fatal for any grompp run *after*
+    # genion, when a net charge would mean genion itself failed.
+    ions_mdp = MDP.render("ions", dict(PACKING_MDP), stage)
+    _run(workspace, ["grompp", "-f", ions_mdp.name, "-c", fixed.name,
+                     "-p", "topol.top", "-o", "ions.tpr",
+                     "-maxwarn", GROMPP_MAXWARN])
+    _run(workspace, ["genion", "-s", "ions.tpr", "-o", "ions.gro",
+                     "-p", "topol.top", "-pname", "NA", "-nname", "CL",
+                     "-neutral"],
+         interactive_inputs=["SOL"])
+
+    s = state.read(workspace)
+    s["step_outputs"].setdefault("step_3", {})["water_atoms_removed"] = removed
+    state.write(workspace, s)
+    return _require(stage / "ions.gro")
+
+
+def build_index(workspace: Path, gro: Path) -> Path:
+    """Create index.ndx with the Protein_DPPC group the mdp files couple to.
+
+    The tutorial enters `1 | 13` at the make_ndx prompt. Those are positional
+    group numbers and shift as soon as the lipid count changes, so the merge is
+    requested by name and the result is verified by atom count.
+    """
+    stage = _stage(workspace)
+    _run(workspace, ["make_ndx", "-f", gro.name, "-o", "index.ndx"],
+         interactive_inputs=['"Protein" | "DPPC"', "q"])
+    index = _require(stage / "index.ndx")
+
+    groups = parse_index_groups(index)
+    merged = _named_merge(groups)
+    if merged is None:
+        raise MembraneAssemblyError(
+            f"make_ndx produced no Protein_DPPC group; groups: {sorted(groups)}"
+        )
+    expected = groups.get("Protein", 0) + groups.get("DPPC", 0)
+    if groups[merged] != expected:
+        raise MembraneAssemblyError(
+            f"{merged} holds {groups[merged]} atoms, expected "
+            f"{expected} (Protein {groups.get('Protein', 0)} + "
+            f"DPPC {groups.get('DPPC', 0)})"
+        )
+    if "Water_and_ions" not in groups:
+        raise MembraneAssemblyError(
+            f"index.ndx has no Water_and_ions group; groups: {sorted(groups)}"
+        )
+    return index
+
+
+def _named_merge(groups: dict[str, int]) -> str | None:
+    """The merged group's name, whichever spelling make_ndx produced."""
+    if "Protein_DPPC" in groups:
+        return "Protein_DPPC"
+    for name in groups:
+        if "Protein" in name and "DPPC" in name:
+            return name
+    return None
+
+
+def assemble(workspace_dir: Path, params: dict[str, Any]) -> dict[str, Any]:
+    """Build the bilayer-embedded system and record what happened."""
+    workspace = Path(workspace_dir)
+    bilayer_whole = prepare_bilayer(workspace)
+    peptide = place_peptide(workspace, bilayer_whole)
+    system = merge_system(workspace, peptide, bilayer_whole)
+    install_strong_restraints(workspace, peptide)
+
+    inflated = inflate_once(workspace, system)
+    inflated_em = minimise(workspace, inflated.output, "system_inflated_em")
+    shrink = shrink_to_target(
+        workspace, inflated_em,
+        target_apl=float(params.get("target_apl", TARGET_APL)),
+    )
+    ions = solvate_and_ionise(workspace, shrink.final_gro)
+    index = build_index(workspace, ions)
+
+    summary = {
+        "lipids_removed": inflated.removed,
+        "lipids_removed_upper": inflated.removed_upper,
+        "lipids_removed_lower": inflated.removed_lower,
+        "apl_after_inflation": inflated.apl_total,
+        "shrink_iterations": shrink.iterations,
+        "apl_final": shrink.apl_total,
+        "apl_target": shrink.target_apl,
+        "apl_history": shrink.apl_history,
+        "index_file": str(index.relative_to(workspace)),
+        "index_groups": parse_index_groups(index),
+    }
+    s = state.read(workspace)
+    s["step_outputs"]["step_2"] = {"membrane_assembly": summary}
+    state.write(workspace, s)
+    return summary
 
 
 def _lipid_count(topol: Path) -> int:

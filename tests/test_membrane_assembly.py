@@ -632,6 +632,68 @@ def test_shrink_to_target_converges_on_the_real_system(real_protein_system):
     assert gro_file.count(shrink.final_gro) == 6438
 
 
+@pytest.fixture(scope="module")
+def real_shrunk_system(real_protein_system):
+    """The real system shrunk to TARGET_APL, ready for solvation.
+
+    The shrink loop alone costs ~6.5s (test_shrink_to_target_converges_on_the_
+    real_system is its own oracle for that), so every solvation/index test
+    below shares one run instead of repeating it.
+    """
+    ws, result = real_protein_system
+    shutil.copy2(TUT / "water_deletor.pl", ws / "inputs" / "water_deletor.pl")
+    inflated_em = MA.minimise(ws, result.output, "system_inflated_em")
+    shrink = MA.shrink_to_target(ws, inflated_em)
+    return ws, shrink
+
+
+@pytest.fixture(scope="module")
+def real_solvated_system(real_shrunk_system):
+    ws, shrink = real_shrunk_system
+    ions = MA.solvate_and_ionise(ws, shrink.final_gro)
+    return ws, ions
+
+
+@pytest.mark.integration
+@pytestmark_needs_data
+def test_solvate_and_ionise_neutralises_the_real_system(real_solvated_system):
+    """genion is the oracle for the net charge: KALP-15 carries +4e (four
+    lysines), so a correct run adds exactly 4 Cl- and no Na+. A leftover net
+    charge here would be a bug, not the grompp *note* seen before genion."""
+    ws, ions = real_solvated_system
+    counts = MA.residue_counts(ions)
+    assert counts.get("CL") == 4
+    assert "NA" not in counts
+
+    s = state.read(ws)
+    removed = s["step_outputs"]["step_3"]["water_atoms_removed"]
+    assert removed > 0
+
+    # grompp is the oracle for [ molecules ] agreeing with the coordinates --
+    # water_deletor.pl trims SOL without touching the topology, and genion's
+    # own -p bookkeeping runs afterward, so this is the first point a stale
+    # SOL count would surface as a fatal (not -maxwarn-able) mismatch.
+    check = GW.run(["grompp", "-f", "ions.mdp", "-c", ions.name,
+                    "-p", "topol.top", "-o", "recheck.tpr",
+                    "-maxwarn", MA.GROMPP_MAXWARN],
+                   cwd=ws / "stage1_env", env=dict(MA.GMX_ENV))
+    assert check.ok, check.stderr[-800:]
+
+
+@pytest.mark.integration
+@pytestmark_needs_data
+def test_build_index_on_the_real_system(real_solvated_system):
+    """make_ndx's own defaults are the oracle for Water_and_ions; the merge
+    arithmetic is checked against the real atom counts, not stubbed ones."""
+    ws, ions = real_solvated_system
+    index = MA.build_index(ws, ions)
+    groups = MA.parse_index_groups(index)
+    # 138 protein atoms + 126 remaining DPPC lipids x 50 atoms each.
+    assert groups["Protein_DPPC"] == 138 + 126 * 50 == 6438
+    assert groups["Water_and_ions"] > 0
+    assert groups["Water_and_ions"] == gro_file.count(ions) - groups["Protein_DPPC"]
+
+
 # --- the shrink loop ----------------------------------------------------------
 # The reference script hardcodes 26 iterations and asks the operator to inspect
 # area_shrink*.dat afterwards. Terminating on the measured APL makes that check
@@ -795,3 +857,225 @@ def test_shrink_raises_membrane_assembly_error_when_max_iterations_is_zero(works
         with pytest.raises(MA.MembraneAssemblyError, match="did not reach"):
             MA.shrink_to_target(workspace, start, max_iterations=0)
     assert calls["inflate"] == []
+
+
+# --- solvation, ions and index groups ----------------------------------------
+
+INDEX_NDX = """\
+[ System ]
+   1    2    3    4    5
+[ Protein ]
+   1    2
+[ DPPC ]
+   3    4
+[ Water_and_ions ]
+   5
+[ Protein_DPPC ]
+   1    2    3    4
+"""
+
+
+def test_parse_index_groups_counts_atoms(tmp_path):
+    p = tmp_path / "index.ndx"
+    p.write_text(INDEX_NDX)
+    groups = MA.parse_index_groups(p)
+    assert groups == {"System": 5, "Protein": 2, "DPPC": 2,
+                      "Water_and_ions": 1, "Protein_DPPC": 4}
+
+
+def test_build_index_merges_by_name_not_by_number(workspace):
+    """The tutorial types `1 | 13`; those numbers shift with lipid count."""
+    gro = workspace / "stage1_env" / "ions.gro"
+    gro.write_text("s\n    1\n    1DPPC     C1    1   1.0   1.0   1.0\n"
+                   "   6.0   6.0   6.0\n")
+    sent = {}
+
+    def fake(args, cwd, **kw):
+        sent["args"] = list(args)
+        sent["stdin"] = kw.get("interactive_inputs")
+        (Path(cwd) / "index.ndx").write_text(INDEX_NDX)
+        return FakeResult()
+
+    with mock.patch.object(MA.GW, "run", side_effect=fake):
+        MA.build_index(workspace, gro)
+
+    assert sent["args"][0] == "make_ndx"
+    joined = " ".join(sent["stdin"])
+    assert '"Protein" | "DPPC"' in joined
+    assert "1 | 13" not in joined
+    assert joined.strip().endswith("q")
+
+
+def test_build_index_is_fatal_without_protein_dppc(workspace):
+    gro = workspace / "stage1_env" / "ions.gro"
+    gro.write_text("s\n    1\n    1DPPC     C1    1   1.0   1.0   1.0\n"
+                   "   6.0   6.0   6.0\n")
+    missing = INDEX_NDX.replace("[ Protein_DPPC ]\n   1    2    3    4\n", "")
+
+    def fake(args, cwd, **kw):
+        (Path(cwd) / "index.ndx").write_text(missing)
+        return FakeResult()
+
+    with mock.patch.object(MA.GW, "run", side_effect=fake):
+        with pytest.raises(MA.MembraneAssemblyError, match="Protein_DPPC"):
+            MA.build_index(workspace, gro)
+
+
+def test_build_index_is_fatal_on_a_wrong_atom_count(workspace):
+    """Protein_DPPC must hold exactly the protein's and lipids' atoms."""
+    gro = workspace / "stage1_env" / "ions.gro"
+    gro.write_text("s\n    1\n    1DPPC     C1    1   1.0   1.0   1.0\n"
+                   "   6.0   6.0   6.0\n")
+    wrong = INDEX_NDX.replace("[ Protein_DPPC ]\n   1    2    3    4\n",
+                              "[ Protein_DPPC ]\n   1    2    3\n")
+
+    def fake(args, cwd, **kw):
+        (Path(cwd) / "index.ndx").write_text(wrong)
+        return FakeResult()
+
+    with mock.patch.object(MA.GW, "run", side_effect=fake):
+        with pytest.raises(MA.MembraneAssemblyError, match="atoms"):
+            MA.build_index(workspace, gro)
+
+
+def test_build_index_is_fatal_without_water_and_ions(workspace):
+    gro = workspace / "stage1_env" / "ions.gro"
+    gro.write_text("s\n    1\n    1DPPC     C1    1   1.0   1.0   1.0\n"
+                   "   6.0   6.0   6.0\n")
+    missing = INDEX_NDX.replace("[ Water_and_ions ]\n   5\n", "")
+
+    def fake(args, cwd, **kw):
+        (Path(cwd) / "index.ndx").write_text(missing)
+        return FakeResult()
+
+    with mock.patch.object(MA.GW, "run", side_effect=fake):
+        with pytest.raises(MA.MembraneAssemblyError, match="Water_and_ions"):
+            MA.build_index(workspace, gro)
+
+
+def test_solvate_and_ionise_deletes_trapped_water(workspace):
+    packed = workspace / "stage1_env" / "system_shrink3_em.gro"
+    packed.write_text("p\n    1\n    1DPPC     C1    1   1.0   1.0   1.0\n"
+                      "   6.0   6.0   6.0\n")
+    (workspace / "stage1_env" / "topol.top").write_text(
+        "[ molecules ]\nProtein_chain_A 1\nDPPC 128\n"
+    )
+    order = []
+
+    def fake_run(args, cwd, **kw):
+        order.append(args[0])
+        stage = Path(cwd)
+        if args[0] == "solvate":
+            (stage / "system_solv.gro").write_text(
+                "s\n    1\n    1SOL      OW    1   1.0   1.0   1.0\n   6.0   6.0   6.0\n")
+        if args[0] == "genion":
+            (stage / "ions.gro").write_text(
+                "i\n    1\n    1SOL      OW    1   1.0   1.0   1.0\n   6.0   6.0   6.0\n")
+        return FakeResult()
+
+    def fake_delete(script, gro, out, cwd, **kw):
+        order.append("water_deletor")
+        Path(out).write_text("f\n    1\n    1SOL      OW    1   1.0   1.0   1.0\n"
+                             "   6.0   6.0   6.0\n")
+        return 3
+
+    with mock.patch.object(MA.GW, "run", side_effect=fake_run), \
+         mock.patch.object(MA.inflate_gro, "delete_trapped_water",
+                           side_effect=fake_delete), \
+         mock.patch.object(MA.MDP, "render",
+                           side_effect=lambda p, o, d: _stub_mdp(d, p)), \
+         mock.patch.object(MA, "_script", return_value=Path("water_deletor.pl")):
+        MA.solvate_and_ionise(workspace, packed)
+
+    assert order.index("solvate") < order.index("water_deletor") < order.index("genion")
+
+
+def _stub_mdp(directory, phase):
+    out = Path(directory) / f"{phase}.mdp"
+    out.write_text("; stub\n")
+    return out
+
+
+def test_solvate_and_ionise_corrects_sol_count_after_water_deletion(workspace):
+    """water_deletor.pl trims waters without touching topol.top; the next
+    grompp needs [ molecules ] SOL to match what actually remains."""
+    packed = workspace / "stage1_env" / "system_shrink3_em.gro"
+    packed.write_text("p\n    1\n    1DPPC     C1    1   1.0   1.0   1.0\n"
+                      "   6.0   6.0   6.0\n")
+    (workspace / "stage1_env" / "topol.top").write_text(
+        "[ molecules ]\nProtein_chain_A 1\nDPPC 128\n"
+    )
+
+    def fake_run(args, cwd, **kw):
+        stage = Path(cwd)
+        if args[0] == "solvate":
+            (stage / "system_solv.gro").write_text(
+                "s\n    3\n"
+                "    1SOL      OW    1   1.0   1.0   1.0\n"
+                "    2SOL      OW    2   1.0   1.0   1.0\n"
+                "    3SOL      OW    3   1.0   1.0   1.0\n"
+                "   6.0   6.0   6.0\n")
+        if args[0] == "genion":
+            (stage / "ions.gro").write_text(
+                "i\n    1\n    1SOL      OW    1   1.0   1.0   1.0\n   6.0   6.0   6.0\n")
+        return FakeResult()
+
+    def fake_delete(script, gro, out, cwd, **kw):
+        # Only 1 of the 3 solvated waters survives water_deletor.pl.
+        Path(out).write_text(
+            "f\n    1\n    1SOL      OW    1   1.0   1.0   1.0\n   6.0   6.0   6.0\n")
+        return 6
+
+    with mock.patch.object(MA.GW, "run", side_effect=fake_run), \
+         mock.patch.object(MA.inflate_gro, "delete_trapped_water",
+                           side_effect=fake_delete), \
+         mock.patch.object(MA.MDP, "render",
+                           side_effect=lambda p, o, d: _stub_mdp(d, p)), \
+         mock.patch.object(MA, "_script", return_value=Path("water_deletor.pl")):
+        MA.solvate_and_ionise(workspace, packed)
+
+    topol = (workspace / "stage1_env" / "topol.top").read_text()
+    # Exactly one SOL row, corrected in place -- not a second one appended
+    # alongside the stale count solvate originally wrote.
+    assert re.findall(r"^SOL[ \t]+\d+$", topol, re.M) == ["SOL 1"], topol
+
+
+def test_solvate_and_ionise_renders_a_restraint_free_ions_mdp(workspace):
+    """em.mdp survives the shrink loop with -DSTRONG_POSRES; the ions grompp
+    must not inherit lipid restraints."""
+    packed = workspace / "stage1_env" / "system_shrink3_em.gro"
+    packed.write_text("p\n    1\n    1DPPC     C1    1   1.0   1.0   1.0\n"
+                      "   6.0   6.0   6.0\n")
+    (workspace / "stage1_env" / "topol.top").write_text(
+        "[ molecules ]\nProtein_chain_A 1\nDPPC 128\nSOL 1\n"
+    )
+    # Simulate the shrink loop's leftover em.mdp.
+    (workspace / "stage1_env" / "em.mdp").write_text(
+        "define = -DSTRONG_POSRES\n")
+
+    def fake_run(args, cwd, **kw):
+        stage = Path(cwd)
+        if args[0] == "solvate":
+            (stage / "system_solv.gro").write_text(
+                "s\n    1\n    1SOL      OW    1   1.0   1.0   1.0\n   6.0   6.0   6.0\n")
+        if args[0] == "grompp":
+            assert args[args.index("-f") + 1] == "ions.mdp"
+            rendered = (stage / "ions.mdp").read_text()
+            assert "STRONG_POSRES" not in rendered
+        if args[0] == "genion":
+            (stage / "ions.gro").write_text(
+                "i\n    1\n    1SOL      OW    1   1.0   1.0   1.0\n   6.0   6.0   6.0\n")
+        return FakeResult()
+
+    def fake_delete(script, gro, out, cwd, **kw):
+        Path(out).write_text(
+            "f\n    1\n    1SOL      OW    1   1.0   1.0   1.0\n   6.0   6.0   6.0\n")
+        return 0
+
+    with mock.patch.object(MA.GW, "run", side_effect=fake_run), \
+         mock.patch.object(MA.inflate_gro, "delete_trapped_water",
+                           side_effect=fake_delete), \
+         mock.patch.object(MA, "_script", return_value=Path("water_deletor.pl")):
+        MA.solvate_and_ionise(workspace, packed)
+
+    assert "STRONG_POSRES" not in (workspace / "stage1_env" / "ions.mdp").read_text()

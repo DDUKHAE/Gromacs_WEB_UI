@@ -36,7 +36,14 @@ DEFAULTS = {
                     # so Parrinello-Rahman (correct NPT ensemble sampling) is
                     # appropriate here.
                     "pcoupl": "Parrinello-Rahman", "pcoupltype": "isotropic"},
-    "ions": {},
+    # coulombtype/rcoulomb/rvdw were hardcoded PME/1.0/1.0 in ions.mdp -- an
+    # override-proof template, since str.format silently ignores kwargs that
+    # have no matching placeholder. Parametrized for the same reason as "em"
+    # above: a system with a net charge (not yet neutralised -- this mdp
+    # builds the .tpr genion itself consumes) needs plain cut-off electrostatics,
+    # since PME raises a fatal "Ewald electrostatics in a system with net
+    # charge" warning. Defaults keep every existing caller byte-identical.
+    "ions": {"coulombtype": "PME", "rcoulomb": 1.0, "rvdw": 1.0},
     "umbrella": {"nsteps": 500000, "dt": 0.002, "tau_t": 0.5, "ref_t": 300.0,
                   "tau_p": 2.0, "pull_group1": "Chain_A", "pull_group2": "Chain_B",
                   "pull_coord_init": 0.0, "pull_coord_k": 1000.0},
