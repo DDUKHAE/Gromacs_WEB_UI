@@ -42,6 +42,11 @@ GROMPP_MAXWARN = "2"
 #: system is solvated and neutralised.
 PACKING_MDP = {"coulombtype": "cutoff", "rcoulomb": 1.2, "rvdw": 1.2}
 
+#: grompp reports the pre-genion charge as a WARNING; its absence means the
+#: system was already neutral.
+_NET_CHARGE_RE = re.compile(r"non-zero total charge:\s*(-?\d+(?:\.\d+)?)",
+                            re.IGNORECASE)
+
 _GRO_RESNAME = slice(5, 10)
 _GRO_RESID = slice(0, 5)
 _PDB_RESNAME = slice(17, 20)
@@ -344,7 +349,8 @@ def solvate_and_ionise(workspace: Path, packed_gro: Path) -> Path:
         gro=solvated, out=stage / "system_solv_fix.gro", cwd=stage,
     )
     fixed = _require(stage / "system_solv_fix.gro")
-    _upsert_sol_count(stage / "topol.top", residue_counts(fixed).get("SOL", 0))
+    final_sol = residue_counts(fixed).get("SOL", 0)
+    _upsert_sol_count(stage / "topol.top", final_sol)
 
     # A fresh render: em.mdp (left by the shrink loop) still carries
     # -DSTRONG_POSRES, and this grompp must not restrain the lipids.
@@ -359,18 +365,37 @@ def solvate_and_ionise(workspace: Path, packed_gro: Path) -> Path:
     # same reason: this warning must stay fatal for any grompp run *after*
     # genion, when a net charge would mean genion itself failed.
     ions_mdp = MDP.render("ions", dict(PACKING_MDP), stage)
-    _run(workspace, ["grompp", "-f", ions_mdp.name, "-c", fixed.name,
-                     "-p", "topol.top", "-o", "ions.tpr",
-                     "-maxwarn", GROMPP_MAXWARN])
+    grompp = _run(workspace, ["grompp", "-f", ions_mdp.name, "-c", fixed.name,
+                              "-p", "topol.top", "-o", "ions.tpr",
+                              "-maxwarn", GROMPP_MAXWARN])
     _run(workspace, ["genion", "-s", "ions.tpr", "-o", "ions.gro",
                      "-p", "topol.top", "-pname", "NA", "-nname", "CL",
                      "-neutral"],
          interactive_inputs=["SOL"])
+    ions = _require(stage / "ions.gro")
 
+    # The aqueous arm's step_3/step_5 records, written from this arm's own
+    # files: md_runner.assert_ready requires both keys, and the run is not
+    # auditable without the solvent and ion counts it actually ended up with.
+    ion_counts = residue_counts(ions)
+    n_na, n_cl = ion_counts.get("NA", 0), ion_counts.get("CL", 0)
+    charge = _NET_CHARGE_RE.search(grompp.stdout + grompp.stderr)
+    initial_net_charge = float(charge.group(1)) if charge else 0.0
     s = state.read(workspace)
-    s["step_outputs"].setdefault("step_3", {})["water_atoms_removed"] = removed
+    s["step_outputs"]["step_3"] = {
+        "solv_gro": f"stage1_env/{fixed.name}",
+        "n_solvent_molecules": final_sol,
+        "water_atoms_removed": removed,
+    }
+    s["step_outputs"]["step_5"] = {
+        "ion_gro": f"stage1_env/{ions.name}",
+        "n_na": n_na, "n_cl": n_cl,
+        # NA/CL are monovalent, so the post-genion charge is the charge grompp
+        # reported before genion plus the ions genion actually placed.
+        "net_charge": initial_net_charge + n_na - n_cl,
+    }
     state.write(workspace, s)
-    return _require(stage / "ions.gro")
+    return ions
 
 
 def build_index(workspace: Path, gro: Path) -> Path:
@@ -445,7 +470,20 @@ def assemble(workspace_dir: Path, params: dict[str, Any]) -> dict[str, Any]:
         "index_groups": parse_index_groups(index),
     }
     s = state.read(workspace)
-    s["step_outputs"]["step_2"] = {"membrane_assembly": summary}
+    # step_2 is env_builder's box slot and is read by name elsewhere
+    # (lib/tutorial_auditor.py, lib/system_config_validator.py), so this
+    # merges into it rather than replacing it. The box is not built here: it
+    # is the pre-equilibrated bilayer's own cell, which is rectangular with
+    # 90 degree angles -- the same shape `editconf -bt triclinic` produces,
+    # which is what the manifest asks for. There is no -d distance to record.
+    step_2 = s["step_outputs"].setdefault("step_2", {})
+    step_2.setdefault("box_type", params.get("box_type", "triclinic"))
+    step_2.setdefault("box_distance", "n/a (bilayer cell reused)")
+    step_2.setdefault("box_gro", "stage1_env/KALP_newbox.gro")
+    step_2["membrane_assembly"] = summary
+    # step_3 (solvate) and step_5 (ions) are written by solvate_and_ionise.
+    s["current_step"] = 5
+    s["last_completed_stage"] = "env"
     state.write(workspace, s)
     return summary
 

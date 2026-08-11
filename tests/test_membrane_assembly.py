@@ -1202,3 +1202,123 @@ def test_assemble_calls_everything_in_order_and_builds_the_summary(workspace):
 
     s = state.read(workspace)
     assert s["step_outputs"]["step_2"]["membrane_assembly"] == summary
+
+
+def stubbed_assemble(workspace, params):
+    """Run assemble() with every gmx-touching stage replaced.
+
+    The stage-ordering test above spells the stubs out one by one; the state
+    records below only care about what assemble() writes afterwards.
+    """
+    stage = workspace / "stage1_env"
+    for name in ("bilayer.gro", "peptide.gro", "system.gro", "inflated.gro",
+                 "inflated_em.gro", "final.gro", "ions.gro", "index.ndx"):
+        (stage / name).write_text("x")
+    inflated = MA.inflate_gro.InflateResult(
+        apl_total=5.0, apl_upper=5.0, apl_lower=5.0, removed_upper=1,
+        removed_lower=1, output=stage / "inflated.gro",
+        area_dat=stage / "area.dat")
+    shrink = MA.ShrinkResult(final_gro=stage / "final.gro", iterations=27,
+                             apl_total=0.63, apl_history=[1.0, 0.63],
+                             target_apl=0.64)
+    with mock.patch.object(MA, "prepare_bilayer", return_value=stage / "bilayer.gro"), \
+         mock.patch.object(MA, "place_peptide", return_value=stage / "peptide.gro"), \
+         mock.patch.object(MA, "merge_system", return_value=stage / "system.gro"), \
+         mock.patch.object(MA, "install_strong_restraints"), \
+         mock.patch.object(MA, "inflate_once", return_value=inflated), \
+         mock.patch.object(MA, "minimise", return_value=stage / "inflated_em.gro"), \
+         mock.patch.object(MA, "shrink_to_target", return_value=shrink), \
+         mock.patch.object(MA, "solvate_and_ionise", return_value=stage / "ions.gro"), \
+         mock.patch.object(MA, "build_index", return_value=stage / "index.ndx"), \
+         mock.patch.object(MA, "parse_index_groups", return_value={"Protein_DPPC": 4}):
+        return MA.assemble(workspace, params)
+
+
+def test_assemble_merges_into_the_env_builder_box_record(workspace):
+    """step_2 is env_builder's box slot: lib/tutorial_auditor.py and
+    lib/system_config_validator.py both read step_2["box_type"] by name, so
+    replacing the dict silently degrades every membrane run's audit trail."""
+    s = state.read(workspace)
+    s["step_outputs"]["step_2"] = {"box_type": "cubic", "box_distance": 1.0,
+                                   "box_gro": "stage1_env/box.gro"}
+    state.write(workspace, s)
+
+    summary = stubbed_assemble(workspace, {"box_type": "triclinic"})
+
+    step_2 = state.read(workspace)["step_outputs"]["step_2"]
+    assert step_2["box_type"] == "cubic"
+    assert step_2["box_distance"] == 1.0
+    assert step_2["box_gro"] == "stage1_env/box.gro"
+    assert step_2["membrane_assembly"] == summary
+
+
+def test_assemble_records_the_box_type_when_no_box_step_ran(workspace):
+    """The membrane arm skips run_step2_box entirely, so nothing else writes
+    box_type and the audit would report "(not recorded)" -> status n/a."""
+    stubbed_assemble(workspace, {"box_type": "triclinic"})
+    assert state.read(workspace)["step_outputs"]["step_2"]["box_type"] == "triclinic"
+
+
+def test_assemble_closes_the_env_stage(workspace):
+    """md_runner.assert_ready calls state.require_last_stage(s, "env")."""
+    stubbed_assemble(workspace, {})
+    s = state.read(workspace)
+    assert s["current_step"] == 5
+    assert s["last_completed_stage"] == "env"
+
+
+def test_solvate_and_ionise_records_the_solvent_and_ion_steps(workspace):
+    """md_runner.REQUIRED_KEYS includes step_3 and step_5; on this arm nothing
+    else writes them, and the ion counts come from the coordinates genion
+    actually produced rather than from a parsed log line."""
+    packed = workspace / "stage1_env" / "system_shrink3_em.gro"
+    packed.write_text("p\n    1\n    1DPPC     C1    1   1.0   1.0   1.0\n"
+                      "   6.0   6.0   6.0\n")
+    (workspace / "stage1_env" / "topol.top").write_text(
+        "[ molecules ]\nProtein_chain_A 1\nDPPC 128\n"
+    )
+
+    class ChargedGrompp(FakeResult):
+        # KALP-15 carries +4e before genion; grompp reports it as a WARNING.
+        stderr = ("WARNING 1 [file topol.top]:\n"
+                  "  System has non-zero total charge: 4.000000\n")
+
+    def fake_run(args, cwd, **kw):
+        stage = Path(cwd)
+        if args[0] == "solvate":
+            (stage / "system_solv.gro").write_text(
+                "s\n    2\n"
+                "    1SOL      OW    1   1.0   1.0   1.0\n"
+                "    2SOL      OW    2   1.0   1.0   1.0\n"
+                "   6.0   6.0   6.0\n")
+        if args[0] == "grompp":
+            return ChargedGrompp()
+        if args[0] == "genion":
+            # One water replaced by the four Cl- that neutralise the peptide.
+            (stage / "ions.gro").write_text(
+                "i\n    5\n"
+                "    1SOL      OW    1   1.0   1.0   1.0\n"
+                + "".join(f"    {i}CL       CL{i:5d}   1.0   1.0   1.0\n"
+                          for i in range(2, 6))
+                + "   6.0   6.0   6.0\n")
+        return FakeResult()
+
+    def fake_delete(script, gro, out, cwd, **kw):
+        Path(out).write_text(
+            "f\n    1\n    1SOL      OW    1   1.0   1.0   1.0\n   6.0   6.0   6.0\n")
+        return 3
+
+    with mock.patch.object(MA.GW, "run", side_effect=fake_run), \
+         mock.patch.object(MA.inflate_gro, "delete_trapped_water",
+                           side_effect=fake_delete), \
+         mock.patch.object(MA.MDP, "render",
+                           side_effect=lambda p, o, d: _stub_mdp(d, p)), \
+         mock.patch.object(MA, "_script", return_value=Path("water_deletor.pl")):
+        MA.solvate_and_ionise(workspace, packed)
+
+    steps = state.read(workspace)["step_outputs"]
+    assert steps["step_3"] == {"solv_gro": "stage1_env/system_solv_fix.gro",
+                               "n_solvent_molecules": 1,
+                               "water_atoms_removed": 3}
+    assert steps["step_5"] == {"ion_gro": "stage1_env/ions.gro",
+                               "n_na": 0, "n_cl": 4, "net_charge": 0.0}
