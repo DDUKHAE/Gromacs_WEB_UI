@@ -254,11 +254,13 @@ def shrink_to_target(workspace: Path, inflated_em: Path,
     """Shrink by 0.95 and minimise until the area per lipid reaches the target.
 
     The tutorial says to "repeat shrinking and EM iterations until the area per
-    lipid reaches an appropriate value", and its reference script hardcodes 26.
-    Because 4 * 0.95**26 returns the cell to roughly native bilayer packing,
-    stopping on the measured APL lands in the same place while adapting to a
-    different lipid or peptide. An iteration count far from 26 is a signal that
-    something is wrong, which is why it is returned and recorded.
+    lipid reaches an appropriate value", and its reference script hardcodes 26
+    (which lands at 0.698 nm^2, still above TARGET_APL). Stopping on the
+    measured APL instead takes one further iteration on the real system --
+    27, confirmed against real gmx -- and would track a different target APL
+    or degree of inflation without a hardcoded count to retune. `resname` is
+    still fixed to "DPPC", matching `inflate_once`, so this does not adapt to
+    a different lipid.
     """
     stage = _stage(workspace)
     script = _script(workspace, "inflategro.pl")
@@ -279,9 +281,10 @@ def shrink_to_target(workspace: Path, inflated_em: Path,
                                 apl_history=history, target_apl=target_apl)
         source = minimised
 
+    last = f"{history[-1]:.4g}" if history else "n/a"
     raise MembraneAssemblyError(
         f"area per lipid did not reach {target_apl} nm^2 in {max_iterations} "
-        f"shrink iterations; last value {history[-1]:.4g}, history {history}"
+        f"shrink iterations; last value {last}, history {history}"
     )
 
 

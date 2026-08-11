@@ -602,6 +602,36 @@ def test_minimise_runs_against_a_real_protein_topology(real_protein_system):
     assert max(abs(float(b[20:28]) - float(a[20:28])) for b, a in lipid) > 0.1
 
 
+@pytest.mark.integration
+@pytestmark_needs_data
+def test_shrink_to_target_converges_on_the_real_system(real_protein_system):
+    """The real loop is the only oracle for the iteration count, the descent
+    toward target, and the final atom count. Measured at ~6.5s for 27
+    iterations (81 gmx invocations) on this system -- cheap enough to run
+    every time, not a reason to fake this with stubs.
+
+    26 iterations (the reference script's hardcoded count) lands at 0.698
+    nm^2, still above TARGET_APL=0.64; 27 is the first at-or-below, which is
+    why this loop is one iteration stricter than the reference script.
+    """
+    ws, result = real_protein_system
+    stage = ws / "stage1_env"
+    inflated_em = MA.minimise(ws, result.output, "system_inflated_em")
+
+    shrink = MA.shrink_to_target(ws, inflated_em)
+
+    assert shrink.iterations == 27
+    assert shrink.apl_total <= MA.TARGET_APL
+    assert len(shrink.apl_history) == 27
+    # Iteration 26 is the reference script's stopping point, and it is not
+    # yet at target -- confirms the loop isn't stopping early by accident.
+    assert shrink.apl_history[-2] > MA.TARGET_APL
+    # Descends overall from the post-inflation APL to the converged one.
+    assert shrink.apl_history[0] > shrink.apl_history[-1]
+    assert shrink.final_gro.name == "system_shrink27_em.gro"
+    assert gro_file.count(shrink.final_gro) == 6438
+
+
 # --- the shrink loop ----------------------------------------------------------
 # The reference script hardcodes 26 iterations and asks the operator to inspect
 # area_shrink*.dat afterwards. Terminating on the measured APL makes that check
@@ -727,3 +757,33 @@ def test_shrink_records_its_parameters_for_audit(workspace):
          mock.patch.object(MA, "_script", return_value=Path("inflategro.pl")):
         result = MA.shrink_to_target(workspace, start, target_apl=0.64)
     assert result.target_apl == 0.64
+
+
+def test_shrink_target_apl_actually_controls_the_stopping_point(workspace):
+    """Behavioural, not just recorded: a target above the first APL must stop
+    immediately, not fall through to the module's TARGET_APL=0.64 default."""
+    start = workspace / "stage1_env" / "system_inflated_em.gro"
+    start.write_text("i\n    1\n    1DPPC     C1    1   1.0   1.0   1.0\n"
+                     "   6.0   6.0   6.0\n")
+    calls, fi, fm = _apl_sequence(workspace, [1.20, 0.90])
+    with mock.patch.object(MA.inflate_gro, "inflate", side_effect=fi), \
+         mock.patch.object(MA, "minimise", side_effect=fm), \
+         mock.patch.object(MA, "_script", return_value=Path("inflategro.pl")):
+        result = MA.shrink_to_target(workspace, start, target_apl=1.0)
+    assert result.iterations == 2
+    assert result.apl_total == pytest.approx(0.90)
+
+
+def test_shrink_raises_membrane_assembly_error_when_max_iterations_is_zero(workspace):
+    """A config-supplied 0 must hit the module's own error type, not an
+    untyped IndexError from an empty history."""
+    start = workspace / "stage1_env" / "system_inflated_em.gro"
+    start.write_text("i\n    1\n    1DPPC     C1    1   1.0   1.0   1.0\n"
+                     "   6.0   6.0   6.0\n")
+    calls, fi, fm = _apl_sequence(workspace, [])
+    with mock.patch.object(MA.inflate_gro, "inflate", side_effect=fi), \
+         mock.patch.object(MA, "minimise", side_effect=fm), \
+         mock.patch.object(MA, "_script", return_value=Path("inflategro.pl")):
+        with pytest.raises(MA.MembraneAssemblyError, match="did not reach"):
+            MA.shrink_to_target(workspace, start, max_iterations=0)
+    assert calls["inflate"] == []
