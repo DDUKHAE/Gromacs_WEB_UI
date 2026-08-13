@@ -717,6 +717,12 @@ def run_simulation(workspace_dir: Path,
         }
         if variant == "membrane_md_standard" and phase in ("npt", "npt_pr", "production"):
             requested_overrides["pcoupltype"] = "semiisotropic"
+            requested_overrides["ref_p_list"] = "1.0 1.0"
+            requested_overrides["compressibility_list"] = "4.5e-5 4.5e-5"
+            # build_index's own groups (skills/env_builder/membrane_assembly.py),
+            # matching the tutorial's own mdp files. The default "Protein
+            # Non-Protein" needs no index file, which left -n inert.
+            requested_overrides["tc_grps"] = "Protein_DPPC Water_and_ions"
         judgment = run_phase_with_recovery(
             workspace_dir, phase=phase,
             phase_runner=_validating_phase_runner,

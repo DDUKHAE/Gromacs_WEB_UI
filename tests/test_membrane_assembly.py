@@ -15,6 +15,7 @@ from lib import berger_forcefield as BFF
 from lib import gmx_wrapper as GW
 from lib import gro_file
 from lib import state
+from lib.mdp_templates import base as MDP
 from skills.env_builder import membrane_assembly as MA
 
 TUT = Path(__file__).resolve().parent.parent / "tutorial_data" / "KALP15_in_DPPC"
@@ -699,6 +700,62 @@ def test_build_index_on_the_real_system(real_solvated_system):
     assert groups["Protein_DPPC"] == 138 + 126 * 50 == 6438
     assert groups["Water_and_ions"] > 0
     assert groups["Water_and_ions"] == gro_file.count(ions) - groups["Protein_DPPC"]
+
+
+@pytest.mark.integration
+@pytestmark_needs_data
+def test_grompp_rejects_semiisotropic_with_single_valued_pressure_mdp(real_solvated_system):
+    """The negative half of the Task 8 pressure-coupling fix: pcoupltype =
+    semiisotropic on the *unpatched* single-valued ref_p/compressibility is
+    a fatal grompp ERROR (not a warning -maxwarn can mask). This is the
+    defect the ref_p_list/compressibility_list overrides exist to remove --
+    proving it still fires without them is what makes the positive test
+    below mean something.
+    """
+    ws, ions = real_solvated_system
+    index = MA.build_index(ws, ions)
+    stage = ws / "stage1_env"
+    mdp = MDP.render("npt", {"pcoupltype": "semiisotropic",
+                              "tc_grps": "Protein_DPPC Water_and_ions"},
+                      stage)
+    check = GW.run(["grompp", "-f", mdp.name, "-c", ions.name,
+                    "-n", index.name, "-p", "topol.top", "-o", "reject.tpr",
+                    "-maxwarn", MA.GROMPP_MAXWARN],
+                   cwd=stage, env=dict(MA.GMX_ENV))
+    assert not check.ok
+    assert "Pressure coupling" in check.stderr
+
+
+@pytest.mark.integration
+@pytestmark_needs_data
+@pytest.mark.parametrize("phase", ["npt", "npt_pr", "production"])
+def test_grompp_accepts_the_membrane_pressure_and_coupling_overrides(real_solvated_system, phase):
+    """The positive half: with ref_p_list/compressibility_list doubled and
+    tc_grps pointed at the index groups build_index actually produced, real
+    grompp accepts npt/npt_pr/production on the finished 17,401-atom system
+    within the shipped -maxwarn budget -- the oracle Task 10's membrane MD
+    phases depend on.
+    """
+    ws, ions = real_solvated_system
+    index = MA.build_index(ws, ions)
+    stage = ws / "stage1_env"
+    overrides = {
+        "pcoupltype": "semiisotropic",
+        "ref_p_list": "1.0 1.0",
+        "compressibility_list": "4.5e-5 4.5e-5",
+        "tc_grps": "Protein_DPPC Water_and_ions",
+    }
+    mdp = MDP.render(phase, overrides, stage)
+    args = ["grompp", "-f", mdp.name, "-c", ions.name]
+    if phase in ("npt", "npt_pr"):
+        # define=-DPOSRES in these two templates' defaults requires -r
+        # (position restraint reference) since GROMACS 2018; production has
+        # no define placeholder default and needs none.
+        args.extend(["-r", ions.name])
+    args.extend(["-n", index.name, "-p", "topol.top", "-o", f"{phase}_accept.tpr",
+                "-maxwarn", MA.GROMPP_MAXWARN])
+    check = GW.run(args, cwd=stage, env=dict(MA.GMX_ENV))
+    assert check.ok, check.stderr[-800:]
 
 
 # --- the shrink loop ----------------------------------------------------------

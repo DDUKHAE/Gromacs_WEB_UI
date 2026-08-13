@@ -69,7 +69,16 @@ for _phase in ("nvt", "npt", "npt_pr", "production"):
         "pme_order": 4, "fourierspacing": 0.16, "tcoupl": "V-rescale",
     })
 for _phase in ("npt", "npt_pr", "production"):
-    DEFAULTS[_phase]["ref_p"] = 1.0
+    # Single-valued defaults for isotropic pcoupl (the aqueous default), so
+    # every existing caller renders byte-identically. Membrane runs override
+    # both to two space-separated values ("1.0 1.0" / "4.5e-5 4.5e-5") for
+    # pcoupltype=semiisotropic, which grompp requires -- see run_simulation's
+    # membrane branch in skills/md_runner/md_runner.py. Not derived from
+    # tc_grps's group count (n_groups): pressure-coupling value count tracks
+    # pcoupltype (isotropic=1, semiisotropic=2), an unrelated axis that only
+    # happens to coincide with n_groups=2 here.
+    DEFAULTS[_phase]["ref_p_list"] = "1.0"
+    DEFAULTS[_phase]["compressibility_list"] = "4.5e-5"
 
 _FILES = {
     "em": "em.mdp",
@@ -85,6 +94,7 @@ _FILES = {
 
 
 _TC_GRPS_PHASES = ("nvt", "npt", "npt_pr", "production")
+_PCOUPL_LIST_PHASES = ("npt", "npt_pr", "production")
 
 
 def render(phase: str, overrides: dict[str, Any], output_dir: Path) -> Path:
@@ -92,6 +102,20 @@ def render(phase: str, overrides: dict[str, Any], output_dir: Path) -> Path:
         raise KeyError(f"unknown template: {phase}")
     template = (_DIR / _FILES[phase]).read_text()
     params = {**DEFAULTS[phase], **overrides}
+    if phase in _PCOUPL_LIST_PHASES:
+        # lib/protocol_contract.py's MDP_LOCK_MAP maps a single expert
+        # "pressure_bar" setting onto the single-valued mdp key "ref_p" (and
+        # ProtocolContract has no analogous compressibility knob). The
+        # template placeholder is {ref_p_list}/{compressibility_list}, so an
+        # incoming singular override would otherwise be a silent no-op
+        # (str.format drops overrides with no placeholder) -- translate it
+        # unless the caller already gave the list form directly.
+        single_ref_p = params.pop("ref_p", None)
+        if single_ref_p is not None and "ref_p_list" not in overrides:
+            params["ref_p_list"] = str(single_ref_p)
+        single_compressibility = params.pop("compressibility", None)
+        if single_compressibility is not None and "compressibility_list" not in overrides:
+            params["compressibility_list"] = str(single_compressibility)
     if phase == "nvt":
         # "reproducible_mode" is a render-time flag, not an mdp key: it picks
         # a fixed, documented gen_seed for reproducible velocity generation.
