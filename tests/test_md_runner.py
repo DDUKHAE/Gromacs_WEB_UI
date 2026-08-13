@@ -86,6 +86,19 @@ def test_maxwarn_defaults_to_1_and_follows_the_override(run_phase_grompp_args):
     assert args[args.index("-maxwarn") + 1] == "2"
 
 
+def test_membrane_maxwarn_defaults_to_2_and_still_follows_an_override(run_phase_grompp_args):
+    """Task 8 review, Fix 2: the two Berger-forcefield topology warnings hit
+    every membrane phase, not just env-build, so a membrane run defaulting to
+    -maxwarn 1 (the aqueous default) failed its first grompp on every phase
+    and burned a retryable-budget slot self-healing to 2 each time."""
+    _, args = run_phase_grompp_args("m", "em", variant="membrane_md_standard")
+    assert args[args.index("-maxwarn") + 1] == "2"
+
+    _, args = run_phase_grompp_args(
+        "m2", "em", {"grompp_maxwarn": 3}, variant="membrane_md_standard")
+    assert args[args.index("-maxwarn") + 1] == "3"
+
+
 def test_run_phase_derives_has_protein_from_state_tutorial(tmp_path, monkeypatch):
     from lib import state
     from lib.mdp_templates import base as MDP

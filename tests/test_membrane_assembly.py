@@ -17,6 +17,7 @@ from lib import gro_file
 from lib import state
 from lib.mdp_templates import base as MDP
 from skills.env_builder import membrane_assembly as MA
+from skills.md_runner import md_runner as MD
 
 TUT = Path(__file__).resolve().parent.parent / "tutorial_data" / "KALP15_in_DPPC"
 
@@ -733,8 +734,14 @@ def test_grompp_accepts_the_membrane_pressure_and_coupling_overrides(real_solvat
     """The positive half: with ref_p_list/compressibility_list doubled and
     tc_grps pointed at the index groups build_index actually produced, real
     grompp accepts npt/npt_pr/production on the finished 17,401-atom system
-    within the shipped -maxwarn budget -- the oracle Task 10's membrane MD
-    phases depend on.
+    within the -maxwarn budget the production path actually uses -- the
+    oracle Task 10's membrane MD phases depend on.
+
+    Built through MD.build_grompp_args (not a hand-rolled argv) and
+    MD.MEMBRANE_DEFAULT_MAXWARN (not MA.GROMPP_MAXWARN, the assembly's own
+    constant, which run_phase never passes): a prior version of this test
+    hardcoded both and so never actually exercised what run_phase renders
+    into a real grompp call.
     """
     ws, ions = real_solvated_system
     index = MA.build_index(ws, ions)
@@ -750,14 +757,16 @@ def test_grompp_accepts_the_membrane_pressure_and_coupling_overrides(real_solvat
         "tc_grps": "Protein_DPPC Water_and_ions",
     }
     mdp = MDP.render(phase, overrides, stage)
-    args = ["grompp", "-f", mdp.name, "-c", ions.name]
-    if phase in ("npt", "npt_pr"):
-        # define=-DPOSRES in these two templates' defaults requires -r
-        # (position restraint reference) since GROMACS 2018; production has
-        # no define placeholder default and needs none.
-        args.extend(["-r", ions.name])
-    args.extend(["-n", index.name, "-p", "topol.top", "-o", f"{phase}_accept.tpr",
-                "-maxwarn", MA.GROMPP_MAXWARN])
+    # define=-DPOSRES in npt/npt_pr's defaults requires -r (position
+    # restraint reference) since GROMACS 2018; production has no define
+    # placeholder default and needs none.
+    args = MD.build_grompp_args(
+        phase=phase, variant="membrane_md_standard", mdp_name=mdp.name,
+        input_gro=ions.name, top="topol.top", tpr=f"{phase}_accept.tpr",
+        index=index.name, input_cpt=None,
+        maxwarn=MD.MEMBRANE_DEFAULT_MAXWARN,
+        restraint=ions.name if phase in ("npt", "npt_pr") else None,
+    )
     check = GW.run(args, cwd=stage, env=dict(MA.GMX_ENV))
     assert check.ok, check.stderr[-800:]
 

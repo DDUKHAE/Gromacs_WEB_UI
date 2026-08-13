@@ -102,6 +102,12 @@ def _mdp_defines_restraints(mdp_path: Path) -> bool:
 
 
 MEMBRANE_VARIANTS = frozenset({"membrane_md_standard"})
+# The two Berger-forcefield topology warnings (repeated LJ-14 bondtype, the
+# multiple-time-stepping note) hit every membrane MD phase, not just
+# env-build -- see skills/env_builder/membrane_assembly.py's own
+# GROMPP_MAXWARN. A named constant here, rather than a bare 2 inline, keeps
+# run_phase's default and its test assertion from silently drifting apart.
+MEMBRANE_DEFAULT_MAXWARN = 2
 
 
 def build_grompp_args(phase: str, variant: str | None, mdp_name: str,
@@ -134,9 +140,18 @@ def run_phase(workspace_dir: Path, phase: str,
     ws = Path(workspace_dir)
     out_dir = ws / "stage2_md"
     render_overrides = dict(overrides or {})
-    grompp_maxwarn = int(render_overrides.pop("grompp_maxwarn", 1))
+    s_for_render = state.read(ws)
+    variant_for_render = (s_for_render.get("tutorial") or {}).get("variant")
+    # Membrane topologies always carry the two Berger-forcefield warnings
+    # (repeated LJ-14 bondtype, the multiple-time-stepping note); every phase
+    # hits both, not just env-build. Default maxwarn to 2 there so a phase
+    # doesn't burn a retryable-budget slot recovering from a warning count
+    # that is already known and expected.
+    default_maxwarn = (
+        MEMBRANE_DEFAULT_MAXWARN if variant_for_render in MEMBRANE_VARIANTS else 1
+    )
+    grompp_maxwarn = int(render_overrides.pop("grompp_maxwarn", default_maxwarn))
     if "has_protein" not in render_overrides and "tc_grps" not in render_overrides:
-        s_for_render = state.read(ws)
         render_overrides["has_protein"] = (
             s_for_render.get("tutorial") or {}
         ).get("has_protein", True)
