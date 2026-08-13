@@ -4,6 +4,7 @@ Unit tests stub GW.run so the ordering, arguments and topology bookkeeping can
 be checked without GROMACS. The integration tests at the bottom let real gmx be
 the oracle for the files this module writes. The end-to-end run lives in Task 10.
 """
+import os
 import re
 import shutil
 from pathlib import Path
@@ -16,6 +17,7 @@ from lib import gmx_wrapper as GW
 from lib import gro_file
 from lib import state
 from lib.mdp_templates import base as MDP
+from skills.env_builder import env_builder as EB
 from skills.env_builder import membrane_assembly as MA
 from skills.md_runner import md_runner as MD
 
@@ -494,9 +496,10 @@ def _real_workspace(ws):
     for sub in ("inputs", "stage1_env"):
         (ws / sub).mkdir(parents=True)
     state.write(ws, state.initial(ws))
-    for name in ("dppc128.pdb", "KALP-15_princ.pdb", "inflategro.pl"):
+    for name in ("dppc128.pdb", "KALP-15_princ.pdb", "inflategro.pl",
+                 "lipid.itp", "dppc.itp"):
         shutil.copy2(TUT / name, ws / "inputs" / name)
-    shutil.copy2(TUT / "dppc.itp", ws / "stage1_env" / "dppc.itp")
+    shutil.copy2(TUT / "KALP-15_princ.pdb", ws / "inputs" / "input.pdb")
     # GW.get_gmxlib() derives GMXLIB from the gmx path without resolving
     # symlinks, so a `ln -s .../gmx /tmp/gmxonly/gmx` on PATH yields nothing.
     resolved = Path(shutil.which("gmx")).resolve().parent.parent / "share" / "gromacs" / "top"
@@ -504,7 +507,10 @@ def _real_workspace(ws):
                    if c and (Path(c) / "gromos53a6.ff").is_dir()), None)
     if gmxlib is None:
         pytest.skip("needs gromos53a6.ff in GMXLIB")
-    BFF.build(TUT / "lipid.itp", gmxlib, ws / "stage1_env")
+    # env_builder's own step 0, not BFF.build directly: it is what records
+    # step_0.berger_forcefield, which integrate_lipid_topology reads.
+    with mock.patch.dict(os.environ, {"GMXLIB": str(gmxlib)}):
+        assert EB.prepare_berger_forcefield(ws) == BFF.FF_TARGET
     return ws, MA.prepare_bilayer(ws)
 
 
@@ -517,25 +523,19 @@ def real_bilayer(tmp_path_factory):
 def real_protein_system(tmp_path_factory):
     """The whole assembly on the real inputs, up to the inflated system.
 
-    Everything before `place_peptide` is env_builder's job, done here as
-    scaffolding: pdb2gmx needs `-ter` with terminus "None" (menu index 2, not 0
-    -- 0 is NH3+, which needs an N the ACE cap does not have) and `-ignh`
-    (the PDB's ACE carries HA1/HA2/HA3, absent from the united-atom rtp entry).
-
-    The topology gets a DPPC row but no SOL row: inflategro writes only the
-    protein and the named lipid, so the bilayer's 3655 waters are gone from
-    system_inflated.gro. The tutorial adds SOL at solvation, which is Task 7.
+    Everything before `place_peptide` goes through env_builder rather than
+    being written out here: a fixture that runs pdb2gmx itself, adds the
+    includes itself and appends the DPPC row itself proves only that the
+    fixture works. All three of those steps were broken in production while
+    this fixture was green.
     """
     ws, whole = _real_workspace(tmp_path_factory.mktemp("kalp_protein"))
-    stage = ws / "stage1_env"
-    assert GW.run(["pdb2gmx", "-f", str(ws / "inputs" / "KALP-15_princ.pdb"),
-                   "-o", "processed.gro", "-p", "topol.top",
-                   "-ff", BFF.FF_TARGET, "-water", "spc", "-ter", "-ignh"],
-                  cwd=stage, interactive_inputs=["2", "2"],
-                  env=dict(MA.GMX_ENV)).ok
-    BFF.add_include(stage / "topol.top", "dppc.itp")
-    topol = stage / "topol.top"
-    topol.write_text(topol.read_text().rstrip("\n") + "\nDPPC 128\n")
+    EB.run_step1_topology(ws, BFF.FF_TARGET, "spc")
+    EB.integrate_lipid_topology(ws)
+    # The topology gets a DPPC row but no SOL row: inflategro writes only the
+    # protein and the named lipid, so the bilayer's 3655 waters are gone from
+    # system_inflated.gro. The tutorial adds SOL at solvation, which is Task 7.
+    assert MA.add_lipid_molecules(ws, whole) == 128
 
     peptide = MA.place_peptide(ws, whole)
     MA.install_strong_restraints(ws, peptide)
@@ -565,9 +565,8 @@ def test_gmx_reads_the_merged_system(real_bilayer):
     atom count on line 2 makes gmx truncate or abort rather than agree."""
     ws, whole = real_bilayer
     stage = ws / "stage1_env"
-    # pdb2gmx on KALP-15_princ.pdb currently fails on its ACE terminus, so the
-    # peptide coordinates come straight from editconf. merge_system only needs
-    # coordinates.
+    # merge_system only needs coordinates, so this chain takes the cheaper
+    # editconf route rather than repeating real_protein_system's pdb2gmx.
     assert GW.run(["editconf", "-f", str(ws / "inputs" / "KALP-15_princ.pdb"),
                    "-o", "processed.gro"], cwd=stage, env=dict(MA.GMX_ENV)).ok
     peptide = MA.place_peptide(ws, whole)
@@ -806,21 +805,12 @@ def test_grompp_accepts_the_membrane_pressure_and_coupling_overrides(real_solvat
     ws, ions = real_solvated_system
     index = MA.build_index(ws, ions)
     stage = ws / "stage1_env"
-    overrides = {
-        "tc_grps": "Protein_DPPC Water_and_ions",
-        "ref_t": 323.0,
-    }
-    if phase != "nvt":
-        overrides.update({
-            "pcoupltype": "semiisotropic",
-            # npt's shared DEFAULTS use Berendsen; grompp's own warning
-            # that it is not a strictly correct ensemble is a third
-            # warning on top of the two expected Berger-forcefield ones,
-            # which blows maxwarn=2.
-            "pcoupl": "Parrinello-Rahman",
-            "ref_p_list": "1.0 1.0",
-            "compressibility_list": "4.5e-5 4.5e-5",
-        })
+    # run_simulation's own derivation, not a copy of it: npt's shared DEFAULTS
+    # use Berendsen, and grompp's warning that it is not a strictly correct
+    # ensemble would be a third warning on top of the two expected Berger ones,
+    # blowing maxwarn=2. A copy here would pass even if production stopped
+    # setting any of it.
+    overrides = MD.apply_membrane_overrides("membrane_md_standard", phase, {})
     mdp = MDP.render(phase, overrides, stage)
     # define=-DPOSRES in nvt/npt/npt_pr's defaults requires -r (position
     # restraint reference) since GROMACS 2018; production has no define

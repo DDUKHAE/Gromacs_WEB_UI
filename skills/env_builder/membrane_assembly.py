@@ -169,6 +169,11 @@ def add_lipid_molecules(workspace: Path, bilayer_whole: Path) -> int:
     pdb2gmx wrote a peptide-only topology, so without this row every later
     grompp sees 138 atoms of topology against a 6,438-atom system. The count is
     read off the bilayer rather than hardcoded to 128, like `write_dppc_topology`.
+
+    Not idempotent in the general case: called again after `inflate_once` has
+    corrected the row to 126, it resets it to the bilayer's 128. That is safe
+    only because `assemble` calls it before `inflate_once`, which recorrects it
+    in the same run. A resumed run must re-enter `assemble` from the top.
     """
     topol = _stage(workspace) / "topol.top"
     count = residue_counts(bilayer_whole).get("DPPC", 0)

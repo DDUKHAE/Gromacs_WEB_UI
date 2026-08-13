@@ -1,23 +1,20 @@
 """The whole membrane pipeline, run for real, checked against the tutorial's numbers.
 
-Marked `integration`: needs gmx and takes about a minute. Deliberately starts
-from a bare workspace and an unprocessed PDB rather than reusing
-test_membrane_assembly.py's `real_protein_system` fixture: that fixture calls
-pdb2gmx itself, with the `-ter`/terminus answers hand-written into the test, so
-it cannot show whether *env_builder* -- the code a real run goes through --
-produces a usable topology for this tutorial. Everything below step 1 is the
-production call chain:
-
-    prepare_berger_forcefield -> run_step1_topology -> integrate_lipid_topology
-    -> dispatch_environment_build
-
-Only the workspace scaffolding (copying the tutorial's inputs, the parameter
-dict the manifest+System Builder would resolve) is written by hand, because the
-System Builder has no membrane-composition input yet.
+Marked `integration`: needs gmx and takes about a minute. It starts from a bare
+workspace, an unprocessed PDB and a System Builder submission, and calls
+`env_builder.build_environment` -- the same entry point `web/runner.py` calls.
+Nothing between the submission and the finished, ionised, indexed system is
+written by hand: the tutorial choice, the parameter resolution, pdb2gmx's
+terminus answers, the lipid topology and the whole InflateGRO assembly are all
+production code. That is the point of the file. Three defects (pdb2gmx's
+missing `-ter`, the path-prefixed force-field include, the missing DPPC row in
+`[ molecules ]`) survived every other test in this repo because their fixtures
+did those steps by hand.
 
 Run with:
   PATH="/tmp/gmxonly:$PATH" python3 -m pytest tests/test_membrane_e2e.py -m integration -v
 """
+import json
 import re
 import shutil
 from pathlib import Path
@@ -40,11 +37,14 @@ pytestmark = [
                        reason="needs tutorial_data/KALP15_in_DPPC"),
 ]
 
-#: What the manifest's defaults plus a membrane System Builder submission
-#: resolve to for this tutorial (docs/tutorial/KALP15_in_DPPC/tutorial.manifest.json).
-PARAMS = {"forcefield": "gromos53a6", "water_model": "spc",
-          "box_type": "triclinic", "box_distance_nm": 1.0,
-          "ion_concentration_M": 0.15}
+#: A membrane submission as the System Builder would write it. `membrane` is
+#: what routes the run to KALP15_in_DPPC and satisfies its membrane_composition
+#: requirement; everything else (force field, water model, box) comes from the
+#: tutorial manifest through RPARAM.resolve, and is asserted below rather than
+#: repeated here.
+SUBMISSION = {"build_type": "membrane",
+              "membrane": {"lipid_type": "DPPC"},
+              "simulation": {"ion_concentration_M": 0.15}}
 
 
 @pytest.fixture(scope="module")
@@ -55,24 +55,38 @@ def built(tmp_path_factory):
     for name in ("dppc128.pdb", "dppc.itp", "lipid.itp",
                  "inflategro.pl", "water_deletor.pl"):
         shutil.copy2(TUT / name, ws / "inputs" / name)
-    shutil.copy2(TUT / "KALP-15_princ.pdb", ws / "inputs" / "input.pdb")
+    (ws / "system_config.json").write_text(json.dumps(SUBMISSION))
 
-    # GW.get_gmxlib() derives GMXLIB from the gmx path without resolving
-    # symlinks, and the documented way to put gmx on PATH here is a symlink,
-    # so point it at the real share/gromacs/top for this module.
+    # GW.get_gmxlib() cannot derive GMXLIB from a bare `gmx` symlink, which is
+    # the documented way to put gmx on PATH here, so supply the environment the
+    # production code would have found on a normal install. Environment, not a
+    # stand-in for a pipeline step.
     resolved = Path(shutil.which("gmx")).resolve().parent.parent / "share" / "gromacs" / "top"
     if not (resolved / "gromos53a6.ff").is_dir():
         pytest.skip("needs gromos53a6.ff in GMXLIB")
     mp = pytest.MonkeyPatch()
     mp.setenv("GMXLIB", str(resolved))
     try:
-        ff = EB.prepare_berger_forcefield(ws)
-        EB.run_step1_topology(ws, ff, PARAMS["water_model"])
-        EB.integrate_lipid_topology(ws)
-        EB.dispatch_environment_build(ws, PARAMS, "membrane_md_standard")
+        EB.build_environment(pdb_path=TUT / "KALP-15_princ.pdb", prompt="",
+                             workspace_dir=ws, interactive=False)
     finally:
         mp.undo()
     return ws, state.read(ws)["step_outputs"]["step_2"]["membrane_assembly"]
+
+
+def test_the_submission_routed_itself_to_the_membrane_tutorial(built):
+    """state["tutorial"] is what md_runner reads to pick the phase sequence and
+    the membrane mdp overrides, and only build_environment writes it."""
+    ws, _ = built
+    s = state.read(ws)
+    assert s["tutorial"]["id"] == "KALP15_in_DPPC"
+    assert s["tutorial"]["variant"] == "membrane_md_standard"
+    assert s["tutorial"]["has_protein"] is True
+    # Resolved from the manifest, not from a dict this test wrote.
+    resolved = s["step_outputs"]["step_0"]["resolved_parameters"]["values"]
+    assert resolved["forcefield"] == "gromos53a6"
+    assert resolved["water_model"] == "spc"
+    assert s["step_outputs"]["step_1"]["forcefield"] == "gromos53a6_lipid"
 
 
 def test_step1_topology_survives_the_capped_termini(built):
@@ -185,12 +199,13 @@ def test_grompp_accepts_every_md_phase_with_exactly_two_warnings(built, phase):
     """
     ws, summary = built
     stage = ws / "stage1_env"
-    overrides = {"tc_grps": "Protein_DPPC Water_and_ions", "ref_t": 323.0}
-    if phase != "nvt":
-        overrides.update({"pcoupltype": "semiisotropic",
-                          "pcoupl": "Parrinello-Rahman",
-                          "ref_p_list": "1.0 1.0",
-                          "compressibility_list": "4.5e-5 4.5e-5"})
+    variant = state.read(ws)["tutorial"]["variant"]
+    # Production's own choice of coupling groups, temperature and barostat --
+    # not a dict written here, which would assert this test against itself.
+    overrides = MD.apply_membrane_overrides(variant, phase, {})
+    assert overrides["tc_grps"] == "Protein_DPPC Water_and_ions"
+    assert overrides["ref_t"] == 323.0
+    assert (phase == "nvt") or overrides["pcoupltype"] == "semiisotropic"
     mdp = MDP.render(phase, overrides, stage)
     assert "ref_t                    = 323" in mdp.read_text()
     args = MD.build_grompp_args(
@@ -217,8 +232,9 @@ def test_single_valued_pressure_coupling_is_still_fatal(built):
     the two-valued overrides above are load-bearing, not decoration."""
     ws, _ = built
     stage = ws / "stage1_env"
-    mdp = MDP.render("npt", {"pcoupltype": "semiisotropic",
-                             "tc_grps": "Protein_DPPC Water_and_ions"}, stage)
+    overrides = MD.apply_membrane_overrides("membrane_md_standard", "npt", {})
+    del overrides["ref_p_list"], overrides["compressibility_list"]
+    mdp = MDP.render("npt", overrides, stage)
     check = GW.run(["grompp", "-f", mdp.name, "-c", "ions.gro", "-r", "ions.gro",
                     "-p", "topol.top", "-n", "index.ndx", "-o", "reject.tpr",
                     "-maxwarn", str(MD.MEMBRANE_DEFAULT_MAXWARN)],

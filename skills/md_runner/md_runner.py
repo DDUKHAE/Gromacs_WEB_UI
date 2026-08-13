@@ -665,6 +665,58 @@ def run_umbrella_workflow(workspace_dir: Path, workflow: dict[str, Any]) -> dict
     return {"completed_windows": completed}
 
 
+def apply_membrane_overrides(variant: str, phase: str,
+                             overrides: dict[str, Any]) -> dict[str, Any]:
+    """The mdp settings a bilayer needs, mutated into `overrides` in place.
+
+    Split out of `run_simulation` so it can be exercised against a real
+    assembled system (tests/test_membrane_e2e.py) rather than only through a
+    stub: these strings are the whole reason the membrane run couples to the
+    right groups at the right temperature.
+    """
+    if variant == "membrane_md_standard" and phase in ("nvt", "npt", "npt_pr", "production"):
+        # build_index's own groups (skills/env_builder/membrane_assembly.py),
+        # matching the tutorial's own mdp files. The default "Protein
+        # Non-Protein" needs no index file, which left -n inert. Not a
+        # lockable expert key, so a plain assignment is fine.
+        overrides["tc_grps"] = "Protein_DPPC Water_and_ions"
+        # DPPC's main phase transition is ~314 K; at the aqueous default
+        # of 300.0 the bilayer sits in the gel phase, which is why the
+        # tutorial's own nvt.mdp/npt.mdp/md.mdp all specify
+        # ref_t = 323 323. setdefault, not "=": a user-locked
+        # temperature_K must still win over this default, same
+        # principle as the barostat lock below. em needs neither this
+        # nor tc_grps -- the tutorial's minimisation mdps carry no
+        # coupling at all.
+        overrides.setdefault("ref_t", 323.0)
+    if variant == "membrane_md_standard" and phase in ("npt", "npt_pr", "production"):
+        overrides["pcoupltype"] = "semiisotropic"
+        # npt's shared DEFAULTS use Berendsen, which grompp warns is not a
+        # strictly correct ensemble; the tutorial's own npt.mdp uses
+        # Parrinello-Rahman for the membrane run, and that third warning
+        # would blow the two-warning Berger maxwarn budget. setdefault,
+        # not "=": a user-locked barostat (expert mode) must win over
+        # this default -- the lock exists so an expert can override it,
+        # and Parrinello-Rahman is our default, not a physical
+        # constraint. npt/npt_pr are unaffected either way, since
+        # protocol_contract.phase_overrides already forces their pcoupl
+        # regardless of any lock (by design, those two segments are not
+        # a user/agent choice); only production passes a lock through
+        # untouched, so only production actually honours it here.
+        overrides.setdefault("pcoupl", "Parrinello-Rahman")
+        # A locked pressure_bar (expert mode) arrives here as the
+        # contract's singular "ref_p"; semiisotropic coupling needs
+        # exactly two values, one per direction, so double it ourselves
+        # rather than let lib/mdp_templates/base.py's aqueous shim
+        # stringify a single value into a list of the wrong length.
+        locked_ref_p = overrides.pop("ref_p", None)
+        overrides["ref_p_list"] = (
+            f"{locked_ref_p} {locked_ref_p}" if locked_ref_p is not None else "1.0 1.0"
+        )
+        overrides["compressibility_list"] = "4.5e-5 4.5e-5"
+    return overrides
+
+
 def run_simulation(workspace_dir: Path,
                    phase_overrides: dict[str, dict[str, Any]] | None = None,
                    interactive: bool = True,
@@ -718,46 +770,8 @@ def run_simulation(workspace_dir: Path,
             **phase_overrides.get(phase, {}),
             **PC.phase_overrides(workspace_dir, phase),
         }
-        if variant == "membrane_md_standard" and phase in ("nvt", "npt", "npt_pr", "production"):
-            # build_index's own groups (skills/env_builder/membrane_assembly.py),
-            # matching the tutorial's own mdp files. The default "Protein
-            # Non-Protein" needs no index file, which left -n inert. Not a
-            # lockable expert key, so a plain assignment is fine.
-            requested_overrides["tc_grps"] = "Protein_DPPC Water_and_ions"
-            # DPPC's main phase transition is ~314 K; at the aqueous default
-            # of 300.0 the bilayer sits in the gel phase, which is why the
-            # tutorial's own nvt.mdp/npt.mdp/md.mdp all specify
-            # ref_t = 323 323. setdefault, not "=": a user-locked
-            # temperature_K must still win over this default, same
-            # principle as the barostat lock below. em needs neither this
-            # nor tc_grps -- the tutorial's minimisation mdps carry no
-            # coupling at all.
-            requested_overrides.setdefault("ref_t", 323.0)
-        if variant == "membrane_md_standard" and phase in ("npt", "npt_pr", "production"):
-            requested_overrides["pcoupltype"] = "semiisotropic"
-            # npt's shared DEFAULTS use Berendsen, which grompp warns is not a
-            # strictly correct ensemble; the tutorial's own npt.mdp uses
-            # Parrinello-Rahman for the membrane run, and that third warning
-            # would blow the two-warning Berger maxwarn budget. setdefault,
-            # not "=": a user-locked barostat (expert mode) must win over
-            # this default -- the lock exists so an expert can override it,
-            # and Parrinello-Rahman is our default, not a physical
-            # constraint. npt/npt_pr are unaffected either way, since
-            # protocol_contract.phase_overrides already forces their pcoupl
-            # regardless of any lock (by design, those two segments are not
-            # a user/agent choice); only production passes a lock through
-            # untouched, so only production actually honours it here.
-            requested_overrides.setdefault("pcoupl", "Parrinello-Rahman")
-            # A locked pressure_bar (expert mode) arrives here as the
-            # contract's singular "ref_p"; semiisotropic coupling needs
-            # exactly two values, one per direction, so double it ourselves
-            # rather than let lib/mdp_templates/base.py's aqueous shim
-            # stringify a single value into a list of the wrong length.
-            locked_ref_p = requested_overrides.pop("ref_p", None)
-            requested_overrides["ref_p_list"] = (
-                f"{locked_ref_p} {locked_ref_p}" if locked_ref_p is not None else "1.0 1.0"
-            )
-            requested_overrides["compressibility_list"] = "4.5e-5 4.5e-5"
+        requested_overrides = apply_membrane_overrides(
+            variant, phase, requested_overrides)
         judgment = run_phase_with_recovery(
             workspace_dir, phase=phase,
             phase_runner=_validating_phase_runner,
