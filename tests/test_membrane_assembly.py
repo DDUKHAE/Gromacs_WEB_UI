@@ -729,13 +729,20 @@ def test_grompp_rejects_semiisotropic_with_single_valued_pressure_mdp(real_solva
 
 @pytest.mark.integration
 @pytestmark_needs_data
-@pytest.mark.parametrize("phase", ["npt", "npt_pr", "production"])
+@pytest.mark.parametrize("phase", ["nvt", "npt", "npt_pr", "production"])
 def test_grompp_accepts_the_membrane_pressure_and_coupling_overrides(real_solvated_system, phase):
-    """The positive half: with ref_p_list/compressibility_list doubled and
-    tc_grps pointed at the index groups build_index actually produced, real
-    grompp accepts npt/npt_pr/production on the finished 17,401-atom system
-    within the -maxwarn budget the production path actually uses -- the
-    oracle Task 10's membrane MD phases depend on.
+    """The positive half: with ref_p_list/compressibility_list doubled,
+    ref_t at the tutorial's 323 K, and tc_grps pointed at the index groups
+    build_index actually produced, real grompp accepts nvt/npt/npt_pr/
+    production on the finished 17,401-atom system within the -maxwarn
+    budget the production path actually uses -- the oracle Task 10's
+    membrane MD phases depend on.
+
+    nvt is included (Task 8 re-review, Fix 3): run_simulation only set
+    tc_grps for npt/npt_pr/production, so nvt rendered "Protein
+    Non-Protein" -- an index group -n never resolves to for a membrane
+    system -- and ref_t stayed at the aqueous default of 300 K, which sits
+    DPPC in the gel phase rather than the tutorial's fluid phase at 323 K.
 
     Built through MD.build_grompp_args (not a hand-rolled argv) and
     MD.MEMBRANE_DEFAULT_MAXWARN (not MA.GROMPP_MAXWARN, the assembly's own
@@ -747,17 +754,22 @@ def test_grompp_accepts_the_membrane_pressure_and_coupling_overrides(real_solvat
     index = MA.build_index(ws, ions)
     stage = ws / "stage1_env"
     overrides = {
-        "pcoupltype": "semiisotropic",
-        # npt's shared DEFAULTS use Berendsen; grompp's own warning that it
-        # is not a strictly correct ensemble is a third warning on top of
-        # the two expected Berger-forcefield ones, which blows maxwarn=2.
-        "pcoupl": "Parrinello-Rahman",
-        "ref_p_list": "1.0 1.0",
-        "compressibility_list": "4.5e-5 4.5e-5",
         "tc_grps": "Protein_DPPC Water_and_ions",
+        "ref_t": 323.0,
     }
+    if phase != "nvt":
+        overrides.update({
+            "pcoupltype": "semiisotropic",
+            # npt's shared DEFAULTS use Berendsen; grompp's own warning
+            # that it is not a strictly correct ensemble is a third
+            # warning on top of the two expected Berger-forcefield ones,
+            # which blows maxwarn=2.
+            "pcoupl": "Parrinello-Rahman",
+            "ref_p_list": "1.0 1.0",
+            "compressibility_list": "4.5e-5 4.5e-5",
+        })
     mdp = MDP.render(phase, overrides, stage)
-    # define=-DPOSRES in npt/npt_pr's defaults requires -r (position
+    # define=-DPOSRES in nvt/npt/npt_pr's defaults requires -r (position
     # restraint reference) since GROMACS 2018; production has no define
     # placeholder default and needs none.
     args = MD.build_grompp_args(
@@ -765,7 +777,7 @@ def test_grompp_accepts_the_membrane_pressure_and_coupling_overrides(real_solvat
         input_gro=ions.name, top="topol.top", tpr=f"{phase}_accept.tpr",
         index=index.name, input_cpt=None,
         maxwarn=MD.MEMBRANE_DEFAULT_MAXWARN,
-        restraint=ions.name if phase in ("npt", "npt_pr") else None,
+        restraint=ions.name if phase in ("nvt", "npt", "npt_pr") else None,
     )
     check = GW.run(args, cwd=stage, env=dict(MA.GMX_ENV))
     assert check.ok, check.stderr[-800:]

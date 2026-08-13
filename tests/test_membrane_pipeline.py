@@ -248,6 +248,85 @@ def test_run_simulation_honours_a_locked_barostat_on_production_but_not_npt(tmp_
     assert "pcoupl                   = C-rescale" in production
 
 
+def test_run_simulation_sets_the_tutorial_temperature_and_nvt_coupling_groups(tmp_path, monkeypatch):
+    """Task 8 re-review, Fix 3: run_simulation only set tc_grps for
+    npt/npt_pr/production, so nvt rendered "Protein Non-Protein" -- an
+    index group -n never resolves to for a membrane system -- and ref_t
+    stayed at the aqueous default of 300 K everywhere. DPPC's main phase
+    transition is ~314 K, so 300 K sits the bilayer in the gel phase; the
+    tutorial's own nvt.mdp/npt.mdp/md.mdp all specify ref_t = 323 323. A
+    user-locked temperature_K must still win over the 323.0 default, same
+    principle as the barostat lock.
+    """
+    import json
+    from lib import gmx_wrapper as GW
+    from lib import protocol_contract as PC
+
+    ws = _workspace(tmp_path, "kalp_temp_locked")
+    (ws / "stage1_env" / "processed.gro").write_text("gro")
+    (ws / "stage1_env" / "topol.top").write_text("top")
+    (ws / "stage1_env" / "ions.gro").write_text("gro")
+    s = state.read(ws)
+    s["last_completed_stage"] = "env"
+    s["hardware"] = {"cpu_count": 1, "gpu_ids": [], "ntomp": 1}
+    s["tutorial"] = {"id": "KALP15_in_DPPC", "variant": "membrane_md_standard"}
+    for key in ("step_1", "step_2", "step_3", "step_5"):
+        s["step_outputs"][key] = {"ok": True}
+    state.write(ws, s)
+    (ws / "system_config.json").write_text(json.dumps({
+        "simulation": {"_expert_mode": True, "temperature_K": 310.0},
+    }))
+    PC.materialize(ws, "KALP15_in_DPPC")
+
+    def fake_run(args, cwd, **kwargs):
+        if args[0] == "grompp":
+            Path(cwd, args[args.index("-o") + 1]).write_text("tpr")
+        if args[0] == "mdrun":
+            Path(cwd, f"{args[args.index('-deffnm') + 1]}.gro").write_text("gro")
+        return GW.GmxResult(command=list(args), returncode=0, stdout="",
+                            stderr="", classification="success")
+
+    monkeypatch.setattr(GW, "run", fake_run)
+    MD.run_simulation(ws)
+
+    nvt = (ws / "stage2_md" / "nvt.mdp").read_text()
+    assert "tc-grps                  = Protein_DPPC Water_and_ions" in nvt
+    # A locked temperature_K (310.0) wins over the 323.0 tutorial default.
+    assert "ref_t                    = 310.0 310.0" in nvt
+
+
+def test_run_simulation_defaults_nvt_to_323k_when_nothing_is_locked(tmp_path, monkeypatch):
+    """Same as above without an expert lock: the membrane default (323.0,
+    not the aqueous 300.0) must apply on its own."""
+    from lib import gmx_wrapper as GW
+
+    ws = _workspace(tmp_path, "kalp_temp_default")
+    (ws / "stage1_env" / "processed.gro").write_text("gro")
+    (ws / "stage1_env" / "topol.top").write_text("top")
+    (ws / "stage1_env" / "ions.gro").write_text("gro")
+    s = state.read(ws)
+    s["last_completed_stage"] = "env"
+    s["hardware"] = {"cpu_count": 1, "gpu_ids": [], "ntomp": 1}
+    s["tutorial"] = {"id": "kalp", "variant": "membrane_md_standard"}
+    for key in ("step_1", "step_2", "step_3", "step_5"):
+        s["step_outputs"][key] = {"ok": True}
+    state.write(ws, s)
+
+    def fake_run(args, cwd, **kwargs):
+        if args[0] == "grompp":
+            Path(cwd, args[args.index("-o") + 1]).write_text("tpr")
+        if args[0] == "mdrun":
+            Path(cwd, f"{args[args.index('-deffnm') + 1]}.gro").write_text("gro")
+        return GW.GmxResult(command=list(args), returncode=0, stdout="",
+                            stderr="", classification="success")
+
+    monkeypatch.setattr(GW, "run", fake_run)
+    MD.run_simulation(ws)
+
+    nvt = (ws / "stage2_md" / "nvt.mdp").read_text()
+    assert "ref_t                    = 323.0 323.0" in nvt
+
+
 def test_run_simulation_sets_membrane_pressure_and_coupling_overrides(tmp_path):
     """The override dict run_simulation builds for npt/npt_pr/production is
     never exercised by the integration grompp tests -- those hardcode their
@@ -283,8 +362,18 @@ def test_run_simulation_sets_membrane_pressure_and_coupling_overrides(tmp_path):
         assert overrides["pcoupl"] == "Parrinello-Rahman"
         assert overrides["ref_p_list"] == "1.0 1.0"
         assert overrides["compressibility_list"] == "4.5e-5 4.5e-5"
+    # nvt/npt/npt_pr/production all get the tutorial's coupling groups and
+    # its 323 K reference temperature (Task 8 re-review, Fix 3: DPPC's main
+    # phase transition is ~314 K, so the aqueous default of 300.0 sits the
+    # bilayer in the gel phase); only npt/npt_pr/production are pressure
+    # coupled, so pcoupl is scoped to those three.
+    for phase in ("nvt", "npt", "npt_pr", "production"):
+        overrides = by_phase[phase]
         assert overrides["tc_grps"] == "Protein_DPPC Water_and_ions"
-    # em/nvt are unaffected -- the override block is scoped to the
-    # pressure-coupled phases only.
-    assert "pcoupl" not in by_phase["em"]
+        assert overrides["ref_t"] == 323.0
     assert "pcoupl" not in by_phase["nvt"]
+    # em is unaffected -- the tutorial's minimisation mdp carries no
+    # coupling at all.
+    assert "pcoupl" not in by_phase["em"]
+    assert "tc_grps" not in by_phase["em"]
+    assert "ref_t" not in by_phase["em"]

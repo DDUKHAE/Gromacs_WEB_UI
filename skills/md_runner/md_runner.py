@@ -718,6 +718,21 @@ def run_simulation(workspace_dir: Path,
             **phase_overrides.get(phase, {}),
             **PC.phase_overrides(workspace_dir, phase),
         }
+        if variant == "membrane_md_standard" and phase in ("nvt", "npt", "npt_pr", "production"):
+            # build_index's own groups (skills/env_builder/membrane_assembly.py),
+            # matching the tutorial's own mdp files. The default "Protein
+            # Non-Protein" needs no index file, which left -n inert. Not a
+            # lockable expert key, so a plain assignment is fine.
+            requested_overrides["tc_grps"] = "Protein_DPPC Water_and_ions"
+            # DPPC's main phase transition is ~314 K; at the aqueous default
+            # of 300.0 the bilayer sits in the gel phase, which is why the
+            # tutorial's own nvt.mdp/npt.mdp/md.mdp all specify
+            # ref_t = 323 323. setdefault, not "=": a user-locked
+            # temperature_K must still win over this default, same
+            # principle as the barostat lock below. em needs neither this
+            # nor tc_grps -- the tutorial's minimisation mdps carry no
+            # coupling at all.
+            requested_overrides.setdefault("ref_t", 323.0)
         if variant == "membrane_md_standard" and phase in ("npt", "npt_pr", "production"):
             requested_overrides["pcoupltype"] = "semiisotropic"
             # npt's shared DEFAULTS use Berendsen, which grompp warns is not a
@@ -743,10 +758,6 @@ def run_simulation(workspace_dir: Path,
                 f"{locked_ref_p} {locked_ref_p}" if locked_ref_p is not None else "1.0 1.0"
             )
             requested_overrides["compressibility_list"] = "4.5e-5 4.5e-5"
-            # build_index's own groups (skills/env_builder/membrane_assembly.py),
-            # matching the tutorial's own mdp files. The default "Protein
-            # Non-Protein" needs no index file, which left -n inert.
-            requested_overrides["tc_grps"] = "Protein_DPPC Water_and_ions"
         judgment = run_phase_with_recovery(
             workspace_dir, phase=phase,
             phase_runner=_validating_phase_runner,
