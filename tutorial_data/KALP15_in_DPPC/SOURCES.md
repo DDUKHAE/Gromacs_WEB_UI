@@ -123,7 +123,7 @@ the one the tutorial reports as tested.
 content is reproduced at
 `docs/tutorial/KALP15_in_DPPC/troubleshooting/advanced_troubleshooting.md`.
 Its two support files, `lipid_posre.itp` and `anneal_npt.mdp`, were downloaded
-from `http://www.mdtutorials.com/gmx/membrane_protein/Files/` and live here as
+from `http://www.mdtutorials.com/gmx/2018/membrane_protein/Files/` and live here as
 reference copies only — neither is staged into a run's `stage1_env/` by
 `skills/env_builder`, and `anneal_npt.mdp`'s annealing block still needs to be
 trimmed to two values per `tc_grps` before it will pass `grompp`. See the

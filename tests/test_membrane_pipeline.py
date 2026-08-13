@@ -383,8 +383,19 @@ def test_run_simulation_sets_membrane_pressure_and_coupling_overrides(tmp_path):
 
 
 def test_troubleshooting_doc_covers_both_failure_modes():
-    """The upstream page is not represented in the local docs, and the
-    lipid_collapse remediations are meaningless without it."""
+    """Pins the doc's central claim -- 'no lipid_collapse entry, so no
+    automatic recovery' -- to the actual MUTATION_BY_CAUSE dict, so that
+    re-adding that key (wiring up automation) fails this test and points
+    at the doc needing an update. The substring checks below only confirm
+    the doc mentions the relevant vocabulary; they cannot catch drift
+    between the doc and the code, so they are not the guard by themselves.
+    """
+    assert "lipid_collapse" not in MD.MUTATION_BY_CAUSE, (
+        "MUTATION_BY_CAUSE now has a lipid_collapse entry, so "
+        "docs/tutorial/KALP15_in_DPPC/troubleshooting/advanced_troubleshooting.md "
+        "needs updating -- it currently states there is no automatic recovery."
+    )
+
     doc = Path("docs/tutorial/KALP15_in_DPPC/troubleshooting/"
                "advanced_troubleshooting.md")
     assert doc.is_file()
