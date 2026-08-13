@@ -717,6 +717,11 @@ def run_simulation(workspace_dir: Path,
         }
         if variant == "membrane_md_standard" and phase in ("npt", "npt_pr", "production"):
             requested_overrides["pcoupltype"] = "semiisotropic"
+            # npt's shared DEFAULTS use Berendsen, which grompp warns is not a
+            # strictly correct ensemble; the tutorial's own npt.mdp uses
+            # Parrinello-Rahman for the membrane run, and that third warning
+            # would blow the two-warning Berger maxwarn budget.
+            requested_overrides["pcoupl"] = "Parrinello-Rahman"
             requested_overrides["ref_p_list"] = "1.0 1.0"
             requested_overrides["compressibility_list"] = "4.5e-5 4.5e-5"
             # build_index's own groups (skills/env_builder/membrane_assembly.py),

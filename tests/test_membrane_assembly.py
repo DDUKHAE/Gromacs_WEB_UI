@@ -741,6 +741,10 @@ def test_grompp_accepts_the_membrane_pressure_and_coupling_overrides(real_solvat
     stage = ws / "stage1_env"
     overrides = {
         "pcoupltype": "semiisotropic",
+        # npt's shared DEFAULTS use Berendsen; grompp's own warning that it
+        # is not a strictly correct ensemble is a third warning on top of
+        # the two expected Berger-forcefield ones, which blows maxwarn=2.
+        "pcoupl": "Parrinello-Rahman",
         "ref_p_list": "1.0 1.0",
         "compressibility_list": "4.5e-5 4.5e-5",
         "tc_grps": "Protein_DPPC Water_and_ions",

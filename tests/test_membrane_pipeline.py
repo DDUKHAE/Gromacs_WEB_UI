@@ -150,6 +150,48 @@ def test_a_stray_index_file_does_not_reach_an_aqueous_grompp(run_phase_grompp_ar
 # --- the lipid_collapse remediation --------------------------------------
 
 
+def test_run_simulation_sets_membrane_pressure_and_coupling_overrides(tmp_path):
+    """The override dict run_simulation builds for npt/npt_pr/production is
+    never exercised by the integration grompp tests -- those hardcode their
+    own copy of the same values. Pin the construction itself, or a typo here
+    (e.g. "pcoupl" -> "fcoupl") would only surface via a full gmx run."""
+    from lib import validators as V
+
+    ws = _workspace(tmp_path, "kalp_20260807_130000")
+    (ws / "stage1_env" / "processed.gro").write_text("gro")
+    (ws / "stage1_env" / "topol.top").write_text("top")
+    (ws / "stage1_env" / "ions.gro").write_text("gro")
+    s = state.read(ws)
+    s["last_completed_stage"] = "env"
+    s["hardware"] = {"cpu_count": 1, "gpu_ids": [], "ntomp": 1}
+    s["tutorial"] = {"id": "t", "variant": "membrane_md_standard"}
+    for key in ("step_1", "step_2", "step_3", "step_5"):
+        s["step_outputs"][key] = {"ok": True}
+    state.write(ws, s)
+
+    calls = []
+
+    def fake_run_phase_with_recovery(workspace_dir, phase, phase_runner=None, overrides=None):
+        calls.append((phase, dict(overrides or {})))
+        return V.Judgment(tier="pass", metric="stub")
+
+    with mock.patch.object(MD, "run_phase_with_recovery", side_effect=fake_run_phase_with_recovery):
+        MD.run_simulation(ws)
+
+    by_phase = dict(calls)
+    for phase in ("npt", "npt_pr", "production"):
+        overrides = by_phase[phase]
+        assert overrides["pcoupltype"] == "semiisotropic"
+        assert overrides["pcoupl"] == "Parrinello-Rahman"
+        assert overrides["ref_p_list"] == "1.0 1.0"
+        assert overrides["compressibility_list"] == "4.5e-5 4.5e-5"
+        assert overrides["tc_grps"] == "Protein_DPPC Water_and_ions"
+    # em/nvt are unaffected -- the override block is scoped to the
+    # pressure-coupled phases only.
+    assert "pcoupl" not in by_phase["em"]
+    assert "pcoupl" not in by_phase["nvt"]
+
+
 def test_lipid_collapse_has_documented_remediations():
     """The troubleshooting page's two remedies, in escalating order."""
     steps = MD.MUTATION_BY_CAUSE["lipid_collapse"]
