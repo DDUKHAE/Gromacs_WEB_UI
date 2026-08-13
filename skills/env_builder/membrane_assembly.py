@@ -163,6 +163,34 @@ def place_peptide(workspace: Path, bilayer_whole: Path) -> Path:
     return _require(stage / "KALP_newbox.gro")
 
 
+def add_lipid_molecules(workspace: Path, bilayer_whole: Path) -> int:
+    """Add the bilayer's lipids to `[ molecules ]`: the tutorial's "add DPPC".
+
+    pdb2gmx wrote a peptide-only topology, so without this row every later
+    grompp sees 138 atoms of topology against a 6,438-atom system. The count is
+    read off the bilayer rather than hardcoded to 128, like `write_dppc_topology`.
+    """
+    topol = _stage(workspace) / "topol.top"
+    count = residue_counts(bilayer_whole).get("DPPC", 0)
+    if not count:
+        raise MembraneAssemblyError(
+            f"{bilayer_whole} holds no DPPC residues to add to {topol}"
+        )
+    text = topol.read_text(encoding="utf-8", errors="replace")
+    section = re.search(r"^\[\s*molecules\s*\]\s*$(.*)", text, re.M | re.S)
+    if section is None:
+        raise MembraneAssemblyError(f"{topol} has no [ molecules ] section")
+    if re.search(r"^[ \t]*\[", section.group(1), re.M):
+        raise MembraneAssemblyError(
+            f"{topol} has a section after [ molecules ]; cannot append DPPC"
+        )
+    if re.search(r"^[ \t]*DPPC[ \t]+\d+[ \t]*$", section.group(1), re.M):
+        BFF.set_molecule_count(topol, "DPPC", count)  # resumed run
+    else:
+        topol.write_text(text.rstrip("\n") + f"\nDPPC {count}\n", encoding="utf-8")
+    return count
+
+
 def merge_system(workspace: Path, peptide_gro: Path, bilayer_whole: Path) -> Path:
     """Concatenate peptide and bilayer into one coordinate file."""
     stage = _stage(workspace)
@@ -446,6 +474,7 @@ def assemble(workspace_dir: Path, params: dict[str, Any]) -> dict[str, Any]:
     bilayer_whole = prepare_bilayer(workspace)
     peptide = place_peptide(workspace, bilayer_whole)
     system = merge_system(workspace, peptide, bilayer_whole)
+    add_lipid_molecules(workspace, bilayer_whole)
     install_strong_restraints(workspace, peptide)
 
     inflated = inflate_once(workspace, system)

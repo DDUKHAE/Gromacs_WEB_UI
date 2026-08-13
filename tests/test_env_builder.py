@@ -1,3 +1,6 @@
+import shutil
+from pathlib import Path
+
 import pytest
 
 from lib import state
@@ -191,3 +194,61 @@ def test_gro_checkpoint_called_on_warning_and_accepts(tmp_path, monkeypatch):
     EB.run_step5_genion(tmp_path)
     s = state.read(tmp_path)
     assert s["step_outputs"]["step_5"]["neutrality_tier"] == "warning"
+
+
+# ---------------------------------------------------------------------------
+# pdb2gmx terminus selection (capped N-/C-termini)
+# ---------------------------------------------------------------------------
+
+TUTORIAL_DATA = Path(__file__).resolve().parent.parent / "tutorial_data"
+
+
+def _capture_pdb2gmx(ws, monkeypatch, pdb_source):
+    """Run step 1 against a real tutorial PDB, returning the pdb2gmx call."""
+    _init(ws)
+    (ws / "inputs").mkdir(exist_ok=True)
+    shutil.copy2(pdb_source, ws / "inputs" / "input.pdb")
+    seen = {}
+
+    def _run(args, cwd, interactive_inputs=None, **kwargs):
+        seen["args"], seen["inputs"] = list(args), interactive_inputs
+        return GW.GmxResult(command=list(args), returncode=0, stdout="", stderr="",
+                            classification="success")
+
+    monkeypatch.setattr(GW, "run", _run)
+    EB.run_step1_topology(ws, "gromos53a6_lipid", "spc")
+    return seen
+
+
+def test_capped_termini_get_ter_and_the_none_answers(tmp_path, monkeypatch):
+    """KALP-15 is ACE-capped at both ends. Without -ter and "None" for both
+    termini pdb2gmx builds an NH3+ start terminus and dies with "atom N not
+    found in buiding block 1ACE" -- the ACE cap has no N."""
+    seen = _capture_pdb2gmx(tmp_path, monkeypatch,
+                            TUTORIAL_DATA / "KALP15_in_DPPC" / "KALP-15_princ.pdb")
+    assert "-ter" in seen["args"]
+    assert seen["inputs"] == ["2", "2"]
+
+
+def test_ordinary_termini_leave_pdb2gmx_non_interactive(tmp_path, monkeypatch):
+    """Lysozyme has charged termini: the aqueous call must stay exactly as it
+    was, because -ter would block on stdin for answers nobody supplies."""
+    seen = _capture_pdb2gmx(tmp_path, monkeypatch,
+                            TUTORIAL_DATA / "Lysozyme_in_water" / "1AKI.pdb")
+    assert "-ter" not in seen["args"]
+    assert seen["inputs"] is None
+    assert seen["args"] == ["pdb2gmx", "-f", str(tmp_path / "inputs" / "input.pdb"),
+                            "-o", "processed.gro", "-p", "topol.top",
+                            "-water", "spc", "-ff", "gromos53a6_lipid", "-ignh"]
+
+
+def test_one_capped_terminus_keeps_the_default_for_the_other(tmp_path):
+    """A single cap still needs -ter, but only that end answers "None"; 0 is
+    pdb2gmx's own default for the uncapped one."""
+    pdb = tmp_path / "half.pdb"
+    pdb.write_text("ATOM      1  CA  ACE     1       0.0   0.0   0.0\n"
+                   "ATOM      2  CA  ALA     2       0.0   0.0   0.0\n")
+    assert EB._terminus_answers(pdb) == ["2", "0"]
+    pdb.write_text("ATOM      1  CA  ALA     1       0.0   0.0   0.0\n"
+                   "ATOM      2  N   NH2     2       0.0   0.0   0.0\n")
+    assert EB._terminus_answers(pdb) == ["0", "2"]

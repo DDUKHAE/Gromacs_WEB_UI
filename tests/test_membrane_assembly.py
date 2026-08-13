@@ -284,6 +284,59 @@ def test_install_strong_restraints_is_fatal_without_a_posres_block(workspace):
 
 
 # --------------------------------------------------------------------------
+# step 4b: add the bilayer's lipids to [ molecules ]
+# --------------------------------------------------------------------------
+
+PEPTIDE_TOPOL = (
+    '#include "gromos53a6_lipid.ff/forcefield.itp"\n'
+    "\n[ system ]\nKALP-15\n"
+    "\n[ molecules ]\n; Compound        #mols\nProtein_chain_A     1\n"
+)
+
+
+def test_lipids_are_added_to_the_peptide_only_molecules_section(workspace):
+    """pdb2gmx writes no DPPC row, so grompp would see 1 atom of lipid topology
+    against 6300. The count comes off the bilayer, not a hardcoded 128."""
+    topol = workspace / "stage1_env" / "topol.top"
+    topol.write_text(PEPTIDE_TOPOL)
+    bilayer = workspace / "stage1_env" / "dppc128_whole.gro"
+    bilayer.write_text(WHOLE_GRO)
+    assert MA.add_lipid_molecules(workspace, bilayer) == 1
+    assert MA._lipid_count(topol) == 1
+    assert "Protein_chain_A     1" in topol.read_text()
+
+
+def test_adding_lipids_twice_does_not_duplicate_the_row(workspace):
+    """A resumed run must correct the row, not append a second one."""
+    topol = workspace / "stage1_env" / "topol.top"
+    topol.write_text(PEPTIDE_TOPOL)
+    bilayer = workspace / "stage1_env" / "dppc128_whole.gro"
+    bilayer.write_text(WHOLE_GRO)
+    MA.add_lipid_molecules(workspace, bilayer)
+    MA.add_lipid_molecules(workspace, bilayer)
+    assert topol.read_text().count("DPPC") == 1
+
+
+def test_adding_lipids_refuses_a_topology_with_a_later_section(workspace):
+    """Appending past [ molecules ] would land the row in another section."""
+    topol = workspace / "stage1_env" / "topol.top"
+    topol.write_text(PEPTIDE_TOPOL + "\n[ intermolecular_interactions ]\n")
+    bilayer = workspace / "stage1_env" / "dppc128_whole.gro"
+    bilayer.write_text(WHOLE_GRO)
+    with pytest.raises(MA.MembraneAssemblyError, match="after .* molecules"):
+        MA.add_lipid_molecules(workspace, bilayer)
+
+
+def test_adding_lipids_is_fatal_without_a_bilayer(workspace):
+    topol = workspace / "stage1_env" / "topol.top"
+    topol.write_text(PEPTIDE_TOPOL)
+    empty = workspace / "stage1_env" / "empty.gro"
+    empty.write_text("w\n    0\n   6.4 6.4 6.6\n")
+    with pytest.raises(MA.MembraneAssemblyError, match="no DPPC residues"):
+        MA.add_lipid_molecules(workspace, empty)
+
+
+# --------------------------------------------------------------------------
 # steps 5-6: inflate and correct [ molecules ]
 # --------------------------------------------------------------------------
 
@@ -1221,6 +1274,11 @@ def test_assemble_calls_everything_in_order_and_builds_the_summary(workspace):
         assert p == peptide and b == bilayer
         return system
 
+    def fake_add_lipids(ws, b):
+        calls.append("add_lipid_molecules")
+        assert b == bilayer
+        return 128
+
     def fake_install(ws, p):
         calls.append("install_strong_restraints")
         assert p == peptide
@@ -1259,6 +1317,7 @@ def test_assemble_calls_everything_in_order_and_builds_the_summary(workspace):
     with mock.patch.object(MA, "prepare_bilayer", side_effect=fake_prepare_bilayer), \
          mock.patch.object(MA, "place_peptide", side_effect=fake_place_peptide), \
          mock.patch.object(MA, "merge_system", side_effect=fake_merge_system), \
+         mock.patch.object(MA, "add_lipid_molecules", side_effect=fake_add_lipids), \
          mock.patch.object(MA, "install_strong_restraints", side_effect=fake_install), \
          mock.patch.object(MA, "inflate_once", side_effect=fake_inflate_once), \
          mock.patch.object(MA, "minimise", side_effect=fake_minimise), \
@@ -1270,6 +1329,8 @@ def test_assemble_calls_everything_in_order_and_builds_the_summary(workspace):
 
     assert calls == [
         "prepare_bilayer", "place_peptide", "merge_system",
+        # the DPPC row has to exist before the first grompp of the merged system
+        "add_lipid_molecules",
         "install_strong_restraints", "inflate_once", "minimise",
         "shrink_to_target", "solvate_and_ionise", "build_index",
         "parse_index_groups",
@@ -1306,6 +1367,7 @@ def stubbed_assemble(workspace, params):
     with mock.patch.object(MA, "prepare_bilayer", return_value=stage / "bilayer.gro"), \
          mock.patch.object(MA, "place_peptide", return_value=stage / "peptide.gro"), \
          mock.patch.object(MA, "merge_system", return_value=stage / "system.gro"), \
+         mock.patch.object(MA, "add_lipid_molecules", return_value=128), \
          mock.patch.object(MA, "install_strong_restraints"), \
          mock.patch.object(MA, "inflate_once", return_value=inflated), \
          mock.patch.object(MA, "minimise", return_value=stage / "inflated_em.gro"), \

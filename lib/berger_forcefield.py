@@ -205,8 +205,11 @@ def ensure_forcefield_include(topol: Path, forcefield: str = FF_TARGET) -> bool:
     want = f'#include "{forcefield}.ff/forcefield.itp"'
     if want in text:
         return False
+    # The directory may carry a path prefix: when the .ff lives in the run
+    # directory rather than GMXLIB, GROMACS 2026's pdb2gmx writes
+    # `#include "./gromos53a6_lipid.ff/forcefield.itp"` ("path added").
     patched, n = re.subn(
-        r'#include\s+"[\w.+-]*\.ff/forcefield\.itp"', want, text, count=1
+        r'#include\s+"[\w./+-]*\.ff/forcefield\.itp"', want, text, count=1
     )
     if n == 0:
         raise BergerForceFieldError(

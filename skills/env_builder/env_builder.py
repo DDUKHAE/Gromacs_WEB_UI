@@ -112,14 +112,43 @@ def select_tutorial(workspace_dir: Path, pdb_path: Path,
     return decision
 
 
+#: Residues that cap a terminus instead of being one. A capped terminus has no
+#: N (or no C/O), so pdb2gmx's default charged terminus cannot be built and it
+#: dies with "atom N not found in buiding block 1ACE" (its own typo).
+_TERMINUS_CAPS = frozenset({"ACE", "FOR", "NH2", "NME", "NAC"})
+
+#: Answers to pdb2gmx's -ter menus, in the order it asks (start, then end).
+#: Both menus list "None" third: 0 NH3+ / 1 NH2 / 2 None and
+#: 0 COO- / 1 COOH / 2 None. 0 is also pdb2gmx's non-interactive default, so
+#: answering it for an uncapped terminus reproduces the behaviour without -ter.
+_TER_NONE, _TER_DEFAULT = "2", "0"
+
+
+def _terminus_answers(pdb_path: Path) -> list[str] | None:
+    """-ter answers for a capped structure, or None if neither end is capped."""
+    residues = [line[17:20].strip() for line in Path(pdb_path).read_text().splitlines()
+                if line.startswith(("ATOM", "HETATM"))]
+    if not residues:
+        return None
+    answers = [_TER_NONE if res in _TERMINUS_CAPS else _TER_DEFAULT
+               for res in (residues[0], residues[-1])]
+    return answers if _TER_NONE in answers else None
+
+
 def run_step1_topology(workspace_dir: Path, forcefield: str, water: str) -> None:
     ws = Path(workspace_dir)
     pdb = ws / "inputs" / "input.pdb"
     out_dir = ws / "stage1_env"
+    # -ignh: the tutorial's ACE cap carries HA1/HA2/HA3, which no united-atom
+    # rtp entry has. Harmless elsewhere -- pdb2gmx rebuilds hydrogens anyway.
+    args = ["pdb2gmx", "-f", str(pdb),
+            "-o", "processed.gro", "-p", "topol.top",
+            "-water", water, "-ff", forcefield, "-ignh"]
+    answers = _terminus_answers(pdb)
+    if answers:
+        args.append("-ter")
     result = GW.run(
-        ["pdb2gmx", "-f", str(pdb),
-         "-o", "processed.gro", "-p", "topol.top",
-         "-water", water, "-ff", forcefield, "-ignh"],
+        args, interactive_inputs=answers,
         cwd=out_dir, progress_log=ws / "runner.log",
     )
     if not result.ok:

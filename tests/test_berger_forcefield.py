@@ -443,6 +443,21 @@ def test_redirect_is_idempotent(tmp_path):
     assert BFF.ensure_forcefield_include(t) is False
 
 
+def test_path_prefixed_include_is_normalised(tmp_path):
+    """GROMACS 2026's pdb2gmx writes `#include "./<ff>.ff/forcefield.itp"` when
+    the force field sits in the run directory instead of GMXLIB ("path added").
+    That prefix used to miss the redirect regex and abort a real membrane run.
+    """
+    t = tmp_path / "topol.top"
+    t.write_text(TOPOL.replace('"gromos53a6_lipid.ff/forcefield.itp"',
+                               '"./gromos53a6_lipid.ff/forcefield.itp"'))
+    assert BFF.ensure_forcefield_include(t) is True
+    text = t.read_text()
+    assert '#include "gromos53a6_lipid.ff/forcefield.itp"' in text
+    assert "./gromos53a6_lipid.ff/forcefield.itp" not in text
+    assert text.count("forcefield.itp") == 1
+
+
 def test_topology_without_a_forcefield_include_is_reported(tmp_path):
     t = tmp_path / "topol.top"
     t.write_text("[ molecules ]\nProtein 1\n")
