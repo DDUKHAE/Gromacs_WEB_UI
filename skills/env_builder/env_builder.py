@@ -117,22 +117,56 @@ def select_tutorial(workspace_dir: Path, pdb_path: Path,
 #: dies with "atom N not found in buiding block 1ACE" (its own typo).
 _TERMINUS_CAPS = frozenset({"ACE", "FOR", "NH2", "NME", "NAC"})
 
-#: Answers to pdb2gmx's -ter menus, in the order it asks (start, then end).
-#: Both menus list "None" third: 0 NH3+ / 1 NH2 / 2 None and
-#: 0 COO- / 1 COOH / 2 None. 0 is also pdb2gmx's non-interactive default, so
-#: answering it for an uncapped terminus reproduces the behaviour without -ter.
-_TER_NONE, _TER_DEFAULT = "2", "0"
+#: pdb2gmx's own menu, asked twice per chain, e.g.
+#:     Select start terminus type for ACE-1
+#:      0: NH3+
+#:      1: NH2
+#:      2: None
+#: The index of "None" is force-field specific (2 for gromos53a6, 3 for
+#: oplsaa, 8 for charmm36's start menu) and residue specific, so it is read
+#: off the menu rather than assumed. 0 is pdb2gmx's non-interactive default,
+#: which is what every uncapped terminus keeps.
+_TER_PROMPT = re.compile(r"^Select (?:start|end) terminus type for (\S+)-\d+\s*$")
+_TER_OPTION = re.compile(r"^\s*(\d+):\s*(\S+)")
+_TER_DEFAULT = "0"
+
+#: Enough "keep the default" answers that pdb2gmx can never block on a prompt
+#: this code did not predict -- a hang leaves the user nothing to act on,
+#: which is strictly worse than the loud failure it would replace.
+_TER_PAD = [_TER_DEFAULT] * 64
+
+#: One round per chain, plus one to confirm. Bounded so a menu this parser
+#: cannot read costs a few seconds rather than looping.
+_TER_MAX_ROUNDS = 12
+
+#: Backstop for a pdb2gmx that blocks on something other than a terminus menu.
+#: Generous: pdb2gmx on a large multi-chain system is minutes of real work.
+PDB2GMX_TIMEOUT_S = 1800
 
 
-def _terminus_answers(pdb_path: Path) -> list[str] | None:
-    """-ter answers for a capped structure, or None if neither end is capped."""
-    residues = [line[17:20].strip() for line in Path(pdb_path).read_text().splitlines()
-                if line.startswith(("ATOM", "HETATM"))]
-    if not residues:
-        return None
-    answers = [_TER_NONE if res in _TERMINUS_CAPS else _TER_DEFAULT
-               for res in (residues[0], residues[-1])]
-    return answers if _TER_NONE in answers else None
+def _terminus_menus(text: str) -> list[tuple[str, dict[str, str]]]:
+    """[(residue, {option name: index}), ...] in the order pdb2gmx asked."""
+    menus: list[tuple[str, dict[str, str]]] = []
+    in_menu = False
+    for line in text.splitlines():
+        prompt = _TER_PROMPT.match(line)
+        if prompt:
+            menus.append((prompt.group(1), {}))
+            in_menu = True
+        elif in_menu:
+            option = _TER_OPTION.match(line)
+            if option:
+                menus[-1][1][option.group(2)] = option.group(1)
+            else:
+                in_menu = False
+    return menus
+
+
+def _terminus_answers(text: str) -> list[str]:
+    """The answer for every menu pdb2gmx printed: "None" for a cap, else default."""
+    return [options.get("None", _TER_DEFAULT) if residue in _TERMINUS_CAPS
+            else _TER_DEFAULT
+            for residue, options in _terminus_menus(text)]
 
 
 def run_step1_topology(workspace_dir: Path, forcefield: str, water: str) -> None:
@@ -144,13 +178,28 @@ def run_step1_topology(workspace_dir: Path, forcefield: str, water: str) -> None
     args = ["pdb2gmx", "-f", str(pdb),
             "-o", "processed.gro", "-p", "topol.top",
             "-water", water, "-ff", forcefield, "-ignh"]
-    answers = _terminus_answers(pdb)
-    if answers:
+
+    def _pdb2gmx(answers: list[str] | None) -> GW.GmxResult:
+        return GW.run(args, interactive_inputs=answers, cwd=out_dir,
+                      timeout=PDB2GMX_TIMEOUT_S, progress_log=ws / "runner.log")
+
+    if _TERMINUS_CAPS & {line[17:20].strip() for line in pdb.read_text().splitlines()
+                         if line.startswith(("ATOM", "HETATM"))}:
+        # A capped structure needs -ter, and -ter makes pdb2gmx interactive.
+        # The answers are read back from the menus pdb2gmx itself printed --
+        # which name the residue they belong to, so this is per chain and
+        # needs no second opinion about where the chains or the caps are.
+        # Each round gets one chain further; the padding answers the rest.
         args.append("-ter")
-    result = GW.run(
-        args, interactive_inputs=answers,
-        cwd=out_dir, progress_log=ws / "runner.log",
-    )
+        answers: list[str] = []
+        for _ in range(_TER_MAX_ROUNDS):
+            result = _pdb2gmx(answers + _TER_PAD)
+            resolved = _terminus_answers(result.stdout or result.stderr)
+            if resolved == answers:
+                break
+            answers = resolved
+    else:
+        result = _pdb2gmx(None)
     if not result.ok:
         raise RuntimeError(f"pdb2gmx failed: {result.stderr[-500:]}")
     s = state.read(ws)
