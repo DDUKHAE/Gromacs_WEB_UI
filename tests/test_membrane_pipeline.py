@@ -377,3 +377,18 @@ def test_run_simulation_sets_membrane_pressure_and_coupling_overrides(tmp_path):
     assert "pcoupl" not in by_phase["em"]
     assert "tc_grps" not in by_phase["em"]
     assert "ref_t" not in by_phase["em"]
+
+
+# --- troubleshooting docs --------------------------------------------------
+
+
+def test_troubleshooting_doc_covers_both_failure_modes():
+    """The upstream page is not represented in the local docs, and the
+    lipid_collapse remediations are meaningless without it."""
+    doc = Path("docs/tutorial/KALP15_in_DPPC/troubleshooting/"
+               "advanced_troubleshooting.md")
+    assert doc.is_file()
+    text = doc.read_text()
+    for token in ("POSRES_LIPID", "lipid_posre.itp", "annealing",
+                  "LINCS", "void"):
+        assert token in text, token

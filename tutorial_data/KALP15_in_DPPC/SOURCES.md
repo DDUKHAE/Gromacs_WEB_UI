@@ -116,3 +116,15 @@ expected to show, but a longer run should consider GROMOS96 54A7 or another
 force field. Validating the model remains the researcher's responsibility —
 Berger lipids mix GROMOS and OPLS-UA elements, and the combination used here is
 the one the tutorial reports as tested.
+
+### The troubleshooting page
+
+`advanced_troubleshooting.html` has no counterpart in the local docs, so its
+content is reproduced at
+`docs/tutorial/KALP15_in_DPPC/troubleshooting/advanced_troubleshooting.md`.
+Its two support files, `lipid_posre.itp` and `anneal_npt.mdp`, were downloaded
+from `http://www.mdtutorials.com/gmx/membrane_protein/Files/` and live here as
+reference copies only — neither is staged into a run's `stage1_env/` by
+`skills/env_builder`, and `anneal_npt.mdp`'s annealing block still needs to be
+trimmed to two values per `tc_grps` before it will pass `grompp`. See the
+troubleshooting page for what that means in practice.
