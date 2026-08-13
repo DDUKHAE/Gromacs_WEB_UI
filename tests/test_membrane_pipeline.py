@@ -147,7 +147,57 @@ def test_a_stray_index_file_does_not_reach_an_aqueous_grompp(run_phase_grompp_ar
     assert "-n" not in args
 
 
-# --- the lipid_collapse remediation --------------------------------------
+# --- expert-mode overrides on a membrane run (Task 8 review, Fix 1) -------
+
+
+def test_run_simulation_survives_a_membrane_run_with_a_locked_contract(tmp_path, monkeypatch):
+    """Task 8 review, Fix 1, end to end: an expert-mode membrane run used to
+    die at npt with a StateContractError -- not retryable, since
+    StateContractError subclasses Exception, not RuntimeError -- because
+    lib.protocol_contract.phase_overrides forced pcoupl="Berendsen"
+    regardless of variant, colliding with md_runner's own
+    pcoupl="Parrinello-Rahman" override. Drives the real run_simulation, with
+    a materialized, non-empty protocol contract (temperature_K + pressure_bar
+    locked) for the membrane tutorial -- that combination was previously
+    untested, which is how this shipped.
+    """
+    import json
+    from lib import gmx_wrapper as GW
+    from lib import protocol_contract as PC
+
+    ws = _workspace(tmp_path, "kalp_locked")
+    (ws / "stage1_env" / "processed.gro").write_text("gro")
+    (ws / "stage1_env" / "topol.top").write_text("top")
+    (ws / "stage1_env" / "ions.gro").write_text("gro")
+    s = state.read(ws)
+    s["last_completed_stage"] = "env"
+    s["hardware"] = {"cpu_count": 1, "gpu_ids": [], "ntomp": 1}
+    s["tutorial"] = {"id": "KALP15_in_DPPC", "variant": "membrane_md_standard"}
+    for key in ("step_1", "step_2", "step_3", "step_5"):
+        s["step_outputs"][key] = {"ok": True}
+    state.write(ws, s)
+    (ws / "system_config.json").write_text(json.dumps({
+        "simulation": {"_expert_mode": True, "temperature_K": 310.0,
+                       "pressure_bar": 2.0},
+    }))
+    PC.materialize(ws, "KALP15_in_DPPC")
+
+    def fake_run(args, cwd, **kwargs):
+        if args[0] == "grompp":
+            Path(cwd, args[args.index("-o") + 1]).write_text("tpr")
+        if args[0] == "mdrun":
+            Path(cwd, f"{args[args.index('-deffnm') + 1]}.gro").write_text("gro")
+        return GW.GmxResult(command=list(args), returncode=0, stdout="",
+                            stderr="", classification="success")
+
+    monkeypatch.setattr(GW, "run", fake_run)
+    MD.run_simulation(ws)  # must not raise StateContractError at npt
+
+    rendered = (ws / "stage2_md" / "npt.mdp").read_text()
+    assert "pcoupl                   = Parrinello-Rahman" in rendered
+    assert "ref_p                    = 2.0 2.0" in rendered
+
+
 
 
 def test_run_simulation_sets_membrane_pressure_and_coupling_overrides(tmp_path):

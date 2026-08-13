@@ -309,6 +309,7 @@ def phase_overrides(workspace: Path, phase: str) -> dict[str, Any]:
     values = dict(contract["locked_mdp_parameters"])
     if phase == "em":
         return {}
+    membrane = contract.get("pipeline_variant") == "membrane_md_standard"
     if phase == "nvt":
         values.pop("pcoupl", None)
         values.pop("ref_p", None)
@@ -316,11 +317,21 @@ def phase_overrides(workspace: Path, phase: str) -> dict[str, Any]:
         # The first pressure-coupling segment is deliberately not a user or
         # agent choice: it relaxes density before the production-quality
         # barostat is enabled in the following, separately recorded phase.
-        values["pcoupl"] = "Berendsen"
+        # Membrane npt is the one exception: the tutorial's own mdp uses
+        # Parrinello-Rahman there because Berendsen does not generate a
+        # strictly correct ensemble -- see skills/md_runner/md_runner.py's
+        # membrane branch, which renders the matching semiisotropic pcoupltype.
+        values["pcoupl"] = "Parrinello-Rahman" if membrane else "Berendsen"
     elif phase == "npt_pr":
         values["pcoupl"] = "Parrinello-Rahman"
     elif phase not in ("npt", "npt_pr", "production"):
         # Current special-workflow templates do not expose the standard
         # expert fields.  They remain tutorial-locked, not silently applied.
         return {}
+    # A locked ref_p (pressure_bar) is left as the single scalar the expert
+    # config gave: _same_mdp_value already tolerates a scalar expectation
+    # matching a repeated multi-group actual (e.g. membrane's two identical
+    # semiisotropic values), same as ref_t already does for tc_grps. Pre-
+    # joining it into "X X" here would break that comparison instead --
+    # _same_mdp_value has no multi-token expected value to split on.
     return values

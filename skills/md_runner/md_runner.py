@@ -722,7 +722,15 @@ def run_simulation(workspace_dir: Path,
             # Parrinello-Rahman for the membrane run, and that third warning
             # would blow the two-warning Berger maxwarn budget.
             requested_overrides["pcoupl"] = "Parrinello-Rahman"
-            requested_overrides["ref_p_list"] = "1.0 1.0"
+            # A locked pressure_bar (expert mode) arrives here as the
+            # contract's singular "ref_p"; semiisotropic coupling needs
+            # exactly two values, one per direction, so double it ourselves
+            # rather than let lib/mdp_templates/base.py's aqueous shim
+            # stringify a single value into a list of the wrong length.
+            locked_ref_p = requested_overrides.pop("ref_p", None)
+            requested_overrides["ref_p_list"] = (
+                f"{locked_ref_p} {locked_ref_p}" if locked_ref_p is not None else "1.0 1.0"
+            )
             requested_overrides["compressibility_list"] = "4.5e-5 4.5e-5"
             # build_index's own groups (skills/env_builder/membrane_assembly.py),
             # matching the tutorial's own mdp files. The default "Protein

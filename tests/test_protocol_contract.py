@@ -65,6 +65,43 @@ def test_expert_config_is_applied_and_validated_in_rendered_mdp(tmp_path):
     assert pc.validate_rendered_mdp(tmp_path, rendered) == []
 
 
+def test_expert_config_on_a_membrane_run_locks_parrinello_rahman_not_berendsen(tmp_path):
+    """Task 8 review, Fix 1: PC.phase_overrides forced pcoupl="Berendsen" for
+    every npt phase regardless of variant, so any expert-mode membrane run
+    (any one of the 13 MDP_LOCK_MAP keys, e.g. temperature_K) collided with
+    md_runner's own pcoupl="Parrinello-Rahman" override and died at npt with
+    a StateContractError the retry machinery cannot recover from. A locked
+    ref_p (pressure_bar) must also survive as the plain scalar that
+    _same_mdp_value already knows how to compare against a doubled
+    semiisotropic actual -- not get pre-joined into "X X" here.
+    """
+    (tmp_path / "system_config.json").write_text(json.dumps({
+        "simulation": {"_expert_mode": True, "temperature_K": 310.0,
+                       "pressure_bar": 2.0},
+    }))
+    pc.materialize(tmp_path, "KALP15_in_DPPC")
+    out = tmp_path / "md"
+    out.mkdir()
+
+    overrides = pc.phase_overrides(tmp_path, "npt")
+    assert overrides["pcoupl"] == "Parrinello-Rahman"
+    assert overrides["ref_p"] == 2.0
+
+    # The membrane render path (run_simulation's own branch, exercised via
+    # md_runner) doubles a locked ref_p into the two-value semiisotropic
+    # form; simulate that here the way md_runner.run_simulation does.
+    overrides = dict(overrides)
+    overrides["pcoupltype"] = "semiisotropic"
+    ref_p = overrides.pop("ref_p")
+    overrides["ref_p_list"] = f"{ref_p} {ref_p}"
+    overrides["tc_grps"] = "Protein_DPPC Water_and_ions"
+    rendered = mdp.render("npt", overrides, out)
+
+    assert "pcoupl                   = Parrinello-Rahman" in rendered.read_text()
+    assert "ref_p                    = 2.0 2.0" in rendered.read_text()
+    assert pc.validate_rendered_mdp(tmp_path, rendered, "npt") == []
+
+
 def test_contract_reports_changed_rendered_expert_parameter(tmp_path):
     (tmp_path / "system_config.json").write_text(json.dumps({
         "simulation": {"_expert_mode": True, "temperature_K": 310.0},
