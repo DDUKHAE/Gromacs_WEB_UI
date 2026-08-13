@@ -63,6 +63,15 @@ def test_expert_config_is_applied_and_validated_in_rendered_mdp(tmp_path):
     assert "ref_t                    = 310.0 310.0" in rendered.read_text()
     assert "ref_p                    = 1.5" in rendered.read_text()
     assert pc.validate_rendered_mdp(tmp_path, rendered) == []
+    # Fix 1 re-review: the membrane exception in phase_overrides must only
+    # fire for the membrane variant. Pinning membrane=True unconditionally
+    # (instead of reading contract["pipeline_variant"]) would silently move
+    # every aqueous expert-mode npt off its deliberate Berendsen relaxation
+    # stage onto Parrinello-Rahman -- and both suites would still pass,
+    # because this test renders with the same overrides it validates, so the
+    # barostat is self-consistent whatever the lock says. Assert the raw
+    # locked value instead of round-tripping through render.
+    assert pc.phase_overrides(tmp_path, "npt")["pcoupl"] == "Berendsen"
 
 
 def test_expert_config_on_a_membrane_run_locks_parrinello_rahman_not_berendsen(tmp_path):
