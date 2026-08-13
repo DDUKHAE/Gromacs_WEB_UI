@@ -179,10 +179,17 @@ def run_step1_topology(workspace_dir: Path, forcefield: str, water: str) -> None
             "-o", "processed.gro", "-p", "topol.top",
             "-water", water, "-ff", forcefield, "-ignh"]
 
-    def _pdb2gmx(answers: list[str] | None) -> GW.GmxResult:
+    def _pdb2gmx(answers: list[str] | None, log: Path | None) -> GW.GmxResult:
+        # GMX_MAXBACKUP=-1: without it every probe round leaves a #topol.top.N#
+        # behind. The answers are matched to prompts BY ORDER, so the padding
+        # is only safe while -ter is the one interactive option in this argv --
+        # adding -ss, -his, -lys, -arg, -asp, -glu or an interactive -merge
+        # would interleave their menus and silently desynchronise the list.
         return GW.run(args, interactive_inputs=answers, cwd=out_dir,
-                      timeout=PDB2GMX_TIMEOUT_S, progress_log=ws / "runner.log")
+                      env=dict(membrane_assembly.GMX_ENV),
+                      timeout=PDB2GMX_TIMEOUT_S, progress_log=log)
 
+    answers = None
     if _TERMINUS_CAPS & {line[17:20].strip() for line in pdb.read_text().splitlines()
                          if line.startswith(("ATOM", "HETATM"))}:
         # A capped structure needs -ter, and -ter makes pdb2gmx interactive.
@@ -190,16 +197,23 @@ def run_step1_topology(workspace_dir: Path, forcefield: str, water: str) -> None
         # which name the residue they belong to, so this is per chain and
         # needs no second opinion about where the chains or the caps are.
         # Each round gets one chain further; the padding answers the rest.
+        #
+        # These rounds are deliberately kept out of runner.log: a round that
+        # has not yet learned a menu dies with "atom N not found in buiding
+        # block 1ACE", and that string in the log of a *successful* run is the
+        # single most misleading artefact this pipeline can leave behind --
+        # three earlier tasks chased it to the wrong conclusion. Only the final
+        # run, below, is logged.
         args.append("-ter")
-        answers: list[str] = []
+        answers = []
         for _ in range(_TER_MAX_ROUNDS):
-            result = _pdb2gmx(answers + _TER_PAD)
-            resolved = _terminus_answers(result.stdout or result.stderr)
+            probe = _pdb2gmx(answers + _TER_PAD, None)
+            resolved = _terminus_answers(probe.stdout or probe.stderr)
             if resolved == answers:
                 break
             answers = resolved
-    else:
-        result = _pdb2gmx(None)
+        answers = answers + _TER_PAD
+    result = _pdb2gmx(answers, ws / "runner.log")
     if not result.ok:
         raise RuntimeError(f"pdb2gmx failed: {result.stderr[-500:]}")
     s = state.read(ws)

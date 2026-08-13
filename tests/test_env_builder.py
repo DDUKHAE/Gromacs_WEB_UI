@@ -230,9 +230,10 @@ def _fake_pdb2gmx(chains, ff="gromos53a6"):
     """
     calls = []
 
-    def _run(args, cwd, interactive_inputs=None, timeout=None, **kwargs):
+    def _run(args, cwd, interactive_inputs=None, timeout=None,
+             progress_log=None, env=None, **kwargs):
         calls.append({"args": list(args), "inputs": interactive_inputs,
-                      "timeout": timeout})
+                      "timeout": timeout, "log": progress_log, "env": env})
         answers = list(interactive_inputs or [])
         out, ok = "", True
         if "-ter" not in args:
@@ -308,6 +309,21 @@ def test_a_capped_multi_chain_pdb_answers_every_chain(tmp_path, monkeypatch):
     assert all(call["timeout"] == EB.PDB2GMX_TIMEOUT_S for call in calls)
 
 
+def test_only_the_final_pdb2gmx_run_reaches_runner_log(tmp_path, monkeypatch):
+    """A probe round that has not yet learned a menu dies with "atom N not
+    found in buiding block 1ACE" -- the single most misleading string in this
+    pipeline's history, and unacceptable in the log of a successful run. And
+    without GMX_MAXBACKUP every round leaves a #topol.top.N# behind.
+    """
+    runner, calls = _fake_pdb2gmx([CAPPED_CHAIN])
+    _run_step1(tmp_path, monkeypatch, KALP, runner)
+    assert len(calls) > 1, "the capped path probes before it commits"
+    assert [call["log"] for call in calls[:-1]] == [None] * (len(calls) - 1)
+    assert calls[-1]["log"] == tmp_path / "runner.log"
+    assert all(call["env"] == {"GMX_MAXBACKUP": "-1"} for call in calls)
+    assert calls[-1]["inputs"][:2] == ["2", "2"]
+
+
 def test_uncapped_chains_in_a_capped_file_keep_the_default(tmp_path, monkeypatch):
     runner, calls = _fake_pdb2gmx([CAPPED_CHAIN, BARE_CHAIN])
     _run_step1(tmp_path, monkeypatch, KALP, runner)
@@ -336,6 +352,7 @@ def test_ordinary_termini_leave_pdb2gmx_non_interactive(tmp_path, monkeypatch):
     _run_step1(tmp_path, monkeypatch, LYSOZYME, runner)
     assert len(calls) == 1
     assert calls[0]["inputs"] is None
+    assert calls[0]["log"] == tmp_path / "runner.log"
     assert calls[0]["args"] == ["pdb2gmx", "-f", str(tmp_path / "inputs" / "input.pdb"),
                                 "-o", "processed.gro", "-p", "topol.top",
                                 "-water", "spc", "-ff", "gromos53a6_lipid", "-ignh"]
@@ -354,4 +371,6 @@ def test_a_pdb2gmx_that_never_prints_a_menu_is_reported_not_retried(tmp_path, mo
 
     with pytest.raises(RuntimeError, match="could not find force field"):
         _run_step1(tmp_path, monkeypatch, KALP, _run)
-    assert len(calls) == 1
+    # One probe (no menu printed, so nothing to learn and the loop stops) and
+    # the logged run whose message is what the user gets.
+    assert len(calls) == 2
