@@ -1,13 +1,9 @@
 """The membrane variant's integration with env_builder and md_runner."""
 import inspect
-import re
 from pathlib import Path
 from unittest import mock
 
-import pytest
-
 from lib import state
-from lib.mdp_templates import base as MDP
 from skills.env_builder import env_builder as EB
 from skills.md_runner import md_runner as MD
 
@@ -240,114 +236,3 @@ def test_run_simulation_sets_membrane_pressure_and_coupling_overrides(tmp_path):
     # pressure-coupled phases only.
     assert "pcoupl" not in by_phase["em"]
     assert "pcoupl" not in by_phase["nvt"]
-
-
-def test_lipid_collapse_has_documented_remediations():
-    """The troubleshooting page's two remedies, in escalating order."""
-    steps = MD.MUTATION_BY_CAUSE["lipid_collapse"]
-    assert len(steps) == 2
-    assert "-DPOSRES_LIPID" in steps[0]["define"]
-    assert steps[1].get("mdp_template") == "anneal_npt"
-
-
-def test_run_phase_honours_the_mdp_template_mutation(run_phase_grompp_args):
-    """The second remedy is inert unless run_phase actually swaps templates:
-    "mdp_template" would otherwise reach str.format as an unused key and be
-    dropped in silence, leaving the collapsing npt phase unchanged."""
-    ws, args = run_phase_grompp_args(
-        "kalp_anneal", "npt", MD.MUTATION_BY_CAUSE["lipid_collapse"][1],
-        variant="membrane_md_standard", index=True, stage2_files=["nvt.gro"])
-
-    assert args[args.index("-f") + 1] == "anneal_npt.mdp"
-    # The phase's own bookkeeping is untouched by the template swap.
-    assert args[args.index("-o") + 1] == "npt.tpr"
-    rendered = (ws / "stage2_md" / "anneal_npt.mdp").read_text()
-    assert "define" in rendered and "-DPOSRES_LIPID" in rendered
-
-
-def test_anneal_template_define_is_a_real_placeholder(tmp_path):
-    """`define` must be substitutable, or both remedies' -DPOSRES_LIPID is a
-    no-op: str.format discards overrides a template has no placeholder for."""
-    rendered = MDP.render("anneal_npt", {"define": "-DPOSRES"}, tmp_path).read_text()
-    assert re.search(r"^define\s*=\s*-DPOSRES\s", rendered, re.M)
-    assert "-DPOSRES_LIPID" not in rendered
-    assert "{define}" not in rendered
-
-
-def test_anneal_template_renders_from_its_defaults(tmp_path):
-    rendered = MDP.render("anneal_npt", {}, tmp_path).read_text()
-    assert re.search(r"^define\s*=\s*-DPOSRES -DPOSRES_LIPID", rendered, re.M)
-
-
-def test_anneal_template_has_one_annealing_entry_per_coupling_group():
-    """Upstream's file declares three for two groups and fails grompp."""
-    text = (Path("lib/mdp_templates/anneal_npt.mdp")).read_text()
-
-    def values(key):
-        m = re.search(rf"^{key}\s*=\s*([^;\n]+)", text, re.M)
-        return m.group(1).split() if m else []
-
-    n_groups = len(values("tc_grps") or values("tc-grps"))
-    assert n_groups == 2
-    assert len(values("annealing")) == n_groups
-    assert len(values("annealing_npoints")) == n_groups
-    assert len(values("annealing_time")) == 2 * n_groups
-    assert len(values("annealing_temp")) == 2 * n_groups
-    assert len(values("ref_t")) == n_groups
-
-
-@pytest.mark.integration
-def test_grompp_accepts_the_corrected_annealing_template(tmp_path):
-    """gmx is the only oracle for "one annealing entry per coupling group":
-    the upstream file's three entries are a fatal grompp error, and no
-    structural assertion proves the corrected one is accepted."""
-    import os
-    import shutil
-    import subprocess
-
-    gmx = shutil.which("gmx")
-    if not gmx:
-        pytest.skip("gmx not on PATH")
-
-    # A two-group system: one SPC water is "Water_and_ions"; make_ndx cannot
-    # invent a Protein_DPPC group here, so both coupling groups are supplied
-    # by a hand-written index instead of a real membrane system.
-    (tmp_path / "conf.gro").write_text(
-        "two groups\n    6\n"
-        "    1SOL     OW    1   0.500   0.500   0.500\n"
-        "    1SOL    HW1    2   0.600   0.500   0.500\n"
-        "    1SOL    HW2    3   0.400   0.500   0.500\n"
-        "    2SOL     OW    4   1.500   1.500   1.500\n"
-        "    2SOL    HW1    5   1.600   1.500   1.500\n"
-        "    2SOL    HW2    6   1.400   1.500   1.500\n"
-        "   3.00000   3.00000   3.00000\n")
-    (tmp_path / "topol.top").write_text(
-        '#include "oplsaa.ff/forcefield.itp"\n'
-        '#include "oplsaa.ff/spce.itp"\n'
-        "[ system ]\nt\n[ molecules ]\nSOL 2\n")
-    (tmp_path / "index.ndx").write_text(
-        "[ Protein_DPPC ]\n1 2 3\n[ Water_and_ions ]\n4 5 6\n")
-    mdp = MDP.render("anneal_npt", {"define": ""}, tmp_path)
-
-    done = subprocess.run(
-        [gmx, "grompp", "-f", mdp.name, "-c", "conf.gro", "-p", "topol.top",
-         "-n", "index.ndx", "-o", "anneal.tpr", "-maxwarn", "3"],
-        cwd=tmp_path, capture_output=True, text=True,
-        env={**os.environ, "GMX_MAXBACKUP": "-1"},
-    )
-    assert done.returncode == 0, done.stderr[-2000:]
-
-    # And the upstream file's three-entry annealing block is genuinely fatal,
-    # or correcting it proves nothing.
-    upstream = Path("tutorial_data/KALP15_in_DPPC/mdp/anneal_npt.mdp")
-    broken = tmp_path / "broken.mdp"
-    broken.write_text(upstream.read_text().replace(
-        "define\t\t= -DPOSRES -DPOSRES_LIPID", "define = "))
-    failed = subprocess.run(
-        [gmx, "grompp", "-f", broken.name, "-c", "conf.gro", "-p", "topol.top",
-         "-n", "index.ndx", "-o", "broken.tpr", "-maxwarn", "3"],
-        cwd=tmp_path, capture_output=True, text=True,
-        env={**os.environ, "GMX_MAXBACKUP": "-1"},
-    )
-    assert failed.returncode != 0
-    assert "annealing" in failed.stderr.lower()

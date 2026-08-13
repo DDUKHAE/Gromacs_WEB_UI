@@ -155,11 +155,7 @@ def run_phase(workspace_dir: Path, phase: str,
         render_overrides["has_protein"] = (
             s_for_render.get("tutorial") or {}
         ).get("has_protein", True)
-    # A remediation may swap the template (see MUTATION_BY_CAUSE
-    # "lipid_collapse") without renaming the phase: the .tpr, the state key and
-    # the coordinate handoff all stay on the phase's own names.
-    template = render_overrides.pop("mdp_template", phase)
-    mdp_path = MDP.render(template, render_overrides, output_dir=out_dir)
+    mdp_path = MDP.render(phase, render_overrides, output_dir=out_dir)
     contract_errors = PC.validate_rendered_mdp(ws, mdp_path, phase)
     if contract_errors:
         raise StateContractError("; ".join(contract_errors))
@@ -233,14 +229,6 @@ MUTATION_BY_CAUSE = {
     "pressure_coupling": [{"tau_p": 5.0}, {"tau_p": 8.0}, {"tau_p": 10.0}],
     "temperature_coupling": [{"tau_t": 0.5}, {"tau_t": 1.0}, {"tau_t": 2.0}],
     "command_error": [{"grompp_maxwarn": 2}, {"grompp_maxwarn": 3}, {"grompp_maxwarn": 4}],
-    # Membrane equilibration fails in two documented ways: the lipid headgroups
-    # collapse inward, or the bilayer separates and a void opens in the
-    # hydrophobic core. Both show up as LINCS warnings or a distorted cell.
-    # See docs/tutorial/KALP15_in_DPPC/troubleshooting/.
-    "lipid_collapse": [
-        {"define": "-DPOSRES -DPOSRES_LIPID"},
-        {"mdp_template": "anneal_npt", "define": "-DPOSRES -DPOSRES_LIPID"},
-    ],
 }
 
 
