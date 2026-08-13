@@ -723,8 +723,16 @@ def run_simulation(workspace_dir: Path,
             # npt's shared DEFAULTS use Berendsen, which grompp warns is not a
             # strictly correct ensemble; the tutorial's own npt.mdp uses
             # Parrinello-Rahman for the membrane run, and that third warning
-            # would blow the two-warning Berger maxwarn budget.
-            requested_overrides["pcoupl"] = "Parrinello-Rahman"
+            # would blow the two-warning Berger maxwarn budget. setdefault,
+            # not "=": a user-locked barostat (expert mode) must win over
+            # this default -- the lock exists so an expert can override it,
+            # and Parrinello-Rahman is our default, not a physical
+            # constraint. npt/npt_pr are unaffected either way, since
+            # protocol_contract.phase_overrides already forces their pcoupl
+            # regardless of any lock (by design, those two segments are not
+            # a user/agent choice); only production passes a lock through
+            # untouched, so only production actually honours it here.
+            requested_overrides.setdefault("pcoupl", "Parrinello-Rahman")
             # A locked pressure_bar (expert mode) arrives here as the
             # contract's singular "ref_p"; semiisotropic coupling needs
             # exactly two values, one per direction, so double it ourselves

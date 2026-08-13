@@ -194,6 +194,58 @@ def test_run_simulation_survives_a_membrane_run_with_a_locked_contract(tmp_path,
     assert "ref_p                    = 2.0 2.0" in rendered
 
 
+def test_run_simulation_honours_a_locked_barostat_on_production_but_not_npt(tmp_path, monkeypatch):
+    """Task 8 re-review, Fix 2: "barostat" is one of the 13 lockable expert
+    keys and maps to pcoupl. protocol_contract.phase_overrides already
+    forces npt/npt_pr's pcoupl regardless of any lock (by design: those two
+    segments are deliberately not a user/agent choice), so a locked barostat
+    passes through untouched only for production -- and run_simulation used
+    to force pcoupl="Parrinello-Rahman" there unconditionally too, so an
+    expert who locked e.g. "barostat": "C-rescale" died four phases in with
+    a StateContractError blaming their own setting.
+
+    Chosen resolution: a user-locked barostat wins on membrane runs.
+    run_simulation now only defaults pcoupl for production when nothing is
+    locked (requested_overrides.setdefault, not "="); npt/npt_pr are
+    unaffected either way since the contract already supplies their pcoupl.
+    """
+    import json
+    from lib import gmx_wrapper as GW
+    from lib import protocol_contract as PC
+
+    ws = _workspace(tmp_path, "kalp_barostat_locked")
+    (ws / "stage1_env" / "processed.gro").write_text("gro")
+    (ws / "stage1_env" / "topol.top").write_text("top")
+    (ws / "stage1_env" / "ions.gro").write_text("gro")
+    s = state.read(ws)
+    s["last_completed_stage"] = "env"
+    s["hardware"] = {"cpu_count": 1, "gpu_ids": [], "ntomp": 1}
+    s["tutorial"] = {"id": "KALP15_in_DPPC", "variant": "membrane_md_standard"}
+    for key in ("step_1", "step_2", "step_3", "step_5"):
+        s["step_outputs"][key] = {"ok": True}
+    state.write(ws, s)
+    (ws / "system_config.json").write_text(json.dumps({
+        "simulation": {"_expert_mode": True, "barostat": "C-rescale"},
+    }))
+    PC.materialize(ws, "KALP15_in_DPPC")
+
+    def fake_run(args, cwd, **kwargs):
+        if args[0] == "grompp":
+            Path(cwd, args[args.index("-o") + 1]).write_text("tpr")
+        if args[0] == "mdrun":
+            Path(cwd, f"{args[args.index('-deffnm') + 1]}.gro").write_text("gro")
+        return GW.GmxResult(command=list(args), returncode=0, stdout="",
+                            stderr="", classification="success")
+
+    monkeypatch.setattr(GW, "run", fake_run)
+    MD.run_simulation(ws)  # must not raise StateContractError at production
+
+    npt = (ws / "stage2_md" / "npt.mdp").read_text()
+    npt_pr = (ws / "stage2_md" / "npt_pr.mdp").read_text()
+    production = (ws / "stage2_md" / "production.mdp").read_text()
+    assert "pcoupl                   = Parrinello-Rahman" in npt
+    assert "pcoupl                   = Parrinello-Rahman" in npt_pr
+    assert "pcoupl                   = C-rescale" in production
 
 
 def test_run_simulation_sets_membrane_pressure_and_coupling_overrides(tmp_path):
