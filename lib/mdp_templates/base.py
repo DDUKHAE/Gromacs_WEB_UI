@@ -12,26 +12,38 @@ _DIR = Path(__file__).parent
 REPRODUCIBLE_SEED = 20240101
 
 DEFAULTS = {
-    "em": {"emtol": 1000.0, "emstep": 0.01, "nsteps": 50000},
+    # coulombtype/rcoulomb/rvdw were hardcoded in em.mdp; they are parameters so
+    # the membrane assembly's packing minimisations can use the plain cut-off the
+    # KALP-15/DPPC tutorial specifies. The defaults are the previous literals, so
+    # every other caller renders byte-identically.
+    "em": {"emtol": 1000.0, "emstep": 0.01, "nsteps": 50000, "define": "",
+           "coulombtype": "PME", "rcoulomb": 1.0, "rvdw": 1.0},
     "nvt": {"nsteps": 50000, "dt": 0.002, "tau_t": 0.1, "ref_t": 300.0,
-            "gen_seed": -1},
+            "gen_seed": -1, "define": "-DPOSRES"},
     "npt": {"nsteps": 50000, "dt": 0.002, "tau_t": 0.1, "ref_t": 300.0, "tau_p": 2.0,
             # Initial equilibration: Berendsen (or C-rescale) barostat is
             # recommended before switching to Parrinello-Rahman, which can
             # oscillate wildly when started far from equilibrium.
-            "pcoupl": "Berendsen", "pcoupltype": "isotropic"},
+            "pcoupl": "Berendsen", "pcoupltype": "isotropic", "define": "-DPOSRES"},
     # Keep the second NPT stage distinct. Reusing the ``npt`` name would
     # overwrite files and make a restart falsely appear to have completed
     # both barostat stages.
     "npt_pr": {"nsteps": 50000, "dt": 0.002, "tau_t": 0.1, "ref_t": 300.0,
-               "tau_p": 2.0, "pcoupl": "Parrinello-Rahman", "pcoupltype": "isotropic"},
+               "tau_p": 2.0, "pcoupl": "Parrinello-Rahman", "pcoupltype": "isotropic", "define": "-DPOSRES"},
     "production": {"nsteps": 500000, "dt": 0.002, "tau_t": 0.1, "ref_t": 300.0,
                     "tau_p": 2.0,
                     # Production runs from an already-equilibrated NPT state,
                     # so Parrinello-Rahman (correct NPT ensemble sampling) is
                     # appropriate here.
                     "pcoupl": "Parrinello-Rahman", "pcoupltype": "isotropic"},
-    "ions": {},
+    # coulombtype/rcoulomb/rvdw were hardcoded PME/1.0/1.0 in ions.mdp -- an
+    # override-proof template, since str.format silently ignores kwargs that
+    # have no matching placeholder. Parametrized for the same reason as "em"
+    # above: a system with a net charge (not yet neutralised -- this mdp
+    # builds the .tpr genion itself consumes) needs plain cut-off electrostatics,
+    # since PME raises a fatal "Ewald electrostatics in a system with net
+    # charge" warning. Defaults keep every existing caller byte-identical.
+    "ions": {"coulombtype": "PME", "rcoulomb": 1.0, "rvdw": 1.0},
     "umbrella": {"nsteps": 500000, "dt": 0.002, "tau_t": 0.5, "ref_t": 300.0,
                   "tau_p": 2.0, "pull_group1": "Chain_A", "pull_group2": "Chain_B",
                   "pull_coord_init": 0.0, "pull_coord_k": 1000.0},
@@ -52,7 +64,16 @@ for _phase in ("nvt", "npt", "npt_pr", "production"):
         "pme_order": 4, "fourierspacing": 0.16, "tcoupl": "V-rescale",
     })
 for _phase in ("npt", "npt_pr", "production"):
-    DEFAULTS[_phase]["ref_p"] = 1.0
+    # Single-valued defaults for isotropic pcoupl (the aqueous default), so
+    # every existing caller renders byte-identically. Membrane runs override
+    # both to two space-separated values ("1.0 1.0" / "4.5e-5 4.5e-5") for
+    # pcoupltype=semiisotropic, which grompp requires -- see run_simulation's
+    # membrane branch in skills/md_runner/md_runner.py. Not derived from
+    # tc_grps's group count (n_groups): pressure-coupling value count tracks
+    # pcoupltype (isotropic=1, semiisotropic=2), an unrelated axis that only
+    # happens to coincide with n_groups=2 here.
+    DEFAULTS[_phase]["ref_p_list"] = "1.0"
+    DEFAULTS[_phase]["compressibility_list"] = "4.5e-5"
 
 _FILES = {
     "em": "em.mdp",
@@ -67,6 +88,7 @@ _FILES = {
 
 
 _TC_GRPS_PHASES = ("nvt", "npt", "npt_pr", "production")
+_PCOUPL_LIST_PHASES = ("npt", "npt_pr", "production")
 
 
 def render(phase: str, overrides: dict[str, Any], output_dir: Path) -> Path:
@@ -74,6 +96,20 @@ def render(phase: str, overrides: dict[str, Any], output_dir: Path) -> Path:
         raise KeyError(f"unknown template: {phase}")
     template = (_DIR / _FILES[phase]).read_text()
     params = {**DEFAULTS[phase], **overrides}
+    if phase in _PCOUPL_LIST_PHASES:
+        # lib/protocol_contract.py's MDP_LOCK_MAP maps a single expert
+        # "pressure_bar" setting onto the single-valued mdp key "ref_p" (and
+        # ProtocolContract has no analogous compressibility knob). The
+        # template placeholder is {ref_p_list}/{compressibility_list}, so an
+        # incoming singular override would otherwise be a silent no-op
+        # (str.format drops overrides with no placeholder) -- translate it
+        # unless the caller already gave the list form directly.
+        single_ref_p = params.pop("ref_p", None)
+        if single_ref_p is not None and "ref_p_list" not in overrides:
+            params["ref_p_list"] = str(single_ref_p)
+        single_compressibility = params.pop("compressibility", None)
+        if single_compressibility is not None and "compressibility_list" not in overrides:
+            params["compressibility_list"] = str(single_compressibility)
     if phase == "nvt":
         # "reproducible_mode" is a render-time flag, not an mdp key: it picks
         # a fixed, documented gen_seed for reproducible velocity generation.

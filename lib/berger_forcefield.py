@@ -205,8 +205,11 @@ def ensure_forcefield_include(topol: Path, forcefield: str = FF_TARGET) -> bool:
     want = f'#include "{forcefield}.ff/forcefield.itp"'
     if want in text:
         return False
+    # The directory may carry a path prefix: when the .ff lives in the run
+    # directory rather than GMXLIB, GROMACS 2026's pdb2gmx writes
+    # `#include "./gromos53a6_lipid.ff/forcefield.itp"` ("path added").
     patched, n = re.subn(
-        r'#include\s+"[\w.+-]*\.ff/forcefield\.itp"', want, text, count=1
+        r'#include\s+"[\w./+-]*\.ff/forcefield\.itp"', want, text, count=1
     )
     if n == 0:
         raise BergerForceFieldError(
@@ -245,6 +248,71 @@ def add_include(topol: Path, include: str) -> bool:
         )
     topol.write_text(text[: anchor.start()] + block + text[anchor.start():], encoding="utf-8")
     return True
+
+
+def add_ifdef_block(topol: Path, define: str, include: str) -> bool:
+    """Add an `#ifdef <define>` guarded include after the protein's POSRES block.
+
+    The protein's own `#ifdef POSRES ... #endif` block is the only valid
+    anchor: `position_restraints` directives are only legal while a
+    `[ moleculetype ]` scope is still open, and that block is the sole place
+    in a pdb2gmx-generated topol.top where that is still true. Landing the
+    guard anywhere later (e.g. merely "before the lipid include") produces a
+    file section order can't distinguish from valid but that grompp refuses
+    with "Invalid order for directive position_restraints".
+
+    Returns False when the block is already present.
+    """
+    topol = Path(topol)
+    text = topol.read_text(encoding="utf-8", errors="replace")
+    if re.search(rf"^\s*#ifdef\s+{re.escape(define)}\s*$", text, re.M):
+        return False
+
+    block = (
+        f"; Strong position restraints for InflateGRO\n"
+        f"#ifdef {define}\n"
+        f'#include "{include}"\n'
+        f"#endif\n\n"
+    )
+    # Anchor on the end of the protein's POSRES block.
+    posres = re.search(
+        r'^\s*#ifdef\s+POSRES\s*$.*?^\s*#endif\s*$\n', text, re.M | re.S
+    )
+    if posres is None:
+        raise BergerForceFieldError(
+            f"{topol.name} has no #ifdef POSRES block to anchor "
+            f"{define} after; run pdb2gmx first"
+        )
+    at = posres.end()
+    topol.write_text(text[:at] + "\n" + block + text[at:], encoding="utf-8")
+    return True
+
+
+def set_molecule_count(topol: Path, molecule: str, count: int) -> int:
+    """Rewrite one row of `[ molecules ]`, returning the previous count.
+
+    InflateGRO deletes the lipids that overlap the protein and reports how many.
+    The topology has to agree or the next grompp fails on an atom-count
+    mismatch, so this is not optional bookkeeping.
+    """
+    topol = Path(topol)
+    text = topol.read_text(encoding="utf-8", errors="replace")
+    section = re.search(r"^\[\s*molecules\s*\]\s*$(.*)", text, re.M | re.S)
+    if section is None:
+        raise BergerForceFieldError(f"{topol} has no [ molecules ] section")
+
+    body = section.group(1)
+    row = re.search(rf"^([ \t]*){re.escape(molecule)}([ \t]+)(\d+)[ \t]*$", body, re.M)
+    if row is None:
+        raise BergerForceFieldError(
+            f"{topol} [ molecules ] has no row for {molecule!r}"
+        )
+    previous = int(row.group(3))
+    start = section.start(1) + row.start()
+    end = section.start(1) + row.end()
+    text = text[:start] + f"{row.group(1)}{molecule}{row.group(2)}{count}" + text[end:]
+    topol.write_text(text, encoding="utf-8")
+    return previous
 
 
 def build(lipid_itp: Path, gmxlib: Path, dest_parent: Path) -> dict[str, Any]:

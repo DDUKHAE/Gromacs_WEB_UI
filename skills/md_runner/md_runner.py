@@ -77,6 +77,9 @@ PHASE_TO_STATE_KEY = {
 _GROMPP_WARNING_RE = re.compile(r"^WARNING\s+\d+\s+\[.*", re.MULTILINE)
 _GEN_SEED_RE = re.compile(r"gen_seed\s*=\s*(-?\d+)")
 
+_DEFINE_RE = re.compile(r"^define\s*=([^;\n]*)", re.MULTILINE)
+
+
 
 def _record_grompp_warnings(ws: Path, phase: str, combined_output: str) -> None:
     """Log any grompp WARNING blocks into state so suppressed (-maxwarn)
@@ -91,14 +94,64 @@ def _record_grompp_warnings(ws: Path, phase: str, combined_output: str) -> None:
     state.write(ws, s)
 
 
+
+def _mdp_defines_restraints(mdp_path: Path) -> bool:
+    """Whether a rendered mdp switches on any position restraints."""
+    match = _DEFINE_RE.search(mdp_path.read_text())
+    return bool(match) and "-DPOSRES" in match.group(1)
+
+
+MEMBRANE_VARIANTS = frozenset({"membrane_md_standard"})
+# The two Berger-forcefield topology warnings (repeated LJ-14 bondtype, the
+# multiple-time-stepping note) hit every membrane MD phase, not just
+# env-build -- see skills/env_builder/membrane_assembly.py's own
+# GROMPP_MAXWARN. A named constant here, rather than a bare 2 inline, keeps
+# run_phase's default and its test assertion from silently drifting apart.
+MEMBRANE_DEFAULT_MAXWARN = 2
+
+
+def build_grompp_args(phase: str, variant: str | None, mdp_name: str,
+                      input_gro: str, top: str, tpr: str,
+                      index: str | None, input_cpt: str | None,
+                      maxwarn: int, restraint: str | None = None) -> list[str]:
+    """Assemble a grompp command line.
+
+    Membrane phases couple to the Protein_DPPC index group, which only exists
+    in index.ndx, so they must pass -n or grompp fails on an unknown group.
+    The aqueous sequence has no index file and must not be given -n.
+
+    `restraint` is the -r reference structure, which position restraints have
+    required since GROMACS 2018.
+    """
+    args = ["grompp", "-f", mdp_name, "-c", input_gro]
+    if restraint:
+        args.extend(["-r", restraint])
+    if input_cpt:
+        args.extend(["-t", input_cpt])
+    args.extend(["-p", top, "-o", tpr])
+    if variant in MEMBRANE_VARIANTS and index:
+        args.extend(["-n", index])
+    args.extend(["-maxwarn", str(maxwarn)])
+    return args
+
+
 def run_phase(workspace_dir: Path, phase: str,
               overrides: dict[str, Any] | None = None) -> None:
     ws = Path(workspace_dir)
     out_dir = ws / "stage2_md"
     render_overrides = dict(overrides or {})
-    grompp_maxwarn = int(render_overrides.pop("grompp_maxwarn", 1))
+    s_for_render = state.read(ws)
+    variant_for_render = (s_for_render.get("tutorial") or {}).get("variant")
+    # Membrane topologies always carry the two Berger-forcefield warnings
+    # (repeated LJ-14 bondtype, the multiple-time-stepping note); every phase
+    # hits both, not just env-build. Default maxwarn to 2 there so a phase
+    # doesn't burn a retryable-budget slot recovering from a warning count
+    # that is already known and expected.
+    default_maxwarn = (
+        MEMBRANE_DEFAULT_MAXWARN if variant_for_render in MEMBRANE_VARIANTS else 1
+    )
+    grompp_maxwarn = int(render_overrides.pop("grompp_maxwarn", default_maxwarn))
     if "has_protein" not in render_overrides and "tc_grps" not in render_overrides:
-        s_for_render = state.read(ws)
         render_overrides["has_protein"] = (
             s_for_render.get("tutorial") or {}
         ).get("has_protein", True)
@@ -116,15 +169,20 @@ def run_phase(workspace_dir: Path, phase: str,
     in_gro_path = ws / in_dir_rel / in_gro
     top_path = ws / "stage1_env" / "topol.top"
     tpr_path = out_dir / f"{phase}.tpr"
-    grompp_args = ["grompp", "-f", mdp_path.name,
-                   "-c", str(in_gro_path)]
     input_cpt = PHASE_INPUT_CPT.get(phase)
-    if input_cpt and (out_dir / input_cpt).is_file():
-        grompp_args.extend(["-t", input_cpt])
-    grompp_args.extend(["-p", str(top_path), "-o", tpr_path.name,
-                        "-maxwarn", "1"])
-    if grompp_maxwarn != 1:
-        grompp_args[-1] = str(grompp_maxwarn)
+    index_path = ws / "stage1_env" / "index.ndx"
+    grompp_args = build_grompp_args(
+        phase=phase, variant=variant, mdp_name=mdp_path.name,
+        input_gro=str(in_gro_path), top=str(top_path), tpr=tpr_path.name,
+        index=str(index_path) if index_path.is_file() else None,
+        input_cpt=input_cpt if input_cpt and (out_dir / input_cpt).is_file() else None,
+        maxwarn=grompp_maxwarn,
+        # Position restraints need an explicit reference structure since
+        # GROMACS 2018; without it grompp fails with "Cannot find position
+        # restraint file restraint.gro (option -r)". Both tutorials pass the
+        # phase's own input coordinates, e.g. `-c em.gro -r em.gro`.
+        restraint=str(in_gro_path) if _mdp_defines_restraints(mdp_path) else None,
+    )
     grompp_result = GW.run(
         grompp_args,
         cwd=out_dir,
@@ -607,6 +665,58 @@ def run_umbrella_workflow(workspace_dir: Path, workflow: dict[str, Any]) -> dict
     return {"completed_windows": completed}
 
 
+def apply_membrane_overrides(variant: str, phase: str,
+                             overrides: dict[str, Any]) -> dict[str, Any]:
+    """The mdp settings a bilayer needs, mutated into `overrides` in place.
+
+    Split out of `run_simulation` so it can be exercised against a real
+    assembled system (tests/test_membrane_e2e.py) rather than only through a
+    stub: these strings are the whole reason the membrane run couples to the
+    right groups at the right temperature.
+    """
+    if variant == "membrane_md_standard" and phase in ("nvt", "npt", "npt_pr", "production"):
+        # build_index's own groups (skills/env_builder/membrane_assembly.py),
+        # matching the tutorial's own mdp files. The default "Protein
+        # Non-Protein" needs no index file, which left -n inert. Not a
+        # lockable expert key, so a plain assignment is fine.
+        overrides["tc_grps"] = "Protein_DPPC Water_and_ions"
+        # DPPC's main phase transition is ~314 K; at the aqueous default
+        # of 300.0 the bilayer sits in the gel phase, which is why the
+        # tutorial's own nvt.mdp/npt.mdp/md.mdp all specify
+        # ref_t = 323 323. setdefault, not "=": a user-locked
+        # temperature_K must still win over this default, same
+        # principle as the barostat lock below. em needs neither this
+        # nor tc_grps -- the tutorial's minimisation mdps carry no
+        # coupling at all.
+        overrides.setdefault("ref_t", 323.0)
+    if variant == "membrane_md_standard" and phase in ("npt", "npt_pr", "production"):
+        overrides["pcoupltype"] = "semiisotropic"
+        # npt's shared DEFAULTS use Berendsen, which grompp warns is not a
+        # strictly correct ensemble; the tutorial's own npt.mdp uses
+        # Parrinello-Rahman for the membrane run, and that third warning
+        # would blow the two-warning Berger maxwarn budget. setdefault,
+        # not "=": a user-locked barostat (expert mode) must win over
+        # this default -- the lock exists so an expert can override it,
+        # and Parrinello-Rahman is our default, not a physical
+        # constraint. npt/npt_pr are unaffected either way, since
+        # protocol_contract.phase_overrides already forces their pcoupl
+        # regardless of any lock (by design, those two segments are not
+        # a user/agent choice); only production passes a lock through
+        # untouched, so only production actually honours it here.
+        overrides.setdefault("pcoupl", "Parrinello-Rahman")
+        # A locked pressure_bar (expert mode) arrives here as the
+        # contract's singular "ref_p"; semiisotropic coupling needs
+        # exactly two values, one per direction, so double it ourselves
+        # rather than let lib/mdp_templates/base.py's aqueous shim
+        # stringify a single value into a list of the wrong length.
+        locked_ref_p = overrides.pop("ref_p", None)
+        overrides["ref_p_list"] = (
+            f"{locked_ref_p} {locked_ref_p}" if locked_ref_p is not None else "1.0 1.0"
+        )
+        overrides["compressibility_list"] = "4.5e-5 4.5e-5"
+    return overrides
+
+
 def run_simulation(workspace_dir: Path,
                    phase_overrides: dict[str, dict[str, Any]] | None = None,
                    interactive: bool = True,
@@ -660,8 +770,8 @@ def run_simulation(workspace_dir: Path,
             **phase_overrides.get(phase, {}),
             **PC.phase_overrides(workspace_dir, phase),
         }
-        if variant == "membrane_md_standard" and phase in ("npt", "npt_pr", "production"):
-            requested_overrides["pcoupltype"] = "semiisotropic"
+        requested_overrides = apply_membrane_overrides(
+            variant, phase, requested_overrides)
         judgment = run_phase_with_recovery(
             workspace_dir, phase=phase,
             phase_runner=_validating_phase_runner,

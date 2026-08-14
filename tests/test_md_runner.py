@@ -75,11 +75,28 @@ def test_judge_energy_drift_stable_series_passes(tmp_path, monkeypatch):
     assert judgment.tier == "pass"
 
 
-def test_maxwarn_reduced_from_2():
-    import inspect
-    src = inspect.getsource(MR.run_phase)
-    assert '"-maxwarn", "2"' not in src
-    assert '"-maxwarn", "1"' in src
+def test_maxwarn_defaults_to_1_and_follows_the_override(run_phase_grompp_args):
+    """-maxwarn 2 would wave through the "non-zero total charge" warning that
+    means genion failed, so 1 is the default; only an explicit
+    grompp_maxwarn mutation (MUTATION_BY_CAUSE["command_error"]) raises it."""
+    _, args = run_phase_grompp_args("a", "em")
+    assert args[args.index("-maxwarn") + 1] == "1"
+
+    _, args = run_phase_grompp_args("b", "em", {"grompp_maxwarn": 2})
+    assert args[args.index("-maxwarn") + 1] == "2"
+
+
+def test_membrane_maxwarn_defaults_to_2_and_still_follows_an_override(run_phase_grompp_args):
+    """Task 8 review, Fix 2: the two Berger-forcefield topology warnings hit
+    every membrane phase, not just env-build, so a membrane run defaulting to
+    -maxwarn 1 (the aqueous default) failed its first grompp on every phase
+    and burned a retryable-budget slot self-healing to 2 each time."""
+    _, args = run_phase_grompp_args("m", "em", variant="membrane_md_standard")
+    assert args[args.index("-maxwarn") + 1] == "2"
+
+    _, args = run_phase_grompp_args(
+        "m2", "em", {"grompp_maxwarn": 3}, variant="membrane_md_standard")
+    assert args[args.index("-maxwarn") + 1] == "3"
 
 
 def test_run_phase_derives_has_protein_from_state_tutorial(tmp_path, monkeypatch):

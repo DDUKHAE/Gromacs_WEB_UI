@@ -1,0 +1,405 @@
+"""The membrane variant's integration with env_builder and md_runner."""
+import inspect
+from pathlib import Path
+from unittest import mock
+
+from lib import state
+from skills.env_builder import env_builder as EB
+from skills.md_runner import md_runner as MD
+
+
+def _workspace(tmp_path, name):
+    ws = tmp_path / name
+    for sub in ("inputs", "stage1_env", "stage2_md", "stage3_viz"):
+        (ws / sub).mkdir(parents=True)
+    state.write(ws, state.initial(ws))
+    return ws
+
+
+# --- routing --------------------------------------------------------------
+
+
+def test_membrane_variant_routes_to_the_assembly(tmp_path):
+    """A membrane run must not go through the aqueous box/solvate/ions path."""
+    ws = _workspace(tmp_path, "kalp_20260807_120000")
+
+    with mock.patch.object(EB, "membrane_assembly") as ma, \
+         mock.patch.object(EB, "run_step2_box") as box:
+        EB.dispatch_environment_build(ws, {"forcefield": "gromos53a6"},
+                                      variant="membrane_md_standard")
+    ma.assemble.assert_called_once()
+    box.assert_not_called()
+
+
+def test_aqueous_variant_still_uses_the_standard_steps(tmp_path):
+    ws = _workspace(tmp_path, "aki_20260807_120000")
+
+    params = {"box_type": "cubic", "box_distance_nm": 1.0,
+              "ion_concentration_M": 0.15, "forcefield": "charmm36"}
+    with mock.patch.object(EB, "membrane_assembly") as ma, \
+         mock.patch.object(EB, "run_step2_box") as box, \
+         mock.patch.object(EB, "run_step3_solvate"), \
+         mock.patch.object(EB, "run_step4_ions_prep"), \
+         mock.patch.object(EB, "run_step5_genion"):
+        EB.dispatch_environment_build(ws, params,
+                                      variant="protein_aqueous_standard")
+    box.assert_called_once()
+    ma.assemble.assert_not_called()
+
+
+def test_build_environment_routes_through_the_dispatcher():
+    """The dispatcher is only wired in if build_environment actually calls it.
+
+    A structural check because build_environment's own path (pdb2gmx, the run
+    plan and the protocol contract) needs gmx and a full submission; Task 10's
+    end-to-end run is the behavioural oracle.
+    """
+    src = inspect.getsource(EB.build_environment)
+    assert "dispatch_environment_build(workspace_dir, params.values" in src
+    assert "run_step2_box" not in src, (
+        "build_environment still calls run_step2_box directly, so a membrane "
+        "run would build an aqueous box before reaching the assembly"
+    )
+
+
+def test_the_assembly_is_not_swallowed_by_a_broad_except():
+    """MembraneAssemblyError subclasses Exception, not RuntimeError, so that a
+    fatal packing or topology failure cannot be demoted into a retryable
+    judgment. A try/except around the call here would undo that."""
+    body = inspect.getsource(EB.dispatch_environment_build).split('"""')[-1]
+    assert "except" not in body
+    assert not issubclass(
+        EB.membrane_assembly.MembraneAssemblyError, RuntimeError)
+
+
+# --- the index file -------------------------------------------------------
+
+
+def test_membrane_phases_pass_the_index_file():
+    """grompp needs -n index.ndx to resolve tc_grps=Protein_DPPC."""
+    args = MD.build_grompp_args(
+        phase="npt", variant="membrane_md_standard",
+        mdp_name="npt.mdp", input_gro="nvt.gro", top="topol.top",
+        tpr="npt.tpr", index="index.ndx", input_cpt=None, maxwarn=1,
+    )
+    assert "-n" in args
+    assert args[args.index("-n") + 1] == "index.ndx"
+
+
+def test_aqueous_phases_do_not_pass_an_index_file():
+    args = MD.build_grompp_args(
+        phase="npt", variant="protein_aqueous_standard",
+        mdp_name="npt.mdp", input_gro="nvt.gro", top="topol.top",
+        tpr="npt.tpr", index=None, input_cpt=None, maxwarn=1,
+    )
+    assert "-n" not in args
+
+
+def test_no_index_file_means_no_index_flag_even_for_a_membrane_run():
+    """A membrane workspace resumed before build_index ran has no index.ndx;
+    passing -n for a file that does not exist is a fatal grompp error."""
+    args = MD.build_grompp_args(
+        phase="npt", variant="membrane_md_standard",
+        mdp_name="npt.mdp", input_gro="nvt.gro", top="topol.top",
+        tpr="npt.tpr", index=None, input_cpt=None, maxwarn=1,
+    )
+    assert "-n" not in args
+
+
+def test_build_grompp_args_keeps_the_restraint_and_checkpoint_options():
+    args = MD.build_grompp_args(
+        phase="npt", variant="membrane_md_standard", mdp_name="npt.mdp",
+        input_gro="nvt.gro", top="topol.top", tpr="npt.tpr",
+        index="index.ndx", input_cpt="nvt.cpt", maxwarn=3,
+        restraint="nvt.gro",
+    )
+    assert args == ["grompp", "-f", "npt.mdp", "-c", "nvt.gro",
+                    "-r", "nvt.gro", "-t", "nvt.cpt",
+                    "-p", "topol.top", "-o", "npt.tpr",
+                    "-n", "index.ndx", "-maxwarn", "3"]
+
+
+def test_run_phase_finds_the_index_file_in_stage1_env(run_phase_grompp_args):
+    """build_grompp_args is only useful if run_phase hands it the real path
+    the assembly wrote index.ndx to."""
+    ws, args = run_phase_grompp_args("kalp", "em", index=True,
+                                     variant="membrane_md_standard")
+    assert args[args.index("-n") + 1] == str(ws / "stage1_env" / "index.ndx")
+
+
+def test_run_phase_omits_the_index_for_an_aqueous_run(run_phase_grompp_args):
+    """The aqueous sequence never builds an index file."""
+    _, args = run_phase_grompp_args("aki", "em", index=False,
+                                    variant="protein_aqueous_standard")
+    assert "-n" not in args
+
+
+def test_a_stray_index_file_does_not_reach_an_aqueous_grompp(run_phase_grompp_args):
+    """The variant decides, not the presence of the file: an aqueous run's
+    mdp couples to Protein/Non-Protein, and a leftover index.ndx (an imported
+    or umbrella workspace) must not silently redefine those groups."""
+    _, args = run_phase_grompp_args("aki_with_index", "em", index=True,
+                                    variant="protein_aqueous_standard")
+    assert "-n" not in args
+
+
+# --- expert-mode overrides on a membrane run (Task 8 review, Fix 1) -------
+
+
+def test_run_simulation_survives_a_membrane_run_with_a_locked_contract(tmp_path, monkeypatch):
+    """Task 8 review, Fix 1, end to end: an expert-mode membrane run used to
+    die at npt with a StateContractError -- not retryable, since
+    StateContractError subclasses Exception, not RuntimeError -- because
+    lib.protocol_contract.phase_overrides forced pcoupl="Berendsen"
+    regardless of variant, colliding with md_runner's own
+    pcoupl="Parrinello-Rahman" override. Drives the real run_simulation, with
+    a materialized, non-empty protocol contract (temperature_K + pressure_bar
+    locked) for the membrane tutorial -- that combination was previously
+    untested, which is how this shipped.
+    """
+    import json
+    from lib import gmx_wrapper as GW
+    from lib import protocol_contract as PC
+
+    ws = _workspace(tmp_path, "kalp_locked")
+    (ws / "stage1_env" / "processed.gro").write_text("gro")
+    (ws / "stage1_env" / "topol.top").write_text("top")
+    (ws / "stage1_env" / "ions.gro").write_text("gro")
+    s = state.read(ws)
+    s["last_completed_stage"] = "env"
+    s["hardware"] = {"cpu_count": 1, "gpu_ids": [], "ntomp": 1}
+    s["tutorial"] = {"id": "KALP15_in_DPPC", "variant": "membrane_md_standard"}
+    for key in ("step_1", "step_2", "step_3", "step_5"):
+        s["step_outputs"][key] = {"ok": True}
+    state.write(ws, s)
+    (ws / "system_config.json").write_text(json.dumps({
+        "simulation": {"_expert_mode": True, "temperature_K": 310.0,
+                       "pressure_bar": 2.0},
+    }))
+    PC.materialize(ws, "KALP15_in_DPPC")
+
+    def fake_run(args, cwd, **kwargs):
+        if args[0] == "grompp":
+            Path(cwd, args[args.index("-o") + 1]).write_text("tpr")
+        if args[0] == "mdrun":
+            Path(cwd, f"{args[args.index('-deffnm') + 1]}.gro").write_text("gro")
+        return GW.GmxResult(command=list(args), returncode=0, stdout="",
+                            stderr="", classification="success")
+
+    monkeypatch.setattr(GW, "run", fake_run)
+    MD.run_simulation(ws)  # must not raise StateContractError at npt
+
+    rendered = (ws / "stage2_md" / "npt.mdp").read_text()
+    assert "pcoupl                   = Parrinello-Rahman" in rendered
+    assert "ref_p                    = 2.0 2.0" in rendered
+
+
+def test_run_simulation_honours_a_locked_barostat_on_production_but_not_npt(tmp_path, monkeypatch):
+    """Task 8 re-review, Fix 2: "barostat" is one of the 13 lockable expert
+    keys and maps to pcoupl. protocol_contract.phase_overrides already
+    forces npt/npt_pr's pcoupl regardless of any lock (by design: those two
+    segments are deliberately not a user/agent choice), so a locked barostat
+    passes through untouched only for production -- and run_simulation used
+    to force pcoupl="Parrinello-Rahman" there unconditionally too, so an
+    expert who locked e.g. "barostat": "C-rescale" died four phases in with
+    a StateContractError blaming their own setting.
+
+    Chosen resolution: a user-locked barostat wins on membrane runs.
+    run_simulation now only defaults pcoupl for production when nothing is
+    locked (requested_overrides.setdefault, not "="); npt/npt_pr are
+    unaffected either way since the contract already supplies their pcoupl.
+    """
+    import json
+    from lib import gmx_wrapper as GW
+    from lib import protocol_contract as PC
+
+    ws = _workspace(tmp_path, "kalp_barostat_locked")
+    (ws / "stage1_env" / "processed.gro").write_text("gro")
+    (ws / "stage1_env" / "topol.top").write_text("top")
+    (ws / "stage1_env" / "ions.gro").write_text("gro")
+    s = state.read(ws)
+    s["last_completed_stage"] = "env"
+    s["hardware"] = {"cpu_count": 1, "gpu_ids": [], "ntomp": 1}
+    s["tutorial"] = {"id": "KALP15_in_DPPC", "variant": "membrane_md_standard"}
+    for key in ("step_1", "step_2", "step_3", "step_5"):
+        s["step_outputs"][key] = {"ok": True}
+    state.write(ws, s)
+    (ws / "system_config.json").write_text(json.dumps({
+        "simulation": {"_expert_mode": True, "barostat": "C-rescale"},
+    }))
+    PC.materialize(ws, "KALP15_in_DPPC")
+
+    def fake_run(args, cwd, **kwargs):
+        if args[0] == "grompp":
+            Path(cwd, args[args.index("-o") + 1]).write_text("tpr")
+        if args[0] == "mdrun":
+            Path(cwd, f"{args[args.index('-deffnm') + 1]}.gro").write_text("gro")
+        return GW.GmxResult(command=list(args), returncode=0, stdout="",
+                            stderr="", classification="success")
+
+    monkeypatch.setattr(GW, "run", fake_run)
+    MD.run_simulation(ws)  # must not raise StateContractError at production
+
+    npt = (ws / "stage2_md" / "npt.mdp").read_text()
+    npt_pr = (ws / "stage2_md" / "npt_pr.mdp").read_text()
+    production = (ws / "stage2_md" / "production.mdp").read_text()
+    assert "pcoupl                   = Parrinello-Rahman" in npt
+    assert "pcoupl                   = Parrinello-Rahman" in npt_pr
+    assert "pcoupl                   = C-rescale" in production
+
+
+def test_run_simulation_sets_the_tutorial_temperature_and_nvt_coupling_groups(tmp_path, monkeypatch):
+    """Task 8 re-review, Fix 3: run_simulation only set tc_grps for
+    npt/npt_pr/production, so nvt rendered "Protein Non-Protein" -- an
+    index group -n never resolves to for a membrane system -- and ref_t
+    stayed at the aqueous default of 300 K everywhere. DPPC's main phase
+    transition is ~314 K, so 300 K sits the bilayer in the gel phase; the
+    tutorial's own nvt.mdp/npt.mdp/md.mdp all specify ref_t = 323 323. A
+    user-locked temperature_K must still win over the 323.0 default, same
+    principle as the barostat lock.
+    """
+    import json
+    from lib import gmx_wrapper as GW
+    from lib import protocol_contract as PC
+
+    ws = _workspace(tmp_path, "kalp_temp_locked")
+    (ws / "stage1_env" / "processed.gro").write_text("gro")
+    (ws / "stage1_env" / "topol.top").write_text("top")
+    (ws / "stage1_env" / "ions.gro").write_text("gro")
+    s = state.read(ws)
+    s["last_completed_stage"] = "env"
+    s["hardware"] = {"cpu_count": 1, "gpu_ids": [], "ntomp": 1}
+    s["tutorial"] = {"id": "KALP15_in_DPPC", "variant": "membrane_md_standard"}
+    for key in ("step_1", "step_2", "step_3", "step_5"):
+        s["step_outputs"][key] = {"ok": True}
+    state.write(ws, s)
+    (ws / "system_config.json").write_text(json.dumps({
+        "simulation": {"_expert_mode": True, "temperature_K": 310.0},
+    }))
+    PC.materialize(ws, "KALP15_in_DPPC")
+
+    def fake_run(args, cwd, **kwargs):
+        if args[0] == "grompp":
+            Path(cwd, args[args.index("-o") + 1]).write_text("tpr")
+        if args[0] == "mdrun":
+            Path(cwd, f"{args[args.index('-deffnm') + 1]}.gro").write_text("gro")
+        return GW.GmxResult(command=list(args), returncode=0, stdout="",
+                            stderr="", classification="success")
+
+    monkeypatch.setattr(GW, "run", fake_run)
+    MD.run_simulation(ws)
+
+    nvt = (ws / "stage2_md" / "nvt.mdp").read_text()
+    assert "tc-grps                  = Protein_DPPC Water_and_ions" in nvt
+    # A locked temperature_K (310.0) wins over the 323.0 tutorial default.
+    assert "ref_t                    = 310.0 310.0" in nvt
+
+
+def test_run_simulation_defaults_nvt_to_323k_when_nothing_is_locked(tmp_path, monkeypatch):
+    """Same as above without an expert lock: the membrane default (323.0,
+    not the aqueous 300.0) must apply on its own."""
+    from lib import gmx_wrapper as GW
+
+    ws = _workspace(tmp_path, "kalp_temp_default")
+    (ws / "stage1_env" / "processed.gro").write_text("gro")
+    (ws / "stage1_env" / "topol.top").write_text("top")
+    (ws / "stage1_env" / "ions.gro").write_text("gro")
+    s = state.read(ws)
+    s["last_completed_stage"] = "env"
+    s["hardware"] = {"cpu_count": 1, "gpu_ids": [], "ntomp": 1}
+    s["tutorial"] = {"id": "kalp", "variant": "membrane_md_standard"}
+    for key in ("step_1", "step_2", "step_3", "step_5"):
+        s["step_outputs"][key] = {"ok": True}
+    state.write(ws, s)
+
+    def fake_run(args, cwd, **kwargs):
+        if args[0] == "grompp":
+            Path(cwd, args[args.index("-o") + 1]).write_text("tpr")
+        if args[0] == "mdrun":
+            Path(cwd, f"{args[args.index('-deffnm') + 1]}.gro").write_text("gro")
+        return GW.GmxResult(command=list(args), returncode=0, stdout="",
+                            stderr="", classification="success")
+
+    monkeypatch.setattr(GW, "run", fake_run)
+    MD.run_simulation(ws)
+
+    nvt = (ws / "stage2_md" / "nvt.mdp").read_text()
+    assert "ref_t                    = 323.0 323.0" in nvt
+
+
+def test_run_simulation_sets_membrane_pressure_and_coupling_overrides(tmp_path):
+    """The override dict run_simulation builds for npt/npt_pr/production is
+    never exercised by the integration grompp tests -- those hardcode their
+    own copy of the same values. Pin the construction itself, or a typo here
+    (e.g. "pcoupl" -> "fcoupl") would only surface via a full gmx run."""
+    from lib import validators as V
+
+    ws = _workspace(tmp_path, "kalp_20260807_130000")
+    (ws / "stage1_env" / "processed.gro").write_text("gro")
+    (ws / "stage1_env" / "topol.top").write_text("top")
+    (ws / "stage1_env" / "ions.gro").write_text("gro")
+    s = state.read(ws)
+    s["last_completed_stage"] = "env"
+    s["hardware"] = {"cpu_count": 1, "gpu_ids": [], "ntomp": 1}
+    s["tutorial"] = {"id": "t", "variant": "membrane_md_standard"}
+    for key in ("step_1", "step_2", "step_3", "step_5"):
+        s["step_outputs"][key] = {"ok": True}
+    state.write(ws, s)
+
+    calls = []
+
+    def fake_run_phase_with_recovery(workspace_dir, phase, phase_runner=None, overrides=None):
+        calls.append((phase, dict(overrides or {})))
+        return V.Judgment(tier="pass", metric="stub")
+
+    with mock.patch.object(MD, "run_phase_with_recovery", side_effect=fake_run_phase_with_recovery):
+        MD.run_simulation(ws)
+
+    by_phase = dict(calls)
+    for phase in ("npt", "npt_pr", "production"):
+        overrides = by_phase[phase]
+        assert overrides["pcoupltype"] == "semiisotropic"
+        assert overrides["pcoupl"] == "Parrinello-Rahman"
+        assert overrides["ref_p_list"] == "1.0 1.0"
+        assert overrides["compressibility_list"] == "4.5e-5 4.5e-5"
+    # nvt/npt/npt_pr/production all get the tutorial's coupling groups and
+    # its 323 K reference temperature (Task 8 re-review, Fix 3: DPPC's main
+    # phase transition is ~314 K, so the aqueous default of 300.0 sits the
+    # bilayer in the gel phase); only npt/npt_pr/production are pressure
+    # coupled, so pcoupl is scoped to those three.
+    for phase in ("nvt", "npt", "npt_pr", "production"):
+        overrides = by_phase[phase]
+        assert overrides["tc_grps"] == "Protein_DPPC Water_and_ions"
+        assert overrides["ref_t"] == 323.0
+    assert "pcoupl" not in by_phase["nvt"]
+    # em is unaffected -- the tutorial's minimisation mdp carries no
+    # coupling at all.
+    assert "pcoupl" not in by_phase["em"]
+    assert "tc_grps" not in by_phase["em"]
+    assert "ref_t" not in by_phase["em"]
+
+
+# --- troubleshooting docs --------------------------------------------------
+
+
+def test_troubleshooting_doc_covers_both_failure_modes():
+    """Pins the doc's central claim -- 'no lipid_collapse entry, so no
+    automatic recovery' -- to the actual MUTATION_BY_CAUSE dict, so that
+    re-adding that key (wiring up automation) fails this test and points
+    at the doc needing an update. The substring checks below only confirm
+    the doc mentions the relevant vocabulary; they cannot catch drift
+    between the doc and the code, so they are not the guard by themselves.
+    """
+    assert "lipid_collapse" not in MD.MUTATION_BY_CAUSE, (
+        "MUTATION_BY_CAUSE now has a lipid_collapse entry, so "
+        "docs/tutorial/KALP15_in_DPPC/troubleshooting/advanced_troubleshooting.md "
+        "needs updating -- it currently states there is no automatic recovery."
+    )
+
+    doc = Path("docs/tutorial/KALP15_in_DPPC/troubleshooting/"
+               "advanced_troubleshooting.md")
+    assert doc.is_file()
+    text = doc.read_text()
+    for token in ("POSRES_LIPID", "lipid_posre.itp", "annealing",
+                  "LINCS", "void"):
+        assert token in text, token

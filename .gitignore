@@ -23,6 +23,8 @@ coverage.xml
 *.ndx
 *.itp
 *.mdp
+# The mdp templates are source, not run output.
+!lib/mdp_templates/*.mdp
 posre*.itp
 mdout.mdp
 step*.pdb

@@ -60,3 +60,21 @@ def test_umbrella_and_free_energy_still_use_system_unaffected(tmp_path):
     # not be touched by the tc-grps parameterization.
     out = MDP.render("umbrella", {}, output_dir=tmp_path)
     assert "tc-grps                  = System" in out.read_text()
+
+
+def test_em_electrostatics_defaults_are_unchanged_by_parameterization(tmp_path):
+    """coulombtype/rcoulomb/rvdw became parameters so the membrane assembly can
+    ask for the KALP-15/DPPC tutorial's plain cut-off. Every other caller must
+    keep rendering exactly what the hardcoded template produced."""
+    text = MDP.render("em", {}, output_dir=tmp_path).read_text()
+    assert "coulombtype              = PME" in text
+    assert "rcoulomb                 = 1.0" in text
+    assert "rvdw                     = 1.0" in text
+
+
+def test_em_electrostatics_can_be_overridden(tmp_path):
+    text = MDP.render("em", {"coulombtype": "cutoff", "rcoulomb": 1.2, "rvdw": 1.2},
+                      output_dir=tmp_path).read_text()
+    assert "coulombtype              = cutoff" in text
+    assert "rcoulomb                 = 1.2" in text
+    assert "rvdw                     = 1.2" in text

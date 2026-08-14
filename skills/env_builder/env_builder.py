@@ -21,6 +21,7 @@ from lib.system_config import load_config
 from lib import ligand_params as LP
 from lib import llm_assist
 from lib.pdb_analyzer import PDBAnalyzer
+from skills.env_builder import membrane_assembly
 
 
 _NET_CHARGE_RE = re.compile(
@@ -111,16 +112,108 @@ def select_tutorial(workspace_dir: Path, pdb_path: Path,
     return decision
 
 
+#: Residues that cap a terminus instead of being one. A capped terminus has no
+#: N (or no C/O), so pdb2gmx's default charged terminus cannot be built and it
+#: dies with "atom N not found in buiding block 1ACE" (its own typo).
+_TERMINUS_CAPS = frozenset({"ACE", "FOR", "NH2", "NME", "NAC"})
+
+#: pdb2gmx's own menu, asked twice per chain, e.g.
+#:     Select start terminus type for ACE-1
+#:      0: NH3+
+#:      1: NH2
+#:      2: None
+#: The index of "None" is force-field specific (2 for gromos53a6, 3 for
+#: oplsaa, 8 for charmm36's start menu) and residue specific, so it is read
+#: off the menu rather than assumed. 0 is pdb2gmx's non-interactive default,
+#: which is what every uncapped terminus keeps.
+_TER_PROMPT = re.compile(r"^Select (?:start|end) terminus type for (\S+)-\d+\s*$")
+_TER_OPTION = re.compile(r"^\s*(\d+):\s*(\S+)")
+_TER_DEFAULT = "0"
+
+#: Enough "keep the default" answers that pdb2gmx can never block on a prompt
+#: this code did not predict -- a hang leaves the user nothing to act on,
+#: which is strictly worse than the loud failure it would replace.
+_TER_PAD = [_TER_DEFAULT] * 64
+
+#: One round per chain, plus one to confirm. Bounded so a menu this parser
+#: cannot read costs a few seconds rather than looping.
+_TER_MAX_ROUNDS = 12
+
+#: Backstop for a pdb2gmx that blocks on something other than a terminus menu.
+#: Generous: pdb2gmx on a large multi-chain system is minutes of real work.
+PDB2GMX_TIMEOUT_S = 1800
+
+
+def _terminus_menus(text: str) -> list[tuple[str, dict[str, str]]]:
+    """[(residue, {option name: index}), ...] in the order pdb2gmx asked."""
+    menus: list[tuple[str, dict[str, str]]] = []
+    in_menu = False
+    for line in text.splitlines():
+        prompt = _TER_PROMPT.match(line)
+        if prompt:
+            menus.append((prompt.group(1), {}))
+            in_menu = True
+        elif in_menu:
+            option = _TER_OPTION.match(line)
+            if option:
+                menus[-1][1][option.group(2)] = option.group(1)
+            else:
+                in_menu = False
+    return menus
+
+
+def _terminus_answers(text: str) -> list[str]:
+    """The answer for every menu pdb2gmx printed: "None" for a cap, else default."""
+    return [options.get("None", _TER_DEFAULT) if residue in _TERMINUS_CAPS
+            else _TER_DEFAULT
+            for residue, options in _terminus_menus(text)]
+
+
 def run_step1_topology(workspace_dir: Path, forcefield: str, water: str) -> None:
     ws = Path(workspace_dir)
     pdb = ws / "inputs" / "input.pdb"
     out_dir = ws / "stage1_env"
-    result = GW.run(
-        ["pdb2gmx", "-f", str(pdb),
-         "-o", "processed.gro", "-p", "topol.top",
-         "-water", water, "-ff", forcefield, "-ignh"],
-        cwd=out_dir, progress_log=ws / "runner.log",
-    )
+    # -ignh: the tutorial's ACE cap carries HA1/HA2/HA3, which no united-atom
+    # rtp entry has. Harmless elsewhere -- pdb2gmx rebuilds hydrogens anyway.
+    args = ["pdb2gmx", "-f", str(pdb),
+            "-o", "processed.gro", "-p", "topol.top",
+            "-water", water, "-ff", forcefield, "-ignh"]
+
+    def _pdb2gmx(answers: list[str] | None, log: Path | None) -> GW.GmxResult:
+        # GMX_MAXBACKUP=-1: without it every probe round leaves a #topol.top.N#
+        # behind. The answers are matched to prompts BY ORDER, so the padding
+        # is only safe while -ter is the one interactive option in this argv --
+        # adding -ss, -his, -lys, -arg, -asp, -glu or an interactive -merge
+        # would interleave their menus and silently desynchronise the list.
+        return GW.run(args, interactive_inputs=answers, cwd=out_dir,
+                      env=dict(membrane_assembly.GMX_ENV),
+                      timeout=PDB2GMX_TIMEOUT_S, progress_log=log)
+
+    answers = None
+    if _TERMINUS_CAPS & {line[17:20].strip() for line in pdb.read_text().splitlines()
+                         if line.startswith(("ATOM", "HETATM"))}:
+        # A capped structure needs -ter, and -ter makes pdb2gmx interactive.
+        # The answers are read back from the menus pdb2gmx itself printed --
+        # which name the residue they belong to, so this is per chain and
+        # needs no second opinion about where the chains or the caps are.
+        # Each round gets one chain further; the padding answers the rest.
+        #
+        # These rounds are deliberately kept out of runner.log: a round that
+        # has not yet learned a menu dies with "atom N not found in buiding
+        # block 1ACE", and that string in the log of a *successful* run is the
+        # single most misleading artefact this pipeline can leave behind --
+        # three earlier tasks chased it to the wrong conclusion. Only the final
+        # run, below, is logged.
+        args.append("-ter")
+        answers = []
+        for _ in range(_TER_MAX_ROUNDS):
+            probe = _pdb2gmx(answers + _TER_PAD, None)
+            resolved = _terminus_answers(probe.stdout or probe.stderr)
+            if resolved == answers:
+                break
+            answers = resolved
+        answers = answers + _TER_PAD
+    result = _pdb2gmx(answers, ws / "runner.log")
     if not result.ok:
         raise RuntimeError(f"pdb2gmx failed: {result.stderr[-500:]}")
     s = state.read(ws)
@@ -467,6 +560,27 @@ def _resolve_forcefield(requested: str) -> str:
     )
 
 
+def dispatch_environment_build(workspace_dir: Path, params: dict[str, Any],
+                               variant: str | None) -> None:
+    """Build the solvated, ionised system for this tutorial's pipeline variant.
+
+    Both arms end at the same contract: stage1_env/ions.gro exists and
+    step_outputs.step_5 is populated, so md_runner does not need to know which
+    route was taken.
+
+    Deliberately not wrapped in try/except: MembraneAssemblyError subclasses
+    Exception, not RuntimeError, precisely so a fatal topology or packing
+    failure cannot be demoted into a retryable judgment.
+    """
+    if variant == "membrane_md_standard":
+        membrane_assembly.assemble(workspace_dir, params)
+        return
+    run_step2_box(workspace_dir, params["box_type"], params["box_distance_nm"])
+    run_step3_solvate(workspace_dir)
+    run_step4_ions_prep(workspace_dir)
+    run_step5_genion(workspace_dir, concentration=params["ion_concentration_M"])
+
+
 def build_environment(pdb_path: Path, prompt: str, workspace_dir: Path,
                       prerequisites: dict[str, Any] | None = None,
                       interactive: bool = True) -> dict[str, Any]:
@@ -587,8 +701,6 @@ def build_environment(pdb_path: Path, prompt: str, workspace_dir: Path,
     run_step1_topology(workspace_dir, ff, params.values["water_model"])
     integrate_lipid_topology(workspace_dir)
     integrate_cgenff_ligand(workspace_dir)
-    run_step2_box(workspace_dir, params.values["box_type"], params.values["box_distance_nm"])
-    run_step3_solvate(workspace_dir)
-    run_step4_ions_prep(workspace_dir)
-    run_step5_genion(workspace_dir, concentration=params.values["ion_concentration_M"])
+    dispatch_environment_build(workspace_dir, params.values,
+                               decision.pipeline_variant)
     return state.read(workspace_dir)
